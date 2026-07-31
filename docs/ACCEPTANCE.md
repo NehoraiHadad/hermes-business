@@ -94,10 +94,30 @@ Durable facts about those artifacts:
 - **QA companion** — `vite build --mode qa` + `electron-builder --dir`
   (unpacked only, no installer), the **only** build allowed to serve `?demo=1`
   fixtures; clearly marked `DO-NOT-DISTRIBUTE` and must be deleted before release.
-- **Thin bootstrap** — a **release gate, not produced**: `build-bootstrap.ps1`
-  hard-requires `HERMES_BUSINESS_COMPANION_URL` +
+- **Thin bootstrap (production NSIS)** — a **release gate, not produced**:
+  `build-bootstrap.ps1` hard-requires `HERMES_BUSINESS_COMPANION_URL` +
   `HERMES_BUSINESS_COMPANION_SHA256`, which are not configured and were not
   invented. Its logic is validated independently by `verify:bootstrap`.
+- **Thin bootstrap (QA, host-agnostic)** — **produced** by
+  `npm run package:thin-installer:qa` →
+  `release/qa-thin-installer-DO-NOT-DISTRIBUTE/` (git-ignored): a small
+  portable-zip companion payload (`companion.zip`) plus a
+  `companion-release.json` whose `url` is a **placeholder** (`format: "zip"`,
+  real SHA-256, plus a deterministic `entrypoint`). It exists only so the
+  download→verify→**safe-extract** pipeline can be exercised end-to-end without a
+  published endpoint; it is **not** signed and **not** distributable. The
+  manifest's `format` field (`nsis` default | `zip`), the required `entrypoint`
+  for the `zip` format (a strictly-validated relative path to the app `.exe`),
+  and the caller-supplied companion install root are the stable contract that
+  makes this host-agnostic path possible without altering production behaviour.
+  The `zip` payload is treated as untrusted content: every archive entry is
+  validated before any byte is written (absolute/drive/UNC/traversal/colon-ADS/
+  reserved-name/symlink entries are refused), extraction lands in a staging
+  directory and is atomically promoted only after the whole archive validates,
+  and the launched executable is the manifest `entrypoint` — never a scan of the
+  archive's contents. The install root is a **caller** parameter and cannot be
+  injected via the manifest. NSIS placement is unchanged (its trusted installer
+  owns it).
 
 ---
 
@@ -110,6 +130,52 @@ Durable facts about those artifacts:
 | QA demo-only chat | QA companion | temp userData | **PASS** — demo transport echoes + replies |
 | QA demo-only attachment flow | QA companion | temp userData + fixture | **PASS** — pick/remove chip + attachment-only send |
 | Partner-sandbox degraded guard (Docker stopped) | unit-covered | n/a | **PASS via unit tests** — Docker request fails closed to local guard |
+| **Thin network installer (hermetic)** | portable-zip QA artifact | throwaway temp `install` root + temp `HERMES_HOME`, loopback HTTP server, auto-cleaned | **PASS** — see below |
+
+**Hermetic thin-installer E2E** (`npm run test:e2e:thin-installer`,
+`scripts/e2e-thin-network-installer.ps1`). Fully self-contained: it builds small
+portable-zip artifacts and serves them + manifests over a **repo-native loopback
+static server** (`scripts/lib/static-file-server.ps1`, a TcpListener HTTP/1.1
+server — **no Python / no external runtime**; the previous undocumented
+`python -m http.server` dependency was removed). The HTTPS contract is enforced
+in code; loopback HTTP is allowed only via `-AllowInsecureUrl`, exactly as
+production requires `https`. It runs the same `Install-BusinessCompanion` /
+`Save-HttpFile` / `Expand-ArchiveSafely` code the real bootstrap uses, never
+touches the live per-user profile or Hermes install, and downloads/safe-extracts
+into an **isolated** install root with an isolated `HERMES_HOME`. Helpers live in
+`scripts/lib/e2e-thin-installer-lib.ps1` to keep the orchestrator small. Proven
+cases (all green):
+
+1. **download + verify + safe-extract** — artifact fetched over loopback, exact
+   SHA-256 verified, safe-extracted into the isolated root; the launched exe is
+   the manifest **`entrypoint`**, asserted **inside** that root.
+2. **existing Hermes user state preserved** — a pre-seeded `sessions/state.db` is
+   byte-identical (same SHA-256) before and after.
+3. **hash mismatch fails closed** — a manifest with a wrong `sha256` raises a
+   mismatch/tamper error and produces **no** executable.
+4. **network failure fails closed** — a dead endpoint exhausts bounded retries
+   and raises guided offline copy; **no** executable is produced.
+5. **HTTPS contract enforced** — a plain-HTTP manifest without `-AllowInsecureUrl`
+   is rejected with an HTTPS-required error.
+6. **non-loopback HTTP rejected** — a plain-HTTP companion URL to a non-loopback
+   host is rejected **even with** `-AllowInsecureUrl` (the override is loopback-only).
+7. **zip-slip refused** — a hostile archive carrying a traversal entry that
+   resembles a Hermes state path (`../../../../hermes-home/sessions/state.db`)
+   fails closed; nothing is promoted and the pre-seeded state is byte-unchanged.
+8. **manifest cannot inject the install root** — a manifest with `installRoot` /
+   `destination` / `path` fields is ignored; extraction uses the **caller's**
+   root and the manifest-named path is never created.
+9. **deterministic entrypoint** — an archive with a larger decoy `*.exe` resolves
+   the small manifest `entrypoint`, proving the old "largest recursive exe wins"
+   selection is gone (the decoy is extracted but never selected).
+
+Cleanup is verified: the run directory is removed and no static-server process is
+left behind. The offline unit gate `scripts/test-bootstrap-lib.ps1` (part of
+`npm run verify:bootstrap`) additionally covers, without any network: MaxBytes
+enforcement **during** streaming (an over-ceiling body is rejected mid-stream and
+leaves no partial `.part` file), safe-extraction of a benign archive with atomic
+promote, zip-slip refusal, the `zip`-requires-`entrypoint` contract, entrypoint
+shape validation, and fail-closed when the entrypoint is absent after extraction.
 
 **Not run for safety (mutation risk, not isolatable):** `e2e-installed-partner-ui`
 (activates a personality that needs a real Hermes install) and `e2e-hermes`
@@ -126,9 +192,14 @@ satisfied by the operator with real credentials/infrastructure:
 
 1. **Authenticode code-signing** — the companion installer and app exe are
    `NotSigned`; requires an OV/EV certificate.
-2. **Public signed HTTPS companion manifest** — `HERMES_BUSINESS_COMPANION_URL` +
-   `HERMES_BUSINESS_COMPANION_SHA256` must point at the published, signed
-   companion before the thin bootstrap can be built (not invented).
+2. **Public signed HTTPS companion manifest** — the download→verify→extract→
+   fail-closed pipeline is now **proven hermetically** (§4). The **only**
+   remaining decision for a truly distributable network installer is an
+   infrastructure one: host the companion artifact (the NSIS `.exe` or the
+   portable `.zip`) at a stable **HTTPS** URL, then set
+   `HERMES_BUSINESS_COMPANION_URL` + `HERMES_BUSINESS_COMPANION_SHA256` and run
+   `npm run package:bootstrap`. No URL is invented; the placeholder in the QA
+   manifest must be replaced with that real endpoint.
 3. **Google OAuth app verification** — live checks pass for the current tester
    profile; Google's app-verification / consent-screen review is still required
    for general external users.

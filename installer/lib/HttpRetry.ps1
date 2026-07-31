@@ -1,8 +1,10 @@
-# Http.ps1 — single source of truth for every network request the bootstrap
-# makes. Everything goes through here so retry, timeout, backoff, TLS policy and
-# the human-readable offline/proxy/TLS guidance stay consistent.
+# HttpRetry.ps1 — TLS policy, transient-failure classification, bounded retry and
+# JSON requests. This is the request/retry half of the network layer; the bounded
+# file download half lives in HttpDownload.ps1. Everything that opens a socket for
+# the bootstrap flows through here so retry, timeout, backoff, TLS policy and the
+# human-readable offline/proxy/TLS guidance stay consistent.
 #
-# Depends on: Logging.ps1 (Write-Step), Hashing.ps1 (Assert-Sha256Match).
+# Depends on: Logging.ps1 (Write-Step).
 
 # Status codes that justify a retry: transient server / rate-limit / timeout.
 $script:RetryableHttpStatus = @(408, 425, 429, 500, 502, 503, 504)
@@ -136,52 +138,5 @@ function Invoke-HttpJson {
   if (-not $Description) { $Description = "request to $($Uri.Host)" }
   return Invoke-WithHttpRetry -Description $Description -MaxAttempts $MaxAttempts -Action {
     Invoke-RestMethod -Uri $Uri -Headers $Headers -Method $Method -TimeoutSec $TimeoutSec
-  }
-}
-
-function Save-HttpFile {
-  # Retry-wrapped download to a file, written atomically (.part then move) with
-  # optional size bounds and SHA-256 verification. A truncated or tampered body
-  # fails the hash check and is discarded.
-  [CmdletBinding()]
-  param(
-    [Parameter(Mandatory)][uri]$Uri,
-    [Parameter(Mandatory)][string]$Destination,
-    [hashtable]$Headers,
-    [int]$TimeoutSec = 120,
-    [int]$MaxAttempts = 4,
-    [string]$ExpectedSha256,
-    [long]$MinBytes = 0,
-    [long]$MaxBytes = 0,
-    [string]$Description
-  )
-  if (-not $Description) { $Description = "download from $($Uri.Host)" }
-  $targetDir = Split-Path -Parent $Destination
-  if ($targetDir) { New-Item -ItemType Directory -Force -Path $targetDir | Out-Null }
-  $partPath = "$Destination.$PID.part"
-
-  try {
-    Invoke-WithHttpRetry -Description $Description -MaxAttempts $MaxAttempts -Action {
-      if (Test-Path -LiteralPath $partPath) { Remove-Item -LiteralPath $partPath -Force }
-      Invoke-WebRequest -Uri $Uri -OutFile $partPath -Headers $Headers -TimeoutSec $TimeoutSec -UseBasicParsing
-    } | Out-Null
-
-    $info = Get-Item -LiteralPath $partPath
-    if ($MinBytes -gt 0 -and $info.Length -lt $MinBytes) {
-      throw "The $Description returned only $($info.Length) bytes (expected at least $MinBytes). It is likely truncated."
-    }
-    if ($MaxBytes -gt 0 -and $info.Length -gt $MaxBytes) {
-      throw "The $Description returned $($info.Length) bytes (over the $MaxBytes byte ceiling). Refusing to trust it."
-    }
-    if ($ExpectedSha256) {
-      Assert-Sha256Match -Path $partPath -Expected $ExpectedSha256 -What $Description | Out-Null
-    }
-    Move-Item -LiteralPath $partPath -Destination $Destination -Force
-    return $Destination
-  }
-  finally {
-    if (Test-Path -LiteralPath $partPath) {
-      Remove-Item -LiteralPath $partPath -Force -ErrorAction SilentlyContinue
-    }
   }
 }

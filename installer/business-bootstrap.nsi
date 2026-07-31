@@ -34,15 +34,22 @@ Section "Install"
   File /oname=business-bootstrap.SKILL.md "..\hermes-plugin\business-shell\skills\business-bootstrap\SKILL.md"
   File /oname=business-partner.SKILL.md "..\hermes-plugin\business-partner\SKILL.md"
 
-  ; Shared PowerShell library — bootstrap.ps1 dot-sources these from .\lib.
+  ; Shared PowerShell library — bootstrap.ps1 and bootstrap-companion.ps1 dot-source
+  ; these from .\lib. This list MUST stay in sync with the loaders in bootstrap.ps1
+  ; and bootstrap-companion.ps1 so a clean packaged install can never omit a module.
   SetOutPath "$INSTDIR\lib"
   File "lib\Logging.ps1"
   File "lib\Hashing.ps1"
-  File "lib\Http.ps1"
+  File "lib\HttpRetry.ps1"
+  File "lib\HttpDownload.ps1"
   File "lib\FileOps.ps1"
+  File "lib\ZipPolicy.ps1"
+  File "lib\SafeZip.ps1"
   File "lib\HermesEnv.ps1"
   File "lib\Release.ps1"
   File "lib\Payload.ps1"
+  File "lib\CompanionEntrypoint.ps1"
+  File "lib\CompanionManifest.ps1"
   SetOutPath "$INSTDIR"
 
   SetOutPath "$INSTDIR\whatsapp-policy"

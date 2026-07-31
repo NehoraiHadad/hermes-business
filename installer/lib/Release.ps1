@@ -3,8 +3,9 @@
 # an existing compatible install or downloads the newest official tagged release
 # inside the tested version range and runs the official installer verbatim.
 #
-# Depends on: Logging.ps1, Http.ps1 (Invoke-HttpJson), Hashing.ps1 (blob SHA-1,
-# SHA-256), HermesEnv.ps1 (Test-HermesVersionCompatible).
+# Depends on: Logging.ps1, HttpRetry.ps1 (Invoke-HttpJson), HttpDownload.ps1
+# (Save-HttpFile), Hashing.ps1 (blob SHA-1, SHA-256),
+# HermesEnv.ps1 (Test-HermesVersionCompatible).
 
 # Pinned tag -> installed __version__ map, under OUR control. Release TAGS are
 # CalVer (vYYYY.M.D) and carry no semver meaning; this records the authoritative

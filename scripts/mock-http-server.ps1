@@ -2,9 +2,10 @@
 param(
   [Parameter(Mandatory)][int]$Port,
   [Parameter(Mandatory)][string]$StopFile,
-  [ValidateSet('ok', 'flaky')][string]$Mode = 'ok',
+  [ValidateSet('ok', 'flaky', 'oversize')][string]$Mode = 'ok',
   [string]$BodyPath,
-  [int]$FailCount = 0
+  [int]$FailCount = 0,
+  [long]$OversizeBytes = 262144
 )
 
 # mock-http-server.ps1 — minimal, controllable loopback HTTP/1.1 server used by
@@ -27,17 +28,34 @@ try {
       $stream = $client.GetStream()
       $buffer = New-Object byte[] 4096
       try { $stream.Read($buffer, 0, $buffer.Length) | Out-Null } catch {}
-      $status = '200 OK'
-      $payload = $body
-      if ($Mode -eq 'flaky' -and $count -le $FailCount) {
-        $status = '500 Internal Server Error'
-        $payload = [System.Text.Encoding]::ASCII.GetBytes('transient')
+      if ($Mode -eq 'oversize') {
+        # Stream far more than any ceiling WITHOUT a Content-Length, so the
+        # download's early header check can't catch it — only its mid-stream
+        # byte counter can. Proves MaxBytes is enforced during streaming.
+        $header = "HTTP/1.1 200 OK`r`nConnection: close`r`nContent-Type: application/octet-stream`r`n`r`n"
+        $headerBytes = [System.Text.Encoding]::ASCII.GetBytes($header)
+        $stream.Write($headerBytes, 0, $headerBytes.Length)
+        $chunk = New-Object byte[] 65536
+        $sent = 0L
+        while ($sent -lt $OversizeBytes) {
+          $stream.Write($chunk, 0, $chunk.Length)
+          $sent += $chunk.Length
+        }
+        $stream.Flush()
       }
-      $header = "HTTP/1.1 $status`r`nContent-Length: $($payload.Length)`r`nConnection: close`r`nContent-Type: application/octet-stream`r`n`r`n"
-      $headerBytes = [System.Text.Encoding]::ASCII.GetBytes($header)
-      $stream.Write($headerBytes, 0, $headerBytes.Length)
-      if ($payload.Length -gt 0) { $stream.Write($payload, 0, $payload.Length) }
-      $stream.Flush()
+      else {
+        $status = '200 OK'
+        $payload = $body
+        if ($Mode -eq 'flaky' -and $count -le $FailCount) {
+          $status = '500 Internal Server Error'
+          $payload = [System.Text.Encoding]::ASCII.GetBytes('transient')
+        }
+        $header = "HTTP/1.1 $status`r`nContent-Length: $($payload.Length)`r`nConnection: close`r`nContent-Type: application/octet-stream`r`n`r`n"
+        $headerBytes = [System.Text.Encoding]::ASCII.GetBytes($header)
+        $stream.Write($headerBytes, 0, $headerBytes.Length)
+        if ($payload.Length -gt 0) { $stream.Write($payload, 0, $payload.Length) }
+        $stream.Flush()
+      }
     }
     catch {
       # A broken/abandoned client must never take the server down.
