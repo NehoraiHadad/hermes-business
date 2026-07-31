@@ -1,7 +1,8 @@
-export type ProviderApiFn = <T>(
-  endpoint: string,
-  init?: { method?: string; body?: unknown }
-) => Promise<T>
+import { PROVIDER_API_KEYS, withProfile, type ApiFn } from './core'
+
+// Retained alias so existing importers keep compiling; the canonical type now
+// lives in ./core alongside the other shared function shapes.
+export type ProviderApiFn = ApiFn
 
 export type OAuthProvider = {
   id: string
@@ -35,14 +36,7 @@ export interface HermesProviderApi {
   activateProvider(provider: string): Promise<{ ok: boolean; model: string }>
 }
 
-const API_KEY_NAMES: Record<string, string> = {
-  openrouter: 'OPENROUTER_API_KEY',
-  anthropic: 'ANTHROPIC_API_KEY',
-  gemini: 'GEMINI_API_KEY',
-  openai: 'OPENAI_API_KEY'
-}
-
-export function createProviderApi(api: ProviderApiFn): HermesProviderApi {
+export function createProviderApi(api: ApiFn): HermesProviderApi {
   const activateProvider = async (provider: string) => {
     const recommended = await api<{ model: string }>(
       `/api/model/recommended-default?provider=${encodeURIComponent(provider)}`
@@ -57,7 +51,7 @@ export function createProviderApi(api: ProviderApiFn): HermesProviderApi {
 
   return {
     async connectProvider(provider: string, apiKey: string) {
-      const key = API_KEY_NAMES[provider]
+      const key = PROVIDER_API_KEYS[provider]
       if (!key) throw new Error('Provider is not supported by this quick setup')
       const validation = await api<{ ok: boolean; reachable: boolean; message?: string }>('/api/providers/validate', {
         method: 'POST',
@@ -74,25 +68,27 @@ export function createProviderApi(api: ProviderApiFn): HermesProviderApi {
     },
 
     async listOAuthProviders() {
-      const result = await api<{ providers?: OAuthProvider[] }>('/api/providers/oauth?profile=default')
+      const result = await api<{ providers?: OAuthProvider[] }>(withProfile('/api/providers/oauth'))
       return result.providers || []
     },
 
     startOAuth(provider: string) {
-      return api<OAuthStart>(`/api/providers/oauth/${encodeURIComponent(provider)}/start?profile=default`, {
+      return api<OAuthStart>(withProfile(`/api/providers/oauth/${encodeURIComponent(provider)}/start`), {
         method: 'POST'
       })
     },
 
     pollOAuth(provider: string, sessionId: string) {
       return api<OAuthPoll>(
-        `/api/providers/oauth/${encodeURIComponent(provider)}/poll/${encodeURIComponent(sessionId)}?profile=default`
+        withProfile(
+          `/api/providers/oauth/${encodeURIComponent(provider)}/poll/${encodeURIComponent(sessionId)}`
+        )
       )
     },
 
     cancelOAuth(sessionId: string) {
       return api<{ ok: boolean }>(
-        `/api/providers/oauth/sessions/${encodeURIComponent(sessionId)}?profile=default`,
+        withProfile(`/api/providers/oauth/sessions/${encodeURIComponent(sessionId)}`),
         { method: 'DELETE' }
       )
     },

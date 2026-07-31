@@ -19,6 +19,7 @@ const {
   ensureGatewayBackground
 } = require('./google-setup.cjs')
 const { installDesktopPlugin, stageBusinessBootstrap } = require('./plugin-install.cjs')
+const { installWhatsappPolicyPlugin } = require('./whatsapp-plugin-install.cjs')
 const { findHermes, hermesHome } = require('./paths.cjs')
 const { runCaptured } = require('./process-util.cjs')
 const {
@@ -28,6 +29,20 @@ const {
   setMiniPinned,
   hideAssistant
 } = require('./windows.cjs')
+const { getWhatsappPolicy } = require('./whatsapp-policy.cjs')
+const { saveWhatsappPolicySynced } = require('./whatsapp-policy-sync.cjs')
+const { isAllowedExternalUrl } = require('./url-policy.cjs')
+const { applyOfficialHermesUpdate } = require('./hermes-update.cjs')
+const { getPartnerState, applyPartnerMode } = require('./business-partner.cjs')
+const { getCuratorInsights } = require('./curator-insights.cjs')
+
+function ensureWhatsappSafety() {
+  const result = installWhatsappPolicyPlugin()
+  if (!result.ok || !result.enabled) {
+    throw new Error('רכיב ההגנה של WhatsApp אינו פעיל. החיבור לא יופעל במצב לא בטוח.')
+  }
+  return result
+}
 
 // Single place that maps every renderer IPC channel to a module function. Keeps
 // the wiring auditable and the feature modules free of Electron IPC concerns.
@@ -35,6 +50,7 @@ function registerIpc() {
   ipcMain.handle('hermes:runtime', async () => refreshRuntimeInstalled())
   ipcMain.handle('hermes:start', startHermes)
   ipcMain.handle('hermes:restart', restartHermes)
+  ipcMain.handle('hermes:update', applyOfficialHermesUpdate)
   ipcMain.handle('hermes:api', (_event, endpoint, init) => hermesApi(endpoint, init))
   ipcMain.handle('hermes:versions', getVersions)
   ipcMain.handle('hermes:logs', () => ({ lines: recentLogs(250) }))
@@ -43,12 +59,29 @@ function registerIpc() {
     const result = await dialog.showOpenDialog(getMainWindow(), { properties: ['openFile'], filters: filters || [] })
     return result.canceled ? null : result.filePaths[0]
   })
+  ipcMain.handle('hermes:choose-folder', async () => {
+    const result = await dialog.showOpenDialog(getMainWindow(), { properties: ['openDirectory'] })
+    return result.canceled ? null : result.filePaths[0]
+  })
+  ipcMain.handle('hermes:curator:insights', () => getCuratorInsights())
+  ipcMain.handle('hermes:partner:get', () => getPartnerState())
+  ipcMain.handle('hermes:partner:apply', (_event, patch) => applyPartnerMode(patch))
   ipcMain.handle('hermes:google:start', (_event, clientSecretPath, services) =>
     startGoogleSetup(clientSecretPath, services)
   )
   ipcMain.handle('hermes:google:finish', (_event, code) => finishGoogleSetup(code))
   ipcMain.handle('hermes:google:status', getGoogleStatus)
-  ipcMain.handle('hermes:open-external', (_event, url) => shell.openExternal(url))
+  ipcMain.handle('hermes:gateway:ensure', () => ensureGatewayBackground())
+  ipcMain.handle('hermes:whatsapp-policy:get', getWhatsappPolicy)
+  ipcMain.handle('hermes:whatsapp-policy:set', async (_event, policy) => {
+    ensureWhatsappSafety()
+    return saveWhatsappPolicySynced(policy)
+  })
+  ipcMain.handle('hermes:whatsapp-policy:ensure', ensureWhatsappSafety)
+  ipcMain.handle('hermes:open-external', (_event, url) => {
+    if (!isAllowedExternalUrl(url)) throw new Error('External URL is not allowed')
+    return shell.openExternal(url)
+  })
   ipcMain.handle('hermes:open-full', async (_event, surface) => {
     const command = findHermes()
     if (surface === 'desktop' && command) {
@@ -72,6 +105,7 @@ function registerIpc() {
   ipcMain.handle('hermes:install', async () => {
     if (findHermes()) {
       installDesktopPlugin()
+      installWhatsappPolicyPlugin()
       await ensureGatewayBackground()
       return { ok: true, installed: true }
     }
@@ -85,6 +119,7 @@ function registerIpc() {
           '-File', path.join(stagingRoot, 'bootstrap.ps1'),
           '-PayloadRoot', stagingRoot,
           '-HermesHome', hermesHome(),
+          '-SkipCompanionInstall',
           '-NoLaunch'
         ],
         45 * 60_000

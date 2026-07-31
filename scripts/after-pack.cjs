@@ -16,7 +16,7 @@ exports.default = async function afterPack(context) {
     'version-string': {
       ProductName: 'העוזר לעסק',
       FileDescription: 'עוזר עסקי ידידותי המבוסס על Hermes Agent',
-      CompanyName: 'Hermes Business POC'
+      CompanyName: 'העוזר לעסק (Alpha)'
     }
   })
 }

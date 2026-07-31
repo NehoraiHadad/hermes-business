@@ -1,4 +1,5 @@
 import type { GatewayEvent } from '../../types'
+import { HermesRpcError } from './core'
 
 export type EventListener = (event: GatewayEvent) => void
 
@@ -62,7 +63,13 @@ export class HermesTransport {
             if (!pending) return
             clearTimeout(pending.timer)
             this.pending.delete(String(frame.id))
-            if (frame.error) pending.reject(new Error(frame.error.message || 'Hermes RPC failed'))
+            if (frame.error)
+              pending.reject(
+                new HermesRpcError(
+                  frame.error.message || 'Hermes RPC failed',
+                  typeof frame.error.code === 'number' ? frame.error.code : 0
+                )
+              )
             else pending.resolve(frame.result)
           } else if (frame.method === 'event' && frame.params?.type) {
             this.emit(frame.params)

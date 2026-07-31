@@ -1,0 +1,23 @@
+{
+  "name": "hermes-business-promo",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "studio": "remotion studio src/index.ts",
+    "soundtrack": "node scripts/generate-soundtrack.mjs",
+    "render": "npm run soundtrack && remotion render src/index.ts HermesBusinessPromo out/hermes-business-promo.mp4 --codec=h264 --crf=16 --pixel-format=yuv420p",
+    "validate": "node scripts/validate.mjs out/hermes-business-promo.mp4"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.503",
+    "lucide-react": "0.468.0",
+    "react": "19.1.1",
+    "react-dom": "19.1.1",
+    "remotion": "4.0.503"
+  },
+  "devDependencies": {
+    "@types/react": "19.1.16",
+    "@types/react-dom": "19.1.9",
+    "typescript": "5.9.2"
+  }
+}

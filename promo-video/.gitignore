@@ -1,0 +1,14 @@
+# Generated promo-video artifacts — reproducible with `npm run render`.
+# Source (src/, scripts/, public/ static assets, package.json, package-lock.json,
+# tsconfig.json, README.md) stays committable; only generated output is ignored.
+
+# Final render + stills / contact sheets (the user's rendered local video lives
+# here and is intentionally NOT deleted — just untracked).
+out/
+
+# Deterministically (re)generated soundtrack — `npm run soundtrack`.
+/public/soundtrack.wav
+
+# Remotion / bundler caches.
+.remotion/
+node_modules/.cache/

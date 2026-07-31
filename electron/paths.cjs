@@ -62,4 +62,39 @@ function bootstrapSkillSource() {
   return path.join(__dirname, '..', 'hermes-plugin', 'business-shell', 'skills', 'business-bootstrap', 'SKILL.md')
 }
 
-module.exports = { hermesHome, findHermes, getHermesVersion, desktopPluginSource, bootstrapSkillSource }
+function companionBootstrapSource() {
+  return path.join(__dirname, '..', 'installer', 'bootstrap-companion.ps1')
+}
+
+// The fail-closed WhatsApp reply-policy plugin ships as a real Hermes user
+// plugin (Python). It is copied into <hermesHome>/plugins/<id> and activated
+// through the official `hermes plugins enable` command. Only these files make
+// up the runtime payload — the co-located pytest module is not shipped.
+const WHATSAPP_POLICY_PLUGIN_ID = 'business-whatsapp-policy'
+const WHATSAPP_POLICY_PLUGIN_FILES = Object.freeze([
+  '__init__.py',
+  'policy.py',
+  'ingest.py',
+  'contract.py',
+  'surface.py',
+  'guards.py',
+  'transport.py',
+  'registry.py',
+  'plugin.yaml'
+])
+
+function whatsappPolicyPluginSource() {
+  return path.join(__dirname, '..', 'hermes-plugin', WHATSAPP_POLICY_PLUGIN_ID)
+}
+
+module.exports = {
+  hermesHome,
+  findHermes,
+  getHermesVersion,
+  desktopPluginSource,
+  bootstrapSkillSource,
+  companionBootstrapSource,
+  whatsappPolicyPluginSource,
+  WHATSAPP_POLICY_PLUGIN_ID,
+  WHATSAPP_POLICY_PLUGIN_FILES
+}

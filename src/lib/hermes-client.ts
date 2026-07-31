@@ -1,3 +1,4 @@
+import { resolveClientMode } from './hermes/core'
 import { createDemoBackend, type DemoBackend } from './hermes/demo'
 import { createHermesRest, type HermesRest, type HermesUpdateStatus } from './hermes/rest'
 import { createHermesSessions, type HermesSessions } from './hermes/session'
@@ -11,15 +12,29 @@ export interface HermesClient extends HermesSessions, HermesRest {}
 
 export class HermesClient {
   readonly demo: boolean
+  // True when we cannot serve real data and refuse to fabricate: a production
+  // build whose preload bridge is absent. Callers surface this as an error.
+  readonly bridgeMissing: boolean
   private transport = new HermesTransport()
-  private demoBackend: DemoBackend = createDemoBackend()
+  private demoBackend?: DemoBackend
 
   constructor() {
-    this.demo = !window.hermesDesktop || new URLSearchParams(window.location.search).get('demo') === '1'
+    const mode = resolveClientMode()
+    this.demo = mode.demo
+    this.bridgeMissing = mode.bridgeMissing
+    // Only instantiate the fixture backend when demo is actually active, so the
+    // fabricated data has no code path to reach a production user.
+    if (this.demo) this.demoBackend = createDemoBackend()
     Object.assign(
       this,
       createHermesSessions((method, params) => this.rpc(method, params)),
-      createHermesRest((endpoint, init) => this.api(endpoint, init))
+      createHermesRest(
+        (endpoint, init) => this.api(endpoint, init),
+        () => window.hermesDesktop?.ensureGateway() || Promise.resolve(),
+        window.hermesDesktop?.applyUpdate
+          ? () => window.hermesDesktop!.applyUpdate()
+          : undefined
+      )
     )
   }
 
@@ -32,6 +47,17 @@ export class HermesClient {
         mode: 'demo',
         version: '0.19.0',
         error: null,
+        wsUrl: ''
+      } satisfies HermesRuntime
+    }
+    if (this.bridgeMissing) {
+      return {
+        installed: false,
+        running: false,
+        starting: false,
+        mode: 'error',
+        version: null,
+        error: 'גשר שולחן העבודה של Hermes אינו זמין. סגור ופתח את היישום מחדש.',
         wsUrl: ''
       } satisfies HermesRuntime
     }
@@ -49,12 +75,14 @@ export class HermesClient {
   }
 
   async rpc<T>(method: string, params: Record<string, unknown> = {}): Promise<T> {
-    if (this.demo) return this.demoBackend.rpc<T>(method, params, event => this.transport.emit(event))
+    if (this.demo) return this.demoBackend!.rpc<T>(method, params, event => this.transport.emit(event))
+    if (this.bridgeMissing) throw new Error('Hermes desktop bridge is unavailable')
     return this.transport.rpc<T>(method, params)
   }
 
   async api<T>(endpoint: string, init?: { method?: string; body?: unknown }): Promise<T> {
-    if (this.demo) return this.demoBackend.api<T>(endpoint, init)
+    if (this.demo) return this.demoBackend!.api<T>(endpoint, init)
+    if (this.bridgeMissing) throw new Error('Hermes desktop bridge is unavailable')
     return window.hermesDesktop!.api<T>(endpoint, init)
   }
 }

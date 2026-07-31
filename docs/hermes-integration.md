@@ -6,10 +6,10 @@
 
 ## גרסאות שנבדקו
 
-- התקנה פעילה: Hermes Agent `0.19.0` (`2026.7.20`).
+- התקנה פעילה: Hermes Agent `0.19.1` (`2026.7.30`).
 - release רשמי חדש ביותר שנמצא בטווח התאימות: `0.19.1` (`v2026.7.30`).
-- טווח ה־POC: `>=0.19.0 <0.20.0`.
-- מעטפת: `0.3.2`.
+- טווח התאימות הנתמך: `>=0.19.0 <0.20.0`.
+- מעטפת: `0.3.3`.
 - Windows 11 x64, התקנת native תחת `%LOCALAPPDATA%\hermes`.
 
 ## החלטה
@@ -75,6 +75,12 @@ hermes gateway install --start-now --start-on-login
 נדרש fallback. ה־Gateway מפעיל ערוצי הודעות ו־Cron. בבדיקה חיה
 `hermes gateway status --deep` עבר שישה probes.
 
+לפני פעולת חיבור שדורשת restart, המעטפת מפעילה `hermes:gateway:ensure` דרך
+Electron main. תהליכי CLI מורצים עם stdin סגור, כדי ששאלת elevation של Hermes
+לא תיתקע כ־prompt בלתי נראה; Hermes יכול לבחור בברירת המחדל הבטוחה וב־fallback
+הלא־ניהולי שלו. המנגנון הוכח לאחר עצירה מכוונת של ה־Gateway וחיבור Telegram
+מחדש מהבינארי המותקן.
+
 ה־Companion מפעיל process פרטי של:
 
 ```text
@@ -83,6 +89,18 @@ hermes serve --host 127.0.0.1 --port <dynamic>
 
 הפורט נבחר מתוך טווח פנוי, והחיבור מוגן ב־session token אקראי שמועבר רק דרך
 Electron IPC מבודד. השרת אינו נחשף לרשת.
+
+בקשות ה־REST של Electron main נגד `hermes serve` נושאות את הכותרת המועדפת
+`X-Hermes-Session-Token` (החוזה של `web_server._has_valid_session_token`
+ב־Hermes 0.19.1, שנמנע מהתנגשות עם `Authorization` של reverse-proxy) ובנוסף
+את `Authorization: Bearer <token>` הישן לתאימות לאחור — שתיהן נשלחות יחד ללא
+probe מקדים של הגרסה. ה־WebSocket ב־bind של loopback מאומת אך ורק דרך
+`?token=<session>`; מסלול ה־`?ticket=` החד־פעמי של `web_server._ws_auth_reason`
+נבדק *רק* כאשר `auth_required=true` (bind ציבורי/OAuth "gated") ולעולם אינו
+נבדק ב־loopback, ולכן ticket אינו יכול לאמת את ה־WS שלנו — session token הוא
+החוזה הרשמי המדויק והיחיד לארכיטקטורה הזאת. אם בדיקת ה־health לא עוברת, התהליך
+שהופעל נהרג ונאסף מיד (`taskkill /t /f` בלבד ממחזר את כל עץ התהליכים ב־Windows)
+כדי שלא יישאר orphan שמחזיק את פורט ה־loopback.
 
 ## ממשק תכנותי
 
@@ -117,13 +135,13 @@ Electron main מחזיק את token ה־runtime ומתווך:
 ```text
 session.create
 session.list
-session.get
+session.resume
 prompt.submit
-prompt.cancel
+session.interrupt
 message.delta
 message.complete
 tool.start
-tool.end
+tool.complete
 status.update
 ```
 
@@ -131,7 +149,7 @@ Session שנוצר ב־Companion נמצא מיד דרך `session.list` ונפת�
 אותו transcript. אין מסד שיחות נוסף.
 
 Streaming נבנה מ־`message.delta` ומסתיים ב־`message.complete`. Stop שולח
-`prompt.cancel`. Tool Calls אינם מוצגים למשתמש כ־API names; שכבת presentation
+`session.interrupt`. Tool Calls אינם מוצגים למשתמש כ־API names; שכבת presentation
 ממפה אותם לטקסט כמו “בודק את היומן…”.
 
 ## Clarify ואישורים
@@ -207,40 +225,279 @@ authenticated=false
 Telegram הוא Messaging Platform רשמי. ה־POC משתמש ב־API הרשמי להגדרה,
 restart ו־test, ומסמן “מחובר” רק לאחר תשובת test תקינה.
 
-במחשב הבדיקה הוא נשאר `configured=false`, מפני שלא סופקו Bot Token ו־allowed
-user ID.
+במחשב הבדיקה נוצר וחובר בוט ייעודי `@HermesBizPOC_9834209_bot`. לאחר עצירה
+מכוונת של ה־Gateway, פעולת החיבור מהמעטפת הפעילה אותו מחדש, שמרה את ההגדרה
+והעבירה test תקין. הודעה אמיתית מהמשתמש קיבלה את התשובה המדויקת
+`TELEGRAM_E2E_OK_1785502052728`; `/sethome` הגדיר את הערוץ כיעד ברירת המחדל.
+ה־session `20260731_154757_b501cb5b` הופיע דרך `hermes sessions list --source
+telegram` ונפתח עם אותו תוכן גם ב־Hermes Desktop המלא. ה־Bot Token אינו מתועד
+ואינו נכלל בחבילת האבחון.
 
 ### WhatsApp
 
-- `whatsapp_cloud` — חיבור רשמי של Meta לעסקים.
-- `whatsapp` — חיבור לא רשמי מבוסס WhatsApp Web.
+שני מסלולים נחשפים במפורש, בלי להתחזות זה לזה:
 
-הממשק מציג את ההבדל במפורש ואינו מתאר את הפתרון הלא רשמי כרשמי.
+- `whatsapp_cloud` — החיבור הרשמי של Meta לעסקים. דורש Meta Business, מספר עסקי
+  ייעודי ו־webhook ציבורי. המעטפת מציגה אשף מקומי עבור Phone Number ID, Business
+  Account ID, Access Token ו־Verify Token, ושומרת אותם דרך נקודות ה־Messaging
+  הרשמיות של Hermes. ה־renderer אינו כותב קובצי הגדרה ואינו מקבל גישה ישירה
+  למערכת הקבצים.
+- `whatsapp` — חיבור לא רשמי מבוסס WhatsApp Web (Baileys) עם קוד QR. ה־QR נסרק
+  ישירות במעטפת דרך נקודות ה־REST הרשמיות של Hermes:
+  `POST /api/messaging/whatsapp/onboarding/start` → `GET …/{pairing_id}` (poll) →
+  `POST …/{pairing_id}/apply`. הקוד מוצג עם `qrcode.react`, וההמלצה למספר ייעודי
+  מודגשת.
+
+#### בדיקת פתרון רשמי לפני הרחבה עצמאית
+
+נבדקו התיעוד העדכני של Meta, התיעוד הרשמי של Hermes והקוד המותקן של
+`gateway/platforms/whatsapp_cloud.py`:
+
+- **המסלול הרשמי הקיים ב־Hermes הוא Meta Cloud API.** הוא תומך ב־webhook חתום,
+  הודעות נכנסות, שליחה, מדיה, כפתורי אישור, הקלדה ואישורי קריאה. זה המסלול
+  המומלץ למוצר עסקי. חיבור Baileys/QR נשאר חלופת POC ברורה ולא־רשמית.
+- **Meta אינה מספקת הרשאת OAuth נפרדת לקריאה בלבד.**
+  `whatsapp_business_messaging` משמשת גם לקבלת webhooks וגם לשליחה. לכן
+  “קריאה בלבד” חייבת להיאכף באפליקציה/Runtime; אי אפשר להשיג אותה רק על ידי
+  בקשת scope חלש יותר.
+- **Hermes מספק רשמית `dm_policy` ו־allowlist**, אך `disabled`/allowlist מסננים
+  את ההודעה לפני יצירת turn. הם אינם מצב “שמור באותו Session אך אל תריץ את
+  הסוכן”. לכן הם מספיקים ל־“ענה רק לרשימה והתעלם מהשאר”, אך לא לדרישה שלנו:
+  “קרא ושמור את כולם, ענה רק לנבחרים”.
+- **Meta Coexistence הוא פתרון רשמי למספר שכבר נמצא ב־WhatsApp Business App.**
+  הוא כולל Embedded Signup, סנכרון היסטוריה (עד 180 יום, בכפוף להסכמה),
+  אנשי קשר ו־message echoes. קבוצות אינן נכללות בהיסטוריה. ההטמעה דורשת
+  מעמד Tech Provider/Solution Partner ותשתית webhook.
+- **Hermes `0.19.x` עדיין אינו מממש Coexistence.** אין בקוד טיפול ב־`history`,
+  `smb_app_state_sync`, `smb_message_echoes` או Embedded Signup; אשף
+  `hermes whatsapp-cloud` מבקש ידנית Phone Number ID, token, App Secret
+  ו־webhook. לכן אי אפשר להציג את Coexistence כאפשרות עובדת “מהקופסה”.
+
+החלטה: ב־POC משתמשים ב־Cloud API הרשמי כשיש חשבון Meta מתאים, ושומרים את QR
+כחלופה מסומנת. ה־plugin העצמאי נשאר קטן ומוגבל לפער האמיתי בלבד — passive
+ingest ואכיפת egress — ואינו מממש Connector, Session store או Agent Runtime.
+למוצר ייצור יש להוסיף Embedded Signup/Coexistence מעל מתאם Cloud של Hermes,
+או לתרום את התמיכה ל־Hermes upstream, במקום להעמיק את תלות ה־QR.
+
+מקורות:
+[Hermes Cloud API](https://hermes-agent.nousresearch.com/docs/user-guide/messaging/whatsapp-cloud),
+[Hermes environment variables](https://hermes-agent.nousresearch.com/docs/reference/environment-variables),
+[Meta permissions](https://developers.facebook.com/documentation/business-messaging/whatsapp/permissions/),
+[Meta Coexistence onboarding](https://developers.facebook.com/documentation/business-messaging/whatsapp/embedded-signup/onboarding-business-app-users).
+
+#### מדיניות מענה fail-closed
+
+הדרישה המרכזית: משתמש לא־טכני יכול לבחור מדיניות תגובה בטוחה, שנאכפת ב־Runtime של
+Hermes ובשכבת ה־transport — לא רק ב־UI.
+
+- **קריאה בלבד (`read_only`, ברירת מחדל):** כל הודעה נכנסת נשמרת ל־session store
+  המשותף של Hermes, אך הסוכן לעולם אינו רץ ואין שום תופעת־לוואי יוצאת (תשובה,
+  הקלדה, אישור קריאה, תגובה, עריכה/מחיקה, שליחה עצמאית או משימה מתוזמנת).
+- **שיחות פרטיות נבחרות (`selected_chats`):** רק מספרי WhatsApp שנבחרו במפורש
+  מקבלים מענה; כל השאר נשמרים אך לא נענים. בזמן `apply` אותה רשימה נכתבת גם
+  ל־allowlist הרשמי של Hermes, כך שה־hook וה־auth הקיים מסכימים על אותה הרשאה.
+  קבוצות ניתנות להגדרה בממשק Hermes המלא דרך `group_policy/group_allow_from`;
+  ה־POC הפשוט אינו מציג אותן כאילו הוגדרו כשלא הוגדרו.
+- מדיניות חסרה/לא תקינה → ברירת מחדל `read_only` (fail-closed).
+
+**אכיפה** מסופקת על ידי plugin משתמש אמיתי של Hermes,
+`business-whatsapp-policy`, המותקן ל־`<hermesHome>/plugins/` ומופעל דרך הפקודה
+הרשמית `hermes plugins enable business-whatsapp-policy --no-allow-tool-override`:
+
+1. **Hook `pre_gateway_dispatch`** (נקודת האכיפה הראשית) — לפני auth/pairing ולפני
+   שהסוכן רץ. עבור צ׳אט לא־מורשה הוא מחזיר `{"action":"skip"}` ומבצע ingest פסיבי
+   ל־transcript (זוג `user`/`assistant:NO_REPLY` כדי לשמור על alternation ולמנוע
+   כפילויות לפי `message_id`). עבור צ׳אט מורשה בלבד — `{"action":"allow"}`.
+2. **Guards על ה־platform registry** (הגנה בשכבת ה־transport, ברירת־מחדל‑חסום) —
+   עוטפים את `adapter_factory` של `whatsapp` ואת `standalone_sender_fn`, ומרושמים
+   כניסת `whatsapp_cloud` עטופה. עטיפת Cloud מסומנת כ־override של רכיב core ומאמתת
+   credentials לפני חיבור, כדי לא להפעיל Cloud רק משום שהתלויות מותקנות.
+
+   **בחירת המתודות היא contract‑driven, לא denylist שביר של תחיליות.** ה־plugin
+   מחזיק allowlist מפורש של משטח ה־outbound שאומת מול מקור Hermes המותקן `0.19.1`
+   עבור שתי המשפחות — המתאם הרשמי של Baileys
+   (`plugins/platforms/whatsapp/adapter.py`) ומתאם ה־Cloud
+   (`gateway/platforms/whatsapp_cloud.py`). כל מתודת שליחה/עריכה/מחיקה/הקלדה וכל
+   ה־sink הרשתיים הפרטיים (`_send_media_to_bridge`, `_post_interactive`,
+   `_send_read_receipt` …) נעטפים ונחסמים כאשר `can_reply` שקרי — **גם
+   סינכרוני וגם אסינכרוני** (מתודת `def` רגילה לא נשארת פתוחה). מתודות ה־convenience
+   של מחלקת הבסיס מנתבות אל אותם primitives עטופים, כך שהעטיפה מכסה את המשטח
+   הטרנזיטיבי. הקלדה/אישורי קריאה מושתקים בשקט. במסלול Cloud נעטפת גם
+   `_is_interactive_sender_authorized`, משום שכפתורי אישור/בחירה נפתרים במתאם לפני
+   hook ה־dispatch הרגיל.
+
+   **חוזה גרסה, כשל‑סגור — לא degrade עם לוג בלבד.** אם משפחת הפלטפורמה אינה מוכרת,
+   אם חתימות ה־`PlatformEntry` שאנו עוטפים חסרות, או אם המתאם החי חשף מתודת
+   outbound ציבורית **לא מזוהה** (drift), ה־plugin **משבית את החיבור** — ה־factory
+   מחזיר מתאם ריק (הפלטפורמה לא נטענת) במקום לשרת מתאם לא־עטוף, ובכשל התקנה כולל
+   מבטלים את רישום הפלטפורמות. בדיקות חוזה־גרסה (`tests/test_installed_contract.py`)
+   בודקות את המקור המותקן עצמו (דרך מפרש ה־venv של Hermes) ונכשלות אם המשטח סטה
+   מ־allowlist שלנו; הן מדלגות רק כאשר Hermes אינו מותקן.
+   **שליחת Cloud out-of-process:** נכון ל־Hermes `0.19.x` מתאם ה־Cloud הוא רכיב
+   core שאינו רשום ב־platform registry, ולכן אין לו `standalone_sender_fn`.
+   המשמעות: שליחת Cloud מחוץ לתהליך ה־gateway (למשל cron בתהליך נפרד) פשוט אינה
+   זמינה — לא “לא מאובטחת”. איננו ממציאים sender עצמאי ל־Cloud; ה־plugin רק
+   משמר ועוטף `standalone_sender_fn` אם גרסת Hermes עתידית תחשוף אחד, כך ששליחה
+   מתוזמנת עתידית תכבד את אותה מדיניות. שליחת Cloud חיה מתבצעת כיום רק in-process
+   בתוך gateway פעיל.
+
+ה־hook נרשם תמיד תחילה; גם כשל ב־passive ingest מחזיר `skip` ואינו יכול להפוך
+הודעת read-only ל־dispatch רגיל. לפני התחלת QR המעטפת מאמתת מחדש שה־plugin
+מופעל; receipt ישן אינו נחשב הוכחה להפעלה.
+
+המצב נשמר ב־`<hermesHome>/business/whatsapp-policy.json` על ידי תהליך ה־main של
+Electron (`electron/whatsapp-policy.cjs`), עם נורמליזציה זהה
+(TS/`electron`/Python) של מזהי צ׳אט (טלפון, `+`, `whatsapp:`/`whatsapp_cloud:`,
+`@s.whatsapp.net`/`@lid`). ההתאמה ב־`selected_chats` היא **שוויון מנורמל מדויק**
+(לא substring/prefix), ונאכפת בכל המסלולים: sync, async, מתוזמן (standalone) ואינטראקטיבי.
+
+**אמת ה־ACL ב־Windows (`electron/whatsapp-privacy.cjs`):** קובץ המדיניות מכיל PII
+(המספרים המורשים). ב־NTFS ל־`chmod 0600` **אין** משמעות של סודיות — Node ממפה מצב
+POSIX רק ל־read‑only attribute, לא להגבלת קריאה. לכן איננו טוענים ש־`0600` מגן
+ב־Windows: גבול הסודיות הוא ש־Hermes home יושב תחת פרופיל המשתמש
+(`%LOCALAPPDATA%\hermes`), שה־ACL שלו מוריש גישה למשתמש (ול־SYSTEM/Administrators)
+בלבד. ב־POSIX עדיין נכתב `0600` כי שם זהו גבול אמיתי. **הרחקה מאבחון:** חבילת
+האבחון (`electron/diagnostics.cjs`) היא allow‑list נוקשה — היא פולטת רק סיכום
+runtime מסונתז ו־README ואינה קוראת/עוברת על ה־home, כך שקובץ המדיניות מוחרג
+מעצם הבנייה; `diagnosticsExclusions()` מתעד את החוזה לכל אספן עתידי.
+
+שמירת המדיניות מסנכרנת גם את מנגנוני Hermes הרשמיים דרך REST, לפני כתיבת
+הקובץ המקומי: Baileys מקבל `WHATSAPP_DM_POLICY=pairing` ו־
+`WHATSAPP_ALLOWED_USERS`; Cloud מקבל `WHATSAPP_CLOUD_DM_POLICY=pairing` ו־
+`WHATSAPP_CLOUD_ALLOWED_USERS`. כך כל הודעה יכולה להגיע ל־passive ingest,
+אבל turn פעיל וכפתורים אינטראקטיביים מותרים רק למספרים שנבחרו. סדר הכתיבה
+שומר בכל רגע על החיתוך המחמיר בין המדיניות הישנה והחדשה.
+
+ראה [../hermes-plugin/business-whatsapp-policy](../hermes-plugin/business-whatsapp-policy).
+
+בדיקת מנגנון חיה הפעילה `hermes serve` מקומי עם token פרטי, קראה
+`/api/health`, התחילה onboarding, צפתה ברצף
+`installing → starting → waiting`, אימתה שקיים `qr_payload`, וה־QR נסרק בפועל.
+לאחר החיבור התקבלה הודעה אמיתית במצב read-only; היא נשמרה ב־Session ונחסמה
+לפני inference או outbound delivery.
 
 ## Scheduled Tasks
 
-ה־Companion משתמש ב־Cron API הרשמי עם `profile=default`:
+ה־Companion משתמש ב־Cron API הרשמי עם `profile=default`. חוזי ה־REST המדויקים
+(מ־`hermes_cli/web_routers/cron.py`):
 
-- list, create, pause/resume ו־delete.
-- התאמת schedule תומכת גם בגרסה הישנה כמחרוזת וגם במבנה החדש
-  `{display, expr}`.
-- המשתמש רואה “ימים א׳–ה׳ בשעה 08:00”, לא ביטוי Cron.
+- `GET /api/cron/jobs` — list.
+- `POST /api/cron/jobs` — create (גוף `CronJobCreate`).
+- `POST /api/cron/jobs/{id}/pause` ו־`/resume` — הפעלה/השהיה.
+- `PUT /api/cron/jobs/{id}` — **עריכה** אטומית עם גוף `{ updates: {...} }` (חוזה
+  `CronJobUpdate`). ה־UI שולח רק את השדות שהשתנו (diff מול המקור), כך שעריכה לעולם
+  לא דורסת שדות שלא נגעו בהם. שינוי enabled נשאר על pause/resume הייעודיים.
+- `POST /api/cron/jobs/{id}/trigger` — **הרצה מיידית** (fire now).
+- `DELETE /api/cron/jobs/{id}` — **מחיקה**.
 
-ב־E2E משימה נוצרה, נמצאה דרך `/api/cron/jobs`, הושהתה ונמחקה לאחר ההוכחה.
+מחיקה והרצה־עכשיו הן פעולות בלתי הפיכות ולכן דורשות אישור (confirm) ב־UI; עריכה
+נפתחת בדיאלוג ממולא מראש. התאמת schedule תומכת גם בגרסה הישנה כמחרוזת וגם במבנה
+`{display, expr}`. המשתמש רואה “ימים א׳–ה׳ בשעה 08:00”, לא ביטוי Cron.
+
+ב־E2E משימה נוצרה, נמצאה דרך `/api/cron/jobs`, הושהתה ונמחקה לאחר ההוכחה. בדיקות
+היחידה (`cron-rest.test.ts`) מקבעות את חוזי ה־PUT/`{updates}`, trigger ו־delete.
+
+### צירוף קבצים ו־PDF
+
+צירופים מנותבים לפי סוג ל־RPC הרשמי: תמונות דרך `image.attach`/`image.attach_bytes`,
+קבצים כלליים דרך `file.attach` (מחזיר `@file:` ref). **PDF** מנותב תחילה ל־`pdf.attach`
+הרשמי (עיבוד עמוד־לתמונה ל־vision, עם `path` או `content_base64`+`filename`). נפילה
+ל־`file.attach` מתרחשת **רק** כאשר ה־gateway אינו מכיר את השיטה (JSON-RPC `-32601`);
+כל שגיאה אחרת (למשל `pdftoppm` חסר) מוצפת כפי שהיא. ה־transport משמר את קוד ה־JSON-RPC
+דרך `HermesRpcError` כדי לזהות method-not-found במדויק.
+
+### קשיחות demo ב־production
+
+fixtures של demo **מנוטרלים קשיח** ב־build ייצור ארוז. `?demo=1` מכובד **רק** כאשר
+ה־build מתיר demo — שרת dev (`import.meta.env.DEV`), או build QA/בדיקה ייעודי שאופה
+לתוכו `VITE_ALLOW_DEMO` (ראה `npm run build:qa` / `package:win:qa`). הדגל נגזר
+ממצב ה־build ב־`vite.config.ts` (`--mode qa`); אין קובץ `.env.qa`. `npm run build` /
+`package:win` (מצב production) **אינם** אופים את הדגל, ולכן
+ב־executable שהלקוח מקבל אין נתיב קוד שמגיע ל־demo backend — `?demo=1` אינרטי לגמרי.
+build ארוז ללא גשר preload **נכשל סגור** (`bridgeMissing`) במקום לפברק נתונים.
+הלוגיקה מרוכזת ב־`isDemoBuildAllowed`/`resolveClientMode` ומכוסה ב־`hermes-mode.test.ts`.
+ה־e2e של demo מותקן (`e2e-installed-attachment-ui.mjs`) רץ מול חבילת QA, לא מול הייצור.
+
+### התראות Curator/למידה
+
+מודול electron רשמי (`curator-insights.cjs`) קורא את `GET /api/curator` ו־
+`GET /api/learning/graph` בלבד ומחזיר את המטענים הגולמיים דרך IPC. הרנדרר מנסח מהם
+התראות ידידותיות (`deriveCuratorNotifications`) — לעולם לא ממציא מספרים או skills:
+כאשר שדה חסר, ההתראה שלו פשוט מושמטת. מוצג במסך ה־Skills.
+
+## מדיניות תאימות מקור־יחיד וערוץ ההפצה
+
+מדיניות התאימות ל־Hermes מרוכזת בקובץ קנוני יחיד: `hermes-compat.json` (טווח
+`>=0.19.0 <0.20.0`, הגרסה המאומתת `0.19.1`, ומפת ה־pins). כל שכבה מטבעה מחזיקה עותק
+משלה (bundle של TS, תהליך electron ראשי, סקריפט build, plugin של Python בתוך venv של
+Hermes, ו־PowerShell עצמאי — אף אחת אינה יכולה לייבא את האחרות ב־runtime). מה שהופך
+את ה־JSON ל**מקור־האמת** הוא בדיקת ה־drift `src/lib/hermes-compat-policy.test.ts`,
+שמאמתת שכל עותק (renderer `compat.ts`, `electron/hermes-compat.cjs`,
+`scripts/plugin-sdk-contract.mjs`, `contract.py` של ה־plugin, וליטרלי הטווח ב־
+`bootstrap.ps1` + ה־pins ב־`Release.ps1`) זהה ל־JSON. המדיניות אינה יכולה להתפצל בשקט.
+
+**אי־התאמת ערוץ (CalVer מול semver).** תגי ה־release של upstream הם CalVer
+(`v2026.7.30`) ואינם נושאים משמעות semver, בעוד ה־CLI המותקן מדווח `0.19.1`. הגרסה
+הסמכותית שכל release מתקין היא `__version__` שב־`hermes_cli/__init__.py` באותו tag —
+בדיוק מה ש־`hermes --version` ידווח. לכן ה־bootstrap הדק **קורא את `__version__`
+מהמקור לכל tag מועמד** (`Release.ps1: Get-ReleaseSourceVersion`) ובוחר את ה־release
+החדש ביותר שגרסתו בטווח — לעולם לא מפרש tag כ־semver ולא גורף טקסט חופשי. כשקריאת
+המקור אינה זמינה (rate-limit/רשת), נופלים חזרה ל**מפת pins בשליטתנו** (מקושרת ל־JSON).
+אם אף release אינו כשיר — **נכשל סגור**. תהליך העדכון/אמון מתועד ב־`hermes-compat.json`.
+
+`verify:bootstrap` מריץ **gate דטרמיניסטי offline** (unit-suite של installer/lib +
+בידוד home; `scripts/test-bootstrap-lib.ps1`) שמוכיח את לוגיקת הבחירה הבטוחה־ל־CalVer
+ללא רשת, ולאחריו **probe חי** ל־GitHub. כשל ב־probe החי (רשת/rate-limit/סחיפת טווח
+upstream) מדווח כ־`EXTERNAL-GATE` ברור ויוצא 0 — לא כשל שקט של ה־build.
 
 ## עדכונים
 
-המעטפת משתמשת ב:
+בדיקת הזכאות משתמשת ב־API הרשמי:
 
 ```text
 /api/hermes/update/check
-/api/hermes/update
-/api/actions/hermes-update/status
 ```
 
-לאחר update נדרש health check. ה־POC זיהה update זמין, אך לא הפעיל בכוח
-update על checkout פעיל עם שינויים. Profile, Sessions, Memory ו־Skills אינם
-חלק מתיקיית קוד ה־release ולכן ה־bootstrapper אינו מוחק אותם.
+על Windows לא ניתן לעדכן מתוך `hermes serve`, משום שה־executable שמבקשים
+להחליף עדיין פתוח. לכן Electron מתזמר את updater הרשמי בסדר בטוח ומאומת. סדר
+התזמור (`electron/hermes-update-flow.cjs`, מוזרק ל־DI ונבדק לכל סדר כשל):
+
+1. **Preflight לפני כל מוטציה — לפני עצירה או גיבוי.** תחילה **gate של שיטת
+   ההתקנה**: אם ההתקנה אינה git ואינה layout מנוהל מוכר (`hermes-agent`
+   עם `pyproject.toml`), העדכון נעצר מיד ללא שינוי. אחר כך `hermes update
+   --check` (קריאה בלבד), ואז **preflight תאימות** — להתקנת git נקרא ה־
+   `__version__` שב־`origin/main` (`git show origin/main:hermes_cli/__init__.py`)
+   והעדכון מבוטל אם היעד חורג מהטווח הנתמך `>=0.19.0 <0.20.0`. כל אלה קורים
+   *לפני* שעוצרים את ה־runtime/gateway, כך שעדכון לא־כשיר לעולם אינו מפיל את
+   ה־runtime.
+2. **עוגן rollback.** מיד לאחר ה־preflight, עוד לפני כל מוטציה, נלכד ה־commit
+   המדויק של checkout ההתקנה (`git rev-parse HEAD`).
+3. **מוטציה.** עוצרים runtime+gateway, סוגרים רק תהליכי Hermes Desktop תחת
+   ה־installation root המאומת, ואז נוצר **גיבוי מלא (ZIP)** דרך הפקודה הרשמית
+   `hermes backup --output <path>`. הגיבוי מאומת עם **adm-zip הקיים** — נפרסת
+   **ספריית המרכז (central directory)** של ה־ZIP (שנמצאת בסוף הקובץ), כך שגיבוי
+   שנקטע באמצע (דיסק מלא, תהליך שנהרג) נדחה גם אם הוא מתחיל בחתימת `PK`; ארכיון
+   ריק (אפס entries) נדחה גם הוא. רק אז רץ `hermes update --yes` (ששומר בנוסף
+   snapshot מהיר משלו), ולבסוף הפעלה מחדש ו־`/api/health`.
+4. **התאוששות מכשל אחרי מוטציה.** אם משהו נכשל אחרי שהמוטציה החלה: להתקנת git
+   מבצעים `git reset --hard <עוגן>` על **checkout הקוד בלבד**
+   (`<hermesHome>/hermes-agent`). המידע של המשתמש — `sessions/`, `skills/`,
+   `memories/`, `state.db` — הוא sibling של ה־checkout, מחוץ ל־work tree, ולכן
+   reset לעולם אינו נוגע בו; Hermes autostash־ה שינויים מקומיים ו־`reset --hard`
+   אינו נוגע ב־stash. אם ההתקנה אינה git (אין restore רשמי in-place בטוח לריצה
+   אוטומטית), נכשלים **fail-closed**: אין ניחוש הרסני, אלא הודעה כנה עם נתיב
+   הגיבוי המאומת והפניה לתמיכה.
+
+נתיב הגיבוי מוחזר ומוצג למשתמש. אין כאן מנגנון הורדה, גיבוי, restore או update
+חלופי — הכול דרך הפקודות הרשמיות של Hermes. חוזה התאימות משותף בין הצד הרנדרר
+(`src/lib/hermes/compat.ts`) לצד ה־main (`electron/hermes-compat.cjs`) ו־
+`scripts/plugin-sdk-contract.mjs`.
+
+הזרימה עברה בפועל מ־Hermes `0.19.0` ל־`0.19.1`. לאחר העדכון התקבל
+`update_available=false`, ‏`behind=0`; Telegram ו־WhatsApp חזרו ל־connected.
+ה־snapshot לפני ואחרי היה זהה: 70 Sessions, ‏64 Skills, משימה אחת וה־Skill
+שנוצר ב־POC נשמרו. Profile, Sessions, Memory ו־Skills אינם חלק מתיקיית קוד
+ה־release ולכן גם ה־bootstrapper אינו מוחק אותם.
 
 ## אבחון ואבטחה
 
@@ -257,8 +514,18 @@ tokens, raw logs, שיחות, מיילים, קבצי עסק או פרטי לקו
 
 ## הפצה ותאימות
 
-המתקין המלא `0.3.2` כולל את ה־Companion ואת bootstrap payload. מתקין הרשת
-הזעיר כולל רק bootstrap, Plugin ו־Skill; Hermes עצמו יורד מה־release הרשמי.
+המתקין המלא `0.3.3` כולל את ה־Companion ואת bootstrap payload. מתקין הרשת
+הזעיר כולל bootstrap, Plugin ו־Skill; Hermes עצמו יורד מה־release הרשמי,
+וה־Companion יורד לפי manifest חיצוני עם גרסה, URL ו־SHA-256.
+
+ה־artifact הסופי שנבנה והותקן הוא `release/העוזר לעסק Setup 0.3.3.exe`, בגודל
+`102,669,826` bytes וב־SHA-256
+`5529B70A90CCF71F98A9E6B62A37ED8EEB766CC0EA3CE36A85118592569591B0`.
+
+מנגנון הרשת עבר E2E מול שרת loopback: הורדת manifest, אימות SHA-256 והתקנה
+שקטה של ה־Companion הסופי. artifact רשת לפרסום עדיין דורש
+`COMPANION_MANIFEST_URL` יציב ב־HTTPS; הקובץ הקיים ב־`release/` אינו מוצג
+כמתקין הפצה סופי ללא כתובת כזו.
 
 עמידות לשינויים נשענת על:
 
@@ -272,21 +539,51 @@ tokens, raw logs, שיחות, מיילים, קבצי עסק או פרטי לקו
 שינוי breaking ב־Hermes `0.20+` דורש העלאת טווח רק לאחר בדיקת חוזה. זו
 הגנה מכוונת, לא הבטחה בלתי אפשרית ש־API עתידי תמיד יהיה תואם.
 
+## אימות release (verify:release) ו־E2E opt-in
+
+`npm run verify:release` מריץ אך ורק בדיקות דטרמיניסטיות ובטוחות שאינן דורשות
+Hermes חי, אפליקציה מותקנת או רשת: `npm test` (Vitest — כולל צירוף קבצים,
+reducer אירועי הצ׳אט, חוזה התאימות, אימות הגיבוי ותזמור העדכון), בדיקות מדיניות
+ה־WhatsApp ב־Python (`test:plugin:policy`), `verify:plugin` ו־`verify:bootstrap`.
+
+חבילות ה־E2E החיות הן **opt-in בלבד** ואינן חלק מ־`verify:release`, משום שהן
+דורשות binary מותקן, `hermes serve` חי או שירותים חיצוניים:
+
+- `test:e2e:hermes` — מול Hermes חי מקומי.
+- `test:e2e:installed-ui` — האפליקציה המותקנת (זרימת onboarding מלאה).
+- `test:e2e:installed-attachment-ui` — צירוף קבצים באפליקציה המותקנת (stub של
+  דיאלוג הקבצים + transport דמו, דטרמיניסטי אך דורש binary מותקן).
+- `test:e2e:installed-whatsapp-ui` / `test:e2e:whatsapp` — מדיניות WhatsApp.
+- `test:e2e:installed-update` — זרימת העדכון באפליקציה המותקנת.
+- `test:e2e:bootstrap-clean` / `test:e2e:bootstrap-companion` — התקנות נקיות.
+
 ## תוצאות קבלה — 31 ביולי 2026
 
-- `23/23` בדיקות עברו.
-- Plugin contract, bootstrap resolver ו־TypeScript/Vite build עברו.
+- `63/63` בדיקות Vitest ו־`17/17` בדיקות plugin עברו.
+- Plugin contract, bootstrap resolver, אימות Git blob של install.ps1 הרשמי
+  ו־TypeScript/Vite build עברו.
 - `npm audit --omit=dev` החזיר `0` חולשות; Electron שודרג ל־`43.2.0`.
 - נשארו 16 advisories מסוג high בתלויות כלי האריזה של electron-builder;
   הן אינן ב־production dependency tree, ול־npm אין כרגע מסלול תיקון שאינו
   downgrade לגרסה ישנה ופגיעה יותר.
-- `clarify.request/respond` עבר גם ברמת RPC וגם ב־UI.
-- Streaming, Stop, Session משותף ואישור פעולה עברו.
+- `clarify.request/respond` עבר גם ברמת RPC וגם ב־UI; הסוכן שאל שאלה אמיתית
+  וקיבל את התשובה דרך אותו request id.
+- Streaming, `session.resume`, Stop חי באמצעות `session.interrupt`, ‏Session משותף
+  ו־`tool.start/tool.complete` עם אותו tool id עברו מול Hermes חי.
+- מדיניות WhatsApp עברה E2E באפליקציה המותקנת בשני מצבי המדיניות; QR אמיתי
+  הופק, וה־plugin המותקן הוכיח ש־Cloud נוצר דרך factory עטוף ושכפתור
+  אינטראקטיבי חסום ב־read-only.
+- לאחר סריקת ה־QR התקבל אירוע אמיתי ונשמר פסיבית ב־Session של Hermes. לוג ה־gateway
+  הוכיח `business_whatsapp_read_only`; מסד הנתונים הוכיח 0 tokens, ‏0 API/Tool Calls
+  ו־0 delivery obligations, ולכן המופע הזה לא שלח תשובה.
+- Telegram עבר E2E חי: בוט ייעודי, Gateway restart אוטומטי, הודעה ותשובה
+  מדויקות, home channel ו־session משותף שנפתח ב־Hermes Desktop.
 - Skill ו־Scheduled Task עברו מול APIs הרשמיים.
 - diagnostics ZIP עבר בדיקת allowlist.
-- המתקין המלא והזעיר הותקנו עם exit code `0`.
-- EXE `0.3.2`, קיצורי Desktop/Start Menu ואייקון המוצר אומתו.
-- Google ו־Telegram זמינים אך לא מחוברים ללא credentials של המשתמש.
+- המתקין המלא הותקן עם exit code `0`; מסלול מתקין הרשת עבר E2E מלא מול manifest
+  מקומי מאומת, אך artifact פרסום ממתין ל־URL HTTPS אמיתי.
+- EXE `0.3.3`, קיצורי Desktop/Start Menu ואייקון המוצר אומתו.
+- Google זמין אך לא מחובר ללא credentials והסכמה של המשתמש.
 - build ה־POC אינו חתום; release מסחרי דורש certificate וחתימת קוד.
 
 ## תוספת אימות — התקנה, OAuth ואשף
@@ -322,8 +619,8 @@ DELETE /api/providers/oauth/sessions/<session>?profile=default
   Google Workspace ו־Telegram פתחו את תהליכי החיבור הרשמיים.
 
 Google נבדק גם במסלול כשל בטוח: קובץ client secret חסר נדחה, וסטטוס האימות נשאר
-ללא שינוי. השלמת consent אמיתי עדיין דורשת קובץ Google של המשתמש. Telegram נשאר
-לא מוגדר עד שיוזנו Bot Token ו־allowed user ID אמיתיים.
+ללא שינוי. השלמת consent אמיתי עדיין דורשת קובץ Google של המשתמש. Telegram חובר
+לאחר מכן עם Bot Token ו־allowed user ID אמיתיים, ועבר את הבדיקה החיה המתוארת לעיל.
 
 ## מטריצת קבלה
 
@@ -332,7 +629,7 @@ Google נבדק גם במסלול כשל בטוח: קובץ client secret חסר
 | התקנה בלי Terminal | עבר | clean bootstrap ל־Hermes Home ריק + NSIS מותקן exit 0 |
 | חיבור Provider | עבר | Codex OAuth `logged_in=true`, activation ו־inference אמיתי |
 | היכרות עם המשתמש והעסק | עבר | `business-bootstrap` הפעיל `clarify.request/respond` |
-| חיבור שירות חיצוני | ממתין ל־credentials | Google ו־Telegram מחוברים לחוזים הרשמיים; אין client secret או Bot Token |
+| חיבור שירות חיצוני | עבר | Telegram עבר הודעה אמיתית הלוך־ושוב וה־session נפתח בשני הממשקים; Google עדיין ממתין ל־consent |
 | שיחה ו־Streaming | עבר | `message.delta`, Stop ו־`message.complete` בבינארי המותקן |
 | הצגת ואישור פעולות | עבר | מצב manual זמני; destructive delete נדחה והמצב הוחזר ל־smart |
 | משימה מתוזמנת | עבר | create, list, pause ו־cleanup דרך Cron API |
@@ -340,5 +637,93 @@ Google נבדק גם במסלול כשל בטוח: קובץ client secret חסר
 | State משותף | עבר | Session מה־Companion נמצא מיד דרך `session.list` |
 | תקינות וחבילת אבחון | עבר | health/update + ZIP עם שני קבצי allowlist בלבד |
 
-אין חסם קוד ידוע ל־Google או Telegram. ההשלמה היחידה שלא ניתן לבצע אוטונומית היא
-consent לחשבון חיצוני ופרטי גישה שבכוונה אינם נמצאים ב־repository או בחבילת האבחון.
+אין חסם קוד ידוע ל־Google או Telegram. השלמת Google עדיין דורשת consent ופרטי
+גישה של המשתמש. WhatsApp Web עבר סריקה ובדיקת intake אמיתית במצב read-only;
+פרטי הגישה אינם נמצאים ב־repository או בחבילת האבחון.
+
+## שותף עסקי (Business Partner) וארגז חול נייטיב
+
+מצב **שותף עסקי** הוא שכבת־על אופציונלית ועמידה מעל אותה התקנת Hermes יחידה
+ואותו Profile `default`. אין Runtime, Scheduler, Memory או Personality Engine
+חלופיים, ו־`SOUL.md` אינו נוגעים בו כלל.
+
+### חוזי הקונפיגורציה שנבדקו
+
+- `GET /api/config` — קריאת הקונפיגורציה הנוכחית (מנורמלת גם ל־`{config:{...}}`
+  וגם לאובייקט חשוף).
+- `PUT /api/config` עם `{config:{...}, profile:'default'}` — **deep-merge** בצד
+  השרת. נשלח רק ה־delta; מפתחות שלא נגענו בהם נשמרים. deep-merge אינו יכול
+  למחוק מפתח, ולכן שחזור personality קודם נעשה בכתיבת הערך הקודם המדויק.
+- `approvals.mode` = `manual|smart|off`, `approvals.cron_mode` = `deny|approve`,
+  `delegation.subagent_auto_approve` = bool. מצב שותף מקבע `manual` + `deny` +
+  `subagent_auto_approve=false`.
+- `GET /api/tools/terminal/backends` ו־`PUT /api/tools/terminal/backend {backend}`.
+- שדות Docker: `terminal.backend`, `docker_volumes` (רשימת `host:container[:ro]`),
+  `docker_mount_cwd_to_workspace=false`, `docker_network=false` כברירת מחדל
+  בטוחה, `docker_forward_env=[]`, ובנוסף `docker_image/resources/lifecycle`
+  שנשארים בברירת המחדל.
+
+### Personality נייטיב רשמי
+
+מצב שותף משתמש ב־`personalities.business-partner` (Personality בעל שם) וב־
+`display.personality` בלבד. ההפעלה שומרת פעם אחת את `display.personality` הקודם
+המדויק (idempotent — לא משכתבים את הערך המוזרק שלנו), וכיבוי משחזר אותו. הגדרת
+ה־Personality עצמה נשארת בקונפיג (לא מזיקה כשאינה פעילה). ה־prompt קטן בכוונה;
+ההתנהגות המפורטת חיה ב־Skill.
+
+### Skill מותקן ונראה ב־Hermes המלא
+
+`hermes-plugin/business-partner/SKILL.md` מותקן אל
+`<hermesHome>/skills/business/business-partner/SKILL.md` עם receipt של integrity
+(idempotent), ונראה במסך ה־Skills המלא. הוא מגדיר: יזום, אתגור, מחקר, הצעות,
+צוותי `delegate_task` נייטיביים, וגבול קשיח — לעולם לא לשלוח/להוציא כסף/לפרסם/
+למחוק/לבצע commit/לשנות הרשאות/להתחייב חיצונית בלי אישור מפורש. צ׳ק־אין יזום
+(cron) רק לאחר הפעלה מפורשת של המשתמש.
+
+### שלוש רמות ארגז חול — והאמת עליהן
+
+- **off** — backend מקומי, ללא הגבלת נתיב כתיבה. אישור ידני הוא ההגנה היחידה.
+- **guard** — backend מקומי + הזרקת `HERMES_WRITE_SAFE_ROOT` בזמן עליית ה־Runtime.
+  משתנה זה מגביל **רק** `write_file/patch/delete/move` — לא קריאות ולא טרמינל.
+  ריבוי נתיבי כתיבה מחוברים ב־path delimiter של הפלטפורמה.
+- **docker** — backend `docker` עם `docker_volumes` מהתיקיות שנבחרו. נדרש
+  `status==='ready'` מ־`/api/tools/terminal/backends`. אם Docker חסר/עצור/לא
+  זמין — **fail-closed**: המערכת אינה מפעילה Docker, חוזרת ל־local+guard,
+  ומדווחת מפורשות שאין בידוד (degraded).
+
+**דיוק קריטי:** Docker אינו תמיד עוקף אישורים. הוא מדלג על שכבת פקודות מסוכנות
+רק כאשר אין bind של נתיב host. תיקיות `docker_volumes` מ־host או `mount_cwd`
+אוטומטי מחזירים את מלוא שכבת ה־guard של `terminal/execute_code`. כתיבה
+(`write_file/patch`) בתוך mount לכתיבה מסתמכת על שמירת נתיבים רגישים חלשה יותר —
+ולכן `:ro` היא ההגנה החזקה ביותר. מסך התמיכה מציג את המשמעות המדויקת לכל מצב.
+
+### הזרקת Runtime והתמדה
+
+הזרקת ה־env היחידה של ארגז החול היא `HERMES_WRITE_SAFE_ROOT`, שנבנית ב־
+`electron/runtime.cjs` בזמן `spawn` מתוך ההגדרות העמידות. שינוי שמזיז את הערך
+הזה מפעיל restart ממוקד של ה־Runtime המנוהל; שינויים שאינם משנים אותו לא.
+ההגדרות נשמרות ב־`<hermesHome>/business/partner-settings.json` (מצב, רמת ארגז חול,
+רשת, צ׳ק־אין, תיקיות, וגיבוי ה־personality).
+
+WhatsApp נשאר כפוף למדיניות read-only/selected הקיימת; מצב שותף אינו מרפה אף
+guard קיים ואינו טוען שמשלוח דרך connector מאובטח אם אינו.
+
+### קבצים עיקריים
+
+- `electron/hermes-config.cjs` — עטיפות REST מאומתות (deepMerge/get/put/backends/docker).
+- `electron/partner-settings.cjs` — התמדה מקומית + גזירת `HERMES_WRITE_SAFE_ROOT`.
+- `electron/partner-mode.cjs` — הפעלה/כיבוי Personality (idempotent).
+- `electron/sandbox-config.cjs` — חישוב תוכנית ארגז חול + החלה fail-closed.
+- `electron/business-partner.cjs` — Orchestrator שה־IPC מפעיל.
+- `electron/partner-skill-install.cjs` — התקנת ה־Skill המותקן.
+- `src/components/screens/support/SupportPartnerPanel.tsx` + `PartnerStatusRows.tsx`,
+  `src/components/PartnerModeSelector.tsx`, `src/hooks/usePartnerMode.ts`,
+  `src/lib/partner.ts`.
+
+### בדיקות
+
+- Unit/contract: `electron/hermes-config.test.ts`, `partner-settings.test.ts`,
+  `sandbox-config.test.ts`, `partner-mode.test.ts`, `business-partner.test.ts`.
+- Probe מותקן בטוח: `scripts/e2e-installed-partner-ui.mjs`
+  (`npm run test:e2e:installed-partner-ui`) — מפעיל שותף, מבקש Docker בזמן שהוא
+  עצור, ומוודא fail-closed ל־guard. לעולם אינו מפעיל Docker ואינו משאיר container.

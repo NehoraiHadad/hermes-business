@@ -9,13 +9,15 @@ export type Session = {
   source: string
 }
 
+export type ChatAttachmentInfo = { name: string; kind?: 'image' | 'file'; size?: string }
+
 export type ChatMessage = {
   id: string
   role: 'assistant' | 'user'
   text: string
   time?: string
   streaming?: boolean
-  attachment?: { name: string; size: string }
+  attachments?: ChatAttachmentInfo[]
 }
 
 export type Activity = {
@@ -52,6 +54,15 @@ export type ScheduledTask = {
   deliver?: string
   last_run?: string | null
   next_run?: string | null
+}
+
+export type TaskEditValues = { name: string; prompt: string; schedule: string }
+
+export type TaskActions = {
+  onToggle: (task: ScheduledTask) => void
+  onTrigger: (task: ScheduledTask) => void
+  onEdit: (task: ScheduledTask, updates: TaskEditValues) => void
+  onDelete: (task: ScheduledTask) => void
 }
 
 export type Skill = {

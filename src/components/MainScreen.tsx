@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import type { useSupportActions } from '../hooks/useSupportActions'
-import type { Connection, ScheduledTask, Screen, Skill } from '../types'
+import type { ProviderReadiness } from '../lib/provider-readiness'
+import type { Connection, ScheduledTask, Screen, Skill, TaskActions } from '../types'
 import { ConnectionsScreen } from './screens/ConnectionsScreen'
 import { SkillsScreen } from './screens/SkillsScreen'
 import { SupportScreen } from './screens/SupportScreen'
@@ -17,10 +18,11 @@ export function MainScreen({
   connections,
   runtime,
   versions,
+  provider,
   support,
   toast,
   onAddTask,
-  onToggleTask,
+  taskActions,
   onAddSkill,
   onOpenConnection
 }: {
@@ -31,15 +33,16 @@ export function MainScreen({
   connections: Connection[]
   runtime: HermesRuntime | null
   versions: Record<string, string>
+  provider: ProviderReadiness
   support: ReturnType<typeof useSupportActions>
   toast: string
   onAddTask: () => void
-  onToggleTask: (task: ScheduledTask) => void
+  taskActions: TaskActions
   onAddSkill: () => void
   onOpenConnection: (connection: Connection) => void
 }) {
   if (screen === 'tasks') {
-    return <TasksScreen tasks={tasks} onAdd={onAddTask} onToggle={onToggleTask} />
+    return <TasksScreen tasks={tasks} onAdd={onAddTask} actions={taskActions} />
   }
   if (screen === 'skills') return <SkillsScreen skills={skills} onAdd={onAddSkill} />
   if (screen === 'connections') return <ConnectionsScreen connections={connections} onConnect={onOpenConnection} />
@@ -49,7 +52,8 @@ export function MainScreen({
         runtime={runtime}
         versions={versions}
         tasks={tasks}
-        connections={connections}
+          connections={connections}
+          provider={provider}
         checking={support.checking}
         toast={toast}
         onHealth={support.onHealth}

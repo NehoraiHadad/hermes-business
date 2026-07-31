@@ -1,17 +1,30 @@
-import { CalendarClock, CheckCircle2, Clock3, Inbox, MoreHorizontal, Pause, Play, Plus, Zap } from 'lucide-react'
+import { CalendarClock, CheckCircle2, Clock3, Inbox, Pause, Pencil, Play, Plus, Trash2, Zap } from 'lucide-react'
+import { useState } from 'react'
 import { humanSchedule } from '../../lib/presentation'
-import type { ScheduledTask } from '../../types'
+import type { ScheduledTask, TaskActions } from '../../types'
+import { TaskEditDialog } from '../dialogs/TaskEditDialog'
 
 export function TasksScreen({
   tasks,
-  onToggle,
+  actions,
   onAdd
 }: {
   tasks: ScheduledTask[]
-  onToggle: (task: ScheduledTask) => void
+  actions: TaskActions
   onAdd: () => void
 }) {
+  const [editing, setEditing] = useState<ScheduledTask | null>(null)
   const nextRun = tasks.find(task => task.enabled && task.next_run)?.next_run || '—'
+
+  // Destructive/irreversible actions confirm first (delete permanently removes
+  // the job; trigger fires a real run now). Editing opens a prefilled dialog.
+  const confirmTrigger = (task: ScheduledTask) => {
+    if (window.confirm(`להריץ עכשיו את "${task.name}"? Hermes יבצע את המשימה מיד.`)) actions.onTrigger(task)
+  }
+  const confirmDelete = (task: ScheduledTask) => {
+    if (window.confirm(`למחוק לצמיתות את "${task.name}"? לא ניתן לשחזר.`)) actions.onDelete(task)
+  }
+
   return (
     <main className="content-screen">
       <section className="page-heading">
@@ -73,17 +86,42 @@ export function TasksScreen({
                 <span className={`state-label ${task.enabled ? 'state-label--active' : ''}`}>
                   {task.enabled ? 'פעיל' : 'מושהה'}
                 </span>
-                <button className="outline-button outline-button--small" onClick={() => onToggle(task)}>
+                <button
+                  className="outline-button outline-button--small"
+                  onClick={() => confirmTrigger(task)}
+                  title="הרץ עכשיו"
+                >
+                  <Zap size={15} /> הרץ עכשיו
+                </button>
+                <button className="outline-button outline-button--small" onClick={() => actions.onToggle(task)}>
                   {task.enabled ? 'השהה' : 'הפעל'}
                 </button>
-                <button className="icon-button">
-                  <MoreHorizontal size={17} />
+                <button className="icon-button" onClick={() => setEditing(task)} title="עריכה" aria-label="עריכה">
+                  <Pencil size={16} />
+                </button>
+                <button
+                  className="icon-button icon-button--danger"
+                  onClick={() => confirmDelete(task)}
+                  title="מחיקה"
+                  aria-label="מחיקה"
+                >
+                  <Trash2 size={16} />
                 </button>
               </div>
             </article>
           ))}
         </div>
       </section>
+      {editing ? (
+        <TaskEditDialog
+          task={editing}
+          onClose={() => setEditing(null)}
+          onSave={updates => {
+            actions.onEdit(editing, updates)
+            setEditing(null)
+          }}
+        />
+      ) : null}
     </main>
   )
 }

@@ -124,7 +124,7 @@ export function Support({ storage }) {
     h(
       'p',
       { className: 'mt-4 text-[0.6875rem] leading-5 text-(--ui-text-quaternary)' },
-      'האבחון המתקדם הוא המסך הרשמי של Hermes ואינו מעלה דבר אוטומטית. ZIP מצומצם ללא שיחות, מיילים או קבצי עסק זמין ב־launcher של ה־POC. אין במעטפת גישה מרחוק או backdoor.'
+      'האבחון המתקדם הוא המסך הרשמי של Hermes ואינו מעלה דבר אוטומטית. ZIP מצומצם ללא שיחות, מיילים או קבצי עסק זמין ב־launcher של המעטפת. אין במעטפת גישה מרחוק או backdoor.'
     )
   )
 }

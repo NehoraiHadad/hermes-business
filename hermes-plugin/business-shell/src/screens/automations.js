@@ -58,7 +58,7 @@ export function Automations({ storage }) {
     h(SectionTitle, {
       eyebrow: 'אוטומציות',
       title: 'משימות קבועות',
-      copy: 'ה־POC מציע תבנית אנושית, אבל שומר אותה במנגנון ה־Cron הרשמי של Hermes.'
+      copy: 'המעטפת מציעה תבנית אנושית, אבל שומרת אותה במנגנון ה־Cron הרשמי של Hermes.'
     }),
     h(
       'div',

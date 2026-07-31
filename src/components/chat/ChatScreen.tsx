@@ -1,10 +1,13 @@
 import { Paperclip, Plus, Send, Sparkles, Square } from 'lucide-react'
 import { FormEvent, useEffect, useRef, useState } from 'react'
 import type { Activity, Approval, ChatMessage, ClarifyRequest } from '../../types'
+import type { PendingAttachment } from '../../lib/hermes/attachments'
 import { ActivityStrip } from './ActivityStrip'
 import { ApprovalCard } from './ApprovalCard'
 import { ClarifyCard } from './ClarifyCard'
+import { ComposerAttachments } from './ComposerAttachments'
 import { MessageBubble } from './MessageBubble'
+import { useComposerAttachments } from './useComposerAttachments'
 
 export function ChatScreen({
   messages,
@@ -22,24 +25,33 @@ export function ChatScreen({
   approval: Approval | null
   clarify: ClarifyRequest | null
   busy: boolean
-  onSend: (text: string) => void
+  onSend: (text: string, attachments: PendingAttachment[]) => Promise<boolean> | void
   onStop: () => void
   onApproval: (choice: 'once' | 'deny') => void
   onClarify: (answer: string) => void
 }) {
   const [text, setText] = useState('')
+  const { attachments, setAttachments, fileInput, pickAttachment, onBrowserFiles, removeAttachment } =
+    useComposerAttachments(busy)
   const endRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
   }, [messages, activities, approval, clarify])
 
-  const submit = (event: FormEvent) => {
+  const submit = async (event: FormEvent) => {
     event.preventDefault()
     const value = text.trim()
-    if (!value || busy) return
+    if ((!value && !attachments.length) || busy) return
+    const outgoing = attachments
     setText('')
-    onSend(value)
+    setAttachments([])
+    const ok = await onSend(value, outgoing)
+    if (ok === false) {
+      // Restore the composer so the user can retry without re-picking files.
+      setText(value)
+      setAttachments(outgoing.map(item => ({ ...item, status: 'error' })))
+    }
   }
 
   return (
@@ -67,6 +79,7 @@ export function ChatScreen({
       </div>
       <div className="composer-wrap">
         <form className="composer" onSubmit={submit}>
+          <ComposerAttachments attachments={attachments} onRemove={removeAttachment} />
           <textarea
             rows={1}
             disabled={busy}
@@ -78,9 +91,23 @@ export function ChatScreen({
             placeholder="מה תרצה לעשות?"
             aria-label="הודעה לעוזר"
           />
+          <input
+            ref={fileInput}
+            type="file"
+            multiple
+            hidden
+            onChange={onBrowserFiles}
+            aria-hidden="true"
+          />
           <div className="composer__bottom">
             <div>
-              <button type="button" className="composer-icon" aria-label="צירוף קובץ">
+              <button
+                type="button"
+                className="composer-icon"
+                aria-label="צירוף קובץ"
+                onClick={pickAttachment}
+                disabled={busy}
+              >
                 <Paperclip size={18} />
               </button>
               <button type="button" className="composer-icon" aria-label="פעולות נוספות">
@@ -92,7 +119,12 @@ export function ChatScreen({
                 <Square size={15} fill="currentColor" />
               </button>
             ) : (
-              <button type="submit" className="send-button" disabled={!text.trim()} aria-label="שלח">
+              <button
+                type="submit"
+                className="send-button"
+                disabled={!text.trim() && !attachments.length}
+                aria-label="שלח"
+              >
                 <Send size={17} />
               </button>
             )}

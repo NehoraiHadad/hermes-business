@@ -66,12 +66,21 @@ export function useSupportActions({
   }, [setToast])
 
   const onUpdateApply = useCallback(async () => {
-    if (!window.confirm('לעדכן את Hermes כעת? Hermes ייצור גיבוי ויבצע בדיקת תקינות בסיום.')) return
+    if (
+      !window.confirm(
+        'לעדכן את Hermes כעת? Hermes המלא ייסגר, ייווצר גיבוי מלא (ZIP) לפני העדכון, ותתבצע בדיקת תקינות בסיום.'
+      )
+    )
+      return
     setUpdating(true)
     try {
       const checked = await runHermesUpdate(hermesClient)
       setUpdateStatus(checked)
-      setToast('Hermes עודכן ובדיקת התקינות עברה בהצלחה')
+      setToast(
+        checked.backup_path
+          ? `Hermes עודכן. גיבוי מלא נשמר: ${checked.backup_path}`
+          : 'Hermes עודכן ובדיקת התקינות עברה בהצלחה'
+      )
     } catch (caught) {
       setToast(caught instanceof Error ? caught.message : 'העדכון נכשל; המידע של Hermes נשמר')
     } finally {

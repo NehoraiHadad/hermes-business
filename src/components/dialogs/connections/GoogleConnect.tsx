@@ -66,7 +66,7 @@ export function GoogleConnect({
             <ServiceIcon type="google" />
             <div>
               <strong>הרשאות מבוקשות</strong>
-              <p>Gmail, Calendar, Drive, Docs ו־Sheets. ניתן לבחור סט מצומצם בממשק המלא.</p>
+              <p>Gmail, Calendar, Drive, Contacts, Sheets ו־Docs — כל ההרשאות ניתנות יחד. בגרסה זו לא ניתן לבחור שירותים בנפרד.</p>
             </div>
           </div>
           <label>

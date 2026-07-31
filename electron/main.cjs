@@ -4,6 +4,7 @@ const { rememberLog } = require('./logs.cjs')
 const { loadWindowPreferences, createWindow, createTray, showAssistant } = require('./windows.cjs')
 const { startHermes, stopHermes, hasRunningProcess } = require('./runtime.cjs')
 const { installDesktopPlugin } = require('./plugin-install.cjs')
+const { installWhatsappPolicyPlugin } = require('./whatsapp-plugin-install.cjs')
 const { ensureGatewayBackground } = require('./google-setup.cjs')
 const { registerIpc } = require('./ipc.cjs')
 
@@ -25,6 +26,14 @@ app.whenReady().then(async () => {
   loadWindowPreferences()
   registerIpc()
   installDesktopPlugin()
+  try {
+    const policyPlugin = installWhatsappPolicyPlugin()
+    if (!policyPlugin.ok || !policyPlugin.enabled) {
+      rememberLog(`WhatsApp policy plugin not fully active: ${policyPlugin.error || policyPlugin.reason || 'unknown'}`)
+    }
+  } catch (error) {
+    rememberLog(`WhatsApp policy plugin install failed: ${error.message || error}`)
+  }
   createWindow()
   createTray()
   try {

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { hermesClient } from '../lib/hermes-client'
 import { handleGatewayEvent, now } from '../lib/hermes/chat-events'
+import { stageAttachments, type PendingAttachment } from '../lib/hermes/attachments'
 import type { Activity, Approval, ChatMessage, ClarifyRequest, Screen, Session } from '../types'
 
 // Owns the live conversation: streaming messages, tool activity, approvals and
@@ -72,22 +73,35 @@ export function useChat({ setScreen, setToast }: { setScreen: (screen: Screen) =
     }
   }, [setScreen, setToast])
 
+  // Submit a chat turn with optional attachments. Attachments are staged into
+  // the runtime session via the official file/image attach RPCs, then a single
+  // prompt.submit consumes them. Returns false (and rolls back the optimistic
+  // bubble) on failure so the composer can retain the attachments for retry.
   const sendMessage = useCallback(
-    async (text: string) => {
+    async (text: string, attachments: PendingAttachment[] = []): Promise<boolean> => {
       let sid = runtimeSession
       if (!sid) {
         const created = await hermesClient.createSession()
         sid = created.session_id
         setRuntimeSession(sid)
       }
-      setMessages(current => [...current, { id: `user-${Date.now()}`, role: 'user', text, time: now() }])
+      const userId = `user-${Date.now()}`
+      const chips = attachments.map(item => ({ name: item.name, kind: item.kind }))
+      setMessages(current => [
+        ...current,
+        { id: userId, role: 'user', text, time: now(), attachments: chips.length ? chips : undefined }
+      ])
       resetConversation()
       setBusy(true)
       try {
-        await hermesClient.submit(sid, text)
+        const submitText = await stageAttachments(hermesClient, sid, text, attachments)
+        await hermesClient.submit(sid, submitText)
+        return true
       } catch (error) {
+        setMessages(current => current.filter(message => message.id !== userId))
         setBusy(false)
         setToast(error instanceof Error ? error.message : 'שליחת ההודעה נכשלה')
+        return false
       }
     },
     [runtimeSession, setToast]

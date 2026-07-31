@@ -113,6 +113,16 @@
   text-align: right;
 }
 
+.info-box {
+  width: 100%;
+  padding: 10px 12px;
+  color: #565f78;
+  background: #f0f2f8;
+  border-radius: 8px;
+  font-size: 10.5px;
+  line-height: 1.6;
+}
+
 .floating-toast {
   position: fixed;
   z-index: 45;
@@ -133,4 +143,3 @@
 .floating-toast svg {
   color: #8bd1aa;
 }
-

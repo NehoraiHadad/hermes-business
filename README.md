@@ -1,6 +1,7 @@
 # העוזר לעסק — מעטפת עסקית מעל Hermes
 
-POC עובד ל־Windows שמוסיף שתי דרכי שימוש מעל **אותה התקנת Hermes**:
+MVP/Alpha מקומי ל־Windows (מוכן לפיילוט, אך עדיין לא production) שמוסיף שתי דרכי
+שימוש מעל **אותה התקנת Hermes**:
 
 - Companion קטן וזמין על שולחן העבודה, עם צ׳אט, מזעור, הצמדה ו־Tray.
 - Desktop Plugin ידידותי בתוך Hermes המלא.
@@ -21,7 +22,15 @@ POC עובד ל־Windows שמוסיף שתי דרכי שימוש מעל **אות
 - Streaming, Stop, קבצים מצורפים ופעילות כלי בשפה פשוטה.
 - אישורים דרך `approval.request` / `approval.respond`, כולל דחייה שנבדקה בפועל.
 - Google Workspace דרך ה־Skill הרשמי של Hermes.
-- Telegram דרך Messaging API הרשמי של Hermes.
+- Telegram דרך Messaging API הרשמי של Hermes; בוט ייעודי עבר הודעה אמיתית
+  הלוך־ושוב והשיחה הופיעה גם ב־Hermes Desktop המלא.
+- WhatsApp בשני המסלולים בשקיפות: Meta Cloud הרשמי כברירת המחדל העסקית,
+  ו־WhatsApp Web/QR של Hermes כחלופה לא־רשמית.
+- מדיניות מענה fail-closed ל־WhatsApp (קריאה־בלבד או צ׳אטים נבחרים), נאכפת ב־plugin
+  `business-whatsapp-policy` דרך `pre_gateway_dispatch` ו־guards על ה־platform
+  registry — לא רק ב־UI. ברירת מחדל: קריאה בלבד. הודעות נשמרות ל־session store גם
+  במצב קריאה־בלבד, בלי שהסוכן ירוץ. אותה מדיניות וסנכרון allowlist חלים על שני
+  המתאמים.
 - Skills דרך ה־API הרשמי, כולל יצירת Skill שנראה גם ב־Hermes המלא.
 - משימות דרך Cron API הרשמי, בלי לחשוף Cron למשתמש.
 - בדיקת תקינות, restart, גרסאות, Logs, עדכון וחבילת אבחון בטוחה.
@@ -32,44 +41,72 @@ POC עובד ל־Windows שמוסיף שתי דרכי שימוש מעל **אות
 ### המוצר המלא
 
 ```text
-release/העוזר לעסק Setup 0.3.2.exe
+release/העוזר לעסק Setup 0.3.3.exe
 ```
 
-- גודל: `102,600,376` bytes.
+- גודל: `102,669,826` bytes.
 - SHA-256:
-  `38B35C36E46837A4470BEE8D34CCFE1F3C2A41A19BFA98629C6067A9CAC8EB6D`
+  `5529B70A90CCF71F98A9E6B62A37ED8EEB766CC0EA3CE36A85118592569591B0`
 - מתקין per-user אחד הכולל את ה־Companion.
 - בהפעלה ראשונה מזהה Hermes, ובמידת הצורך מפעיל את ה־bootstrap הרשמי.
 - מתקין את ה־Plugin ואת `business-bootstrap`, ומפעיל Gateway ברקע.
 - יוצר קיצורי Desktop ו־Start Menu עם אייקון המוצר.
 
-### מתקין רשת זעיר
+### מתקין רשת זעיר — מנגנון מוכן, artifact לפרסום עדיין לא סופי
 
 ```text
-release/Hermes-Business-Web-Setup-0.3.2.exe
+release/Hermes-Business-Web-Setup-0.3.3.exe
 ```
 
-- גודל: `108,505` bytes.
-- SHA-256:
-  `FEA08C4AFEB6B5CBA105EDAF1EC82890F9D41F36BC30BCC542E8C63A60E0830F`
 - אינו אורז Hermes או Chromium.
 - בוחר את ה־release הרשמי החדש ביותר בטווח התאימות `>=0.19.0 <0.20.0`.
-- מתקין Hermes Desktop, את ה־Plugin ואת ה־Skill, ומבצע Gateway health check.
+- מתקין Hermes Desktop, את ה־Plugin ואת ה־Skill, מוריד Companion לפי manifest
+  עם checksum מסוג SHA-256, ומבצע Gateway health check.
 
-המתקין הזעיר מספק כרגע את חוויית ה־Plugin בתוך Hermes Desktop. כדי שגם הוא
-יוריד את ה־Companion הקטן נדרש לפרסם build חתום ב־release URL יציב; אין ב־POC
-כתובת הורדה מומצאת או לא חתומה.
+המסלול כולו עבר E2E מול שרת loopback: הורדת manifest, אימות ה־checksum (SHA-256)
+והתקנה שקטה של ה־Companion. חשוב לדייק: SHA-256 הוא checksum לאימות שלמות הקובץ,
+ולא חתימה קריפטוגרפית — ה־manifest אינו חתום. הקובץ הקיים תחת `release/` אינו
+artifact הפצה סופי, משום שעדיין אין `COMPANION_MANIFEST_URL` ציבורי ויציב ב־HTTPS,
+ואין עדיין code-signing.
 
-שני ה־builds הם POC ללא code-signing, ולכן Windows עשוי להציג SmartScreen.
+שני ה־builds אינם חתומים (ללא code-signing), ולכן Windows עשוי להציג SmartScreen.
+
+## מה עדיין חסר ל־production (Production gates)
+
+זהו MVP/Alpha מקומי מוכן לפיילוט, לא מוצר production. השערים שנותרו:
+
+- **Google OAuth consent אמיתי** — אישור OAuth מאומת ומאושר (לא test/loopback בלבד).
+- **Companion manifest ציבורי ויציב ב־HTTPS** — כתובת `COMPANION_MANIFEST_URL`
+  קבועה, לא רק שרת loopback ל־E2E.
+- **Code signing** — חתימת המתקין וה־Companion (וה־manifest עצמו), כדי להסיר
+  SmartScreen ולספק אמון הפצה. כיום קיים רק אימות checksum, ללא חתימה.
+- **שליחת WhatsApp חיה לצ׳אטים נבחרים בבידוד** — מסלול Cloud out-of-process חי
+  ומבודד. כיום שליחת Cloud מתבצעת רק בתוך ה־Gateway הפעיל (in-process); ראו
+  [docs/hermes-integration.md](docs/hermes-integration.md).
+- **מטריצת שדרוג מלאה** — כיסוי שדרוג מלא בכל שיטות ההתקנה (git/pip/pipx) וגרסאות
+  לרוחב טווח התאימות `>=0.19.0 <0.20.0`.
+
+## סרטון תדמית
+
+הפקת Remotion מלאה נמצאת תחת `promo-video/`. הסרטון הסופי:
+
+```text
+promo-video/out/hermes-business-promo.mp4
+```
+
+55.06 שניות, ‎1920×1080, ‏30fps, ‏H.264 + AAC. ה־render נבנה עם Remotion
+`4.0.503`, עבר TypeScript, ‏`npm audit` ללא חולשות, ffprobe ובדיקת contact sheet.
 
 ## הפעלה ופיתוח
 
 ```powershell
 npm install
 npm test
+npm run test:plugin:policy
 npm run verify:plugin
 npm run verify:bootstrap
 npm run build
+npm run test:e2e:bootstrap-companion
 npm run test:e2e:bootstrap-clean
 npm run test:e2e:missing-hermes-ui
 npm run test:e2e:hermes
@@ -108,11 +145,18 @@ electron/          runtime, IPC, חלונות, אבחון, Google ו־plugin ins
 נבדקו מול Hermes Agent `0.19.0`; resolver המתקין מצא גם release רשמי תואם
 `0.19.1` (`v2026.7.30`).
 
-- `23/23` בדיקות עברו.
-- TypeScript/Vite build, Plugin contract ו־bootstrap resolver עברו.
+- `63/63` בדיקות Vitest ו־`17/17` בדיקות plugin עברו.
+- TypeScript/Vite build, Plugin contract, bootstrap resolver ואימות Git blob של
+  המתקין הרשמי עברו.
 - המתקין המלא והמתקין הזעיר הותקנו בשקט עם exit code `0`.
 - האפליקציה המותקנת עברה E2E מול Hermes חי ללא console/page errors.
+- מסך WhatsApp המותקן עבר E2E: ברירת מחדל read-only, מעבר לצ׳אטים נבחרים,
+  סנכרון להגדרות Hermes, חזרה ל־read-only ויצירת QR אמיתי.
+- בוט Telegram ייעודי עבר הודעה אמיתית הלוך־ושוב דרך ה־Gateway; ה־session
+  המשותף נפתח גם ב־Hermes Desktop המלא.
 - שאלה מובנית של הסוכן הוצגה ונענתה דרך RPC הרשמי.
+- `session.resume` החזיר את אותו transcript; `tool.start/tool.complete` התקבלו עם
+  אותו tool id, ו־`session.interrupt` עצר תשובת Streaming פעילה.
 - אישור לפקודה מסוכנת נדחה והפעולה לא בוצעה.
 - Session מהחלון הקטן נמצא מיד דרך `session.list`.
 - Skill נוצר ונמצא דרך `/api/skills`.
@@ -124,6 +168,12 @@ electron/          runtime, IPC, חלונות, אבחון, Google ו־plugin ins
 
 - Google Workspace זמין, אך OAuth אינו מחובר במחשב הבדיקה. נדרש
   `client_secret.json` של Google Cloud והסכמה בדפדפן.
-- Telegram זמין, אך אינו מוגדר. נדרשים Bot Token ו־allowed user ID.
 - לא נשמרו credentials מומצאים ולא נעקף מסך הסכמה.
-- עדכון Hermes זוהה ונבדק, אך לא הוחל בכוח על checkout פעיל עם שינויים.
+- חיבור WhatsApp Web נסרק בפועל. הודעה נכנסת נשמרה ב־Session המשותף ונחסמה לפני
+  dispatch במצב read-only: ללא inference, ללא Tool Calls וללא outbound delivery.
+- עדכון Hermes אמיתי עבר דרך המעטפת מ־`0.19.0` ל־`0.19.1`: Hermes Desktop,
+  ה־gateway וה־runtime נסגרו באופן מבוקר, updater הרשמי רץ, Health Check עבר,
+  ו־70 Sessions, ‏64 Skills והמשימות נשמרו לפני ואחרי.
+- Meta Coexistence הוא המסלול הרשמי המתאים למספר שכבר פעיל ב־WhatsApp
+  Business App, אך Hermes `0.19.x` עדיין אינו מממש Embedded Signup או את
+  אירועי הסנכרון שלו. הוא אינו מוצג במוצר כאילו הוא זמין.

@@ -1,8 +1,12 @@
-import { Lightbulb, Sparkles, WandSparkles } from 'lucide-react'
+import { GraduationCap, Lightbulb, Sparkles, WandSparkles } from 'lucide-react'
+import { useCuratorInsights } from '../../hooks/useCuratorInsights'
 import type { Skill } from '../../types'
 
 export function SkillsScreen({ skills, onAdd }: { skills: Skill[]; onAdd: () => void }) {
   const learnedSkill = skills.find(skill => skill.provenance === 'agent')
+  // Friendly Curator/learning notifications sourced from Hermes' official
+  // endpoints (never fabricated); empty in demo/browser or when unavailable.
+  const curatorNotifications = useCuratorInsights(true)
   return (
     <main className="content-screen">
       <section className="page-heading">
@@ -14,6 +18,21 @@ export function SkillsScreen({ skills, onAdd }: { skills: Skill[]; onAdd: () => 
           <Sparkles size={17} /> למד תהליך חדש
         </button>
       </section>
+      {curatorNotifications.length ? (
+        <div className="curator-notes">
+          {curatorNotifications.map(note => (
+            <div key={note.id} className={`curator-note curator-note--${note.tone}`}>
+              <span className="curator-note__icon">
+                <GraduationCap size={18} />
+              </span>
+              <div>
+                <strong>{note.title}</strong>
+                {note.detail ? <p>{note.detail}</p> : null}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
       {learnedSkill ? (
         <div className="learning-banner">
           <span className="learning-banner__icon">
@@ -23,7 +42,12 @@ export function SkillsScreen({ skills, onAdd }: { skills: Skill[]; onAdd: () => 
             <strong>העוזר למד תהליך חדש: {learnedSkill.name}</strong>
             <p>{learnedSkill.description || 'ה־Skill זמין גם בממשק המלא של Hermes.'}</p>
           </div>
-          <button className="outline-button outline-button--small">הצג</button>
+          <button
+            className="outline-button outline-button--small"
+            onClick={() => window.hermesDesktop?.openFull('desktop')}
+          >
+            הצג ב־Hermes
+          </button>
         </div>
       ) : null}
       <div className="skills-grid">

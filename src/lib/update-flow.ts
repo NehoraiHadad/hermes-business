@@ -1,7 +1,7 @@
 import type { HermesUpdateStatus } from './hermes-client'
 
 export type UpdateClient = {
-  startUpdate(): Promise<{ ok?: boolean; message?: string }>
+  startUpdate(): Promise<{ ok?: boolean; message?: string; completed?: boolean; backupPath?: string }>
   updateActionStatus(): Promise<{ running?: boolean; exit_code?: number | null }>
   healthCheck(): Promise<{ health: { ok?: boolean } }>
   checkUpdate(force?: boolean): Promise<HermesUpdateStatus>
@@ -17,17 +17,27 @@ export async function runHermesUpdate(
   client: UpdateClient,
   { sleep = wait }: { sleep?: (ms: number) => Promise<void> } = {}
 ): Promise<HermesUpdateStatus> {
+  const eligibility = await client.checkUpdate(true)
+  if (!eligibility.update_available) {
+    throw new Error(eligibility.message || 'Hermes כבר מעודכן')
+  }
+  if (!eligibility.can_apply) {
+    throw new Error(eligibility.message || 'לא ניתן להחיל את העדכון בבטחה במצב הנוכחי')
+  }
   const started = await client.startUpdate()
   if (!started.ok) throw new Error(started.message || 'Hermes לא התחיל את העדכון')
+  const backupPath = started.backupPath
 
-  let completed = false
-  for (let attempt = 0; attempt < 240; attempt += 1) {
-    await sleep(1000)
-    const action = await client.updateActionStatus().catch(() => null)
-    if (!action || action.running) continue
-    if (action.exit_code !== 0) throw new Error('עדכון Hermes נכשל')
-    completed = true
-    break
+  let completed = started.completed === true
+  if (!completed) {
+    for (let attempt = 0; attempt < 240; attempt += 1) {
+      await sleep(1000)
+      const action = await client.updateActionStatus().catch(() => null)
+      if (!action || action.running) continue
+      if (action.exit_code !== 0) throw new Error('עדכון Hermes נכשל')
+      completed = true
+      break
+    }
   }
   if (!completed) throw new Error('עדכון Hermes עדיין לא הסתיים')
 
@@ -46,5 +56,6 @@ export async function runHermesUpdate(
   }
   if (!healthy) throw new Error('Hermes עודכן, אך בדיקת התקינות טרם הצליחה')
 
-  return client.checkUpdate(true)
+  const finalStatus = await client.checkUpdate(true)
+  return backupPath ? { ...finalStatus, backup_path: backupPath } : finalStatus
 }

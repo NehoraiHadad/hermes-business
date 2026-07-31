@@ -2,6 +2,7 @@ import { startTransition, useCallback, useEffect, useRef, useState } from 'react
 import { CONNECTIONS } from '../constants'
 import { hydrateConnectionStates } from '../lib/connections'
 import { hermesClient } from '../lib/hermes-client'
+import { resolveProviderReadiness } from '../lib/provider-readiness'
 import type { ScheduledTask, Session, Skill } from '../types'
 
 // Owns discovery/install/boot plus the state shared with the full Hermes profile.
@@ -13,6 +14,7 @@ export function useHermesData() {
   const [tasks, setTasks] = useState<ScheduledTask[]>([])
   const [skills, setSkills] = useState<Skill[]>([])
   const [connections, setConnections] = useState(CONNECTIONS)
+  const [provider, setProvider] = useState({ connected: false, label: 'לא מחובר' })
   const [versions, setVersions] = useState<Record<string, string>>({})
   const [installing, setInstalling] = useState(false)
   const [installError, setInstallError] = useState('')
@@ -23,14 +25,18 @@ export function useHermesData() {
     setRuntime(nextRuntime)
     if (!nextRuntime.running && !hermesClient.demo) return nextRuntime
 
-    const [nextSessions, nextTasks, nextSkills, messaging, googleStatus] = await Promise.all([
+    const [nextSessions, nextTasks, nextSkills, messaging, googleStatus, oauthProviders, env] = await Promise.all([
       hermesClient.listSessions().catch(() => []),
       hermesClient.listTasks().catch(() => []),
       hermesClient.listSkills().catch(() => []),
       hermesClient.listMessagingPlatforms().catch(() => []),
       window.hermesDesktop
         ? window.hermesDesktop.getGoogleStatus().catch(() => ({ available: false, authenticated: false }))
-        : Promise.resolve({ available: false, authenticated: false })
+        : Promise.resolve({ available: false, authenticated: false }),
+      hermesClient.listOAuthProviders().catch(() => []),
+      hermesClient
+        .api<Record<string, { is_set?: boolean }>>('/api/env?profile=default')
+        .catch(() => ({}))
     ])
     if (!mounted.current) return nextRuntime
     startTransition(() => {
@@ -38,6 +44,7 @@ export function useHermesData() {
       setTasks(nextTasks)
       setSkills(nextSkills)
       setConnections(hydrateConnectionStates(CONNECTIONS, messaging, googleStatus.authenticated))
+      setProvider(resolveProviderReadiness(oauthProviders, env))
     })
     const nextVersions = window.hermesDesktop
       ? await window.hermesDesktop.getVersions().catch(() => ({}))
@@ -84,6 +91,7 @@ export function useHermesData() {
     skills,
     setSkills,
     connections,
+    provider,
     setConnections,
     versions,
     installing,

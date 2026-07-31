@@ -87,3 +87,52 @@
   font-size: 9.5px;
   text-align: center;
 }
+
+.composer-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.composer-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 220px;
+  padding: 4px 6px 4px 9px;
+  color: #5d5951;
+  font-size: 11px;
+  background: var(--surface-soft);
+  border: 1px solid var(--border-soft, #e6e1d8);
+  border-radius: 8px;
+}
+
+.composer-chip span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.composer-chip--error {
+  color: #b4291f;
+  background: #fdeceb;
+  border-color: #f3c6c2;
+}
+
+.composer-chip__remove {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  place-items: center;
+  cursor: pointer;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+}
+
+.composer-chip__remove:hover {
+  background: rgba(0, 0, 0, 0.06);
+}

@@ -4,11 +4,17 @@ import { runHermesUpdate, type UpdateClient } from './update-flow'
 const noSleep = async () => {}
 
 function client(overrides: Partial<UpdateClient>): UpdateClient {
+  let updateChecks = 0
   return {
     startUpdate: async () => ({ ok: true }),
     updateActionStatus: async () => ({ running: false, exit_code: 0 }),
     healthCheck: async () => ({ health: { ok: true } }),
-    checkUpdate: async () => ({ update_available: false, message: 'מעודכן' }),
+    checkUpdate: async () => {
+      updateChecks += 1
+      return updateChecks === 1
+        ? { update_available: true, can_apply: true, message: 'מוכן לעדכון' }
+        : { update_available: false, message: 'מעודכן' }
+    },
     ...overrides
   }
 }
@@ -29,6 +35,16 @@ describe('runHermesUpdate', () => {
     expect(polls).toBe(2)
   })
 
+  it('accepts a completed desktop-orchestrated Windows update without stale REST polling', async () => {
+    const updateActionStatus = vi.fn()
+    const result = await runHermesUpdate(
+      client({ startUpdate: async () => ({ ok: true, completed: true }), updateActionStatus }),
+      { sleep: noSleep }
+    )
+    expect(result.update_available).toBe(false)
+    expect(updateActionStatus).not.toHaveBeenCalled()
+  })
+
   it('refuses to poll when Hermes never started the update', async () => {
     const updateActionStatus = vi.fn()
     await expect(
@@ -45,5 +61,37 @@ describe('runHermesUpdate', () => {
         sleep: noSleep
       })
     ).rejects.toThrow('עדכון Hermes נכשל')
+  })
+
+  it('refuses an update when Hermes marks the checkout unsafe', async () => {
+    const startUpdate = vi.fn()
+    await expect(
+      runHermesUpdate(
+        client({
+          checkUpdate: async () => ({
+            update_available: true,
+            can_apply: false,
+            message: 'התקנת Hermes כוללת שינויים מקומיים'
+          }),
+          startUpdate
+        }),
+        { sleep: noSleep }
+      )
+    ).rejects.toThrow('שינויים מקומיים')
+    expect(startUpdate).not.toHaveBeenCalled()
+  })
+
+  it('does not start a stale update after Hermes is already current', async () => {
+    const startUpdate = vi.fn()
+    await expect(
+      runHermesUpdate(
+        client({
+          checkUpdate: async () => ({ update_available: false, can_apply: true, message: 'מעודכן' }),
+          startUpdate
+        }),
+        { sleep: noSleep }
+      )
+    ).rejects.toThrow('מעודכן')
+    expect(startUpdate).not.toHaveBeenCalled()
   })
 })

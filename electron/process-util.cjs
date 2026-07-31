@@ -1,4 +1,4 @@
-const { spawn } = require('node:child_process')
+const { spawn, spawnSync } = require('node:child_process')
 const { redact } = require('./security.cjs')
 const { rememberLog } = require('./logs.cjs')
 const { hermesHome } = require('./paths.cjs')
@@ -7,9 +7,15 @@ const { hermesHome } = require('./paths.cjs')
 // buffer and returning the captured stdout/stderr. Rejects on timeout or a
 // non-zero exit (with a redacted message). Used by the Google setup and
 // gateway/install flows.
-function runCaptured(command, args, timeout = 120_000) {
+function runCaptured(command, args, timeout = 120_000, extraEnv = {}) {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { windowsHide: true, env: { ...process.env, HERMES_HOME: hermesHome() } })
+    const child = spawn(command, args, {
+      windowsHide: true,
+      env: { ...process.env, HERMES_HOME: hermesHome(), ...extraEnv },
+      // These setup commands are launched from a GUI and must never wait for
+      // invisible terminal input. Hermes treats EOF as "use the safe default".
+      stdio: ['ignore', 'pipe', 'pipe']
+    })
     let stdout = ''
     let stderr = ''
     const timer = setTimeout(() => {
@@ -58,4 +64,34 @@ function parseJsonOutput(output) {
   return null
 }
 
-module.exports = { runCaptured, parseJsonOutput }
+// Force-terminate a spawned process AND its child tree so a runtime that never
+// became healthy can never linger as an orphan holding its loopback port. On
+// Windows only `taskkill /t /f` reaps the whole tree — Node's `proc.kill()` can
+// leave grandchildren (the venv launcher spawns python). `platform`/`run` are
+// injectable so the reap ordering is unit-testable without spawning a process.
+// Returns true when a kill was actually attempted.
+function reapProcessTree(proc, { platform = process.platform, run = spawnSync } = {}) {
+  if (!proc || proc.pid == null) return false
+  try {
+    if (platform === 'win32') {
+      run('taskkill.exe', ['/pid', String(proc.pid), '/t', '/f'], { windowsHide: true })
+      return true
+    }
+    try {
+      proc.kill('SIGTERM')
+    } catch {
+      // already gone
+    }
+    try {
+      proc.kill('SIGKILL')
+    } catch {
+      // already gone
+    }
+    return true
+  } catch {
+    // Best-effort reap; the caller clears its handle regardless.
+    return false
+  }
+}
+
+module.exports = { runCaptured, parseJsonOutput, reapProcessTree }

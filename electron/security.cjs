@@ -3,9 +3,10 @@
 // the captured-process helpers so redaction is applied in exactly one place.
 function redact(value) {
   return String(value)
-    .replace(/([?&](?:token|ticket)=)[^&\s]+/gi, '$1<redacted>')
+    .replace(/([?&](?:token|ticket|code|client_secret|access_token|refresh_token)=)[^&\s]+/gi, '$1<redacted>')
     .replace(/(authorization:\s*bearer\s+)[^\s]+/gi, '$1<redacted>')
-    .replace(/\b(sk-[A-Za-z0-9_-]{12,}|AIza[A-Za-z0-9_-]{20,}|\d{7,}:[A-Za-z0-9_-]{20,})\b/g, '<redacted>')
+    .replace(/(x-hermes-session-token:\s*)[^\s]+/gi, '$1<redacted>')
+    .replace(/\b(sk-[A-Za-z0-9_-]{12,}|AIza[A-Za-z0-9_-]{20,}|\d{7,}:[A-Za-z0-9_-]{20,}|\d\/[A-Za-z0-9_-]{20,})\b/g, '<redacted>')
     .replace(/("(?:api_key|token|secret|password)"\s*:\s*")[^"]+(")/gi, '$1<redacted>$2')
 }
 

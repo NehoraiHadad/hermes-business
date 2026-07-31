@@ -5,11 +5,11 @@ ManifestDPIAware true
 !include "LogicLib.nsh"
 
 !define PRODUCT_NAME "העוזר לעסק — התקנה מקוונת"
-!define PRODUCT_VERSION "0.3.2"
+!define PRODUCT_VERSION "0.3.3"
 
 Name "${PRODUCT_NAME}"
 Caption "${PRODUCT_NAME}"
-OutFile "..\release\Hermes-Business-Web-Setup-0.3.2.exe"
+OutFile "..\release\Hermes-Business-Web-Setup-0.3.3.exe"
 Icon "..\build\icon.ico"
 InstallDir "$TEMP\HermesBusinessBootstrap"
 RequestExecutionLevel user
@@ -28,8 +28,34 @@ BrandingText "Hermes Business"
 Section "Install"
   SetOutPath "$INSTDIR"
   File /oname=bootstrap.ps1 "bootstrap.ps1"
+  File /oname=bootstrap-companion.ps1 "bootstrap-companion.ps1"
+  File /oname=companion-release.json "companion-release.json"
   File /oname=plugin.js "..\hermes-plugin\business-shell\plugin.js"
   File /oname=business-bootstrap.SKILL.md "..\hermes-plugin\business-shell\skills\business-bootstrap\SKILL.md"
+  File /oname=business-partner.SKILL.md "..\hermes-plugin\business-partner\SKILL.md"
+
+  ; Shared PowerShell library — bootstrap.ps1 dot-sources these from .\lib.
+  SetOutPath "$INSTDIR\lib"
+  File "lib\Logging.ps1"
+  File "lib\Hashing.ps1"
+  File "lib\Http.ps1"
+  File "lib\FileOps.ps1"
+  File "lib\HermesEnv.ps1"
+  File "lib\Release.ps1"
+  File "lib\Payload.ps1"
+  SetOutPath "$INSTDIR"
+
+  SetOutPath "$INSTDIR\whatsapp-policy"
+  File "..\hermes-plugin\business-whatsapp-policy\__init__.py"
+  File "..\hermes-plugin\business-whatsapp-policy\policy.py"
+  File "..\hermes-plugin\business-whatsapp-policy\ingest.py"
+  File "..\hermes-plugin\business-whatsapp-policy\contract.py"
+  File "..\hermes-plugin\business-whatsapp-policy\surface.py"
+  File "..\hermes-plugin\business-whatsapp-policy\guards.py"
+  File "..\hermes-plugin\business-whatsapp-policy\transport.py"
+  File "..\hermes-plugin\business-whatsapp-policy\registry.py"
+  File "..\hermes-plugin\business-whatsapp-policy\plugin.yaml"
+  SetOutPath "$INSTDIR"
 
   DetailPrint "Detecting or installing Hermes Agent..."
   nsExec::ExecToLog '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File "$INSTDIR\bootstrap.ps1" -PayloadRoot "$INSTDIR"'

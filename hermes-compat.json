@@ -1,0 +1,21 @@
+{
+  "$comment": "CANONICAL, single source of truth for Hermes compatibility policy. Every layer (renderer src/lib/hermes/compat.ts, electron/hermes-compat.cjs, scripts/plugin-sdk-contract.mjs, the Python plugin contract, and installer/bootstrap/Release) is asserted against this file by src/lib/hermes-compat-policy.test.ts. Edit HERE first, then update the mirrors the test names.",
+  "range": ">=0.19.0 <0.20.0",
+  "minVersion": "0.19.0",
+  "maxVersionExclusive": "0.20.0",
+  "verifiedInstalledVersion": "0.19.1",
+  "versionSource": "hermes_cli/__init__.py:__version__",
+  "releaseChannel": {
+    "repository": "NousResearch/hermes-agent",
+    "tagScheme": "calver",
+    "tagExample": "v2026.7.30",
+    "note": "Upstream release TAGS are CalVer (vYYYY.M.D) and are NOT the package version. The authoritative semver a release installs is __version__ in hermes_cli/__init__.py at that tag — exactly what `hermes --version` reports. NEVER parse the tag as semver and NEVER scrape release prose. The thin installer reads the source __version__ per candidate tag (Release.ps1: Get-ReleaseSourceVersion) and, when that read is unavailable, falls back to the pinned map below.",
+    "installerContract": "The official scripts/install.ps1 accepts -Tag (precedence Commit > Tag > Branch); the bootstrap pins by CalVer tag and verifies the installer blob before running it."
+  },
+  "pinnedReleases": [
+    { "tag": "v2026.7.30", "version": "0.19.1" },
+    { "tag": "v2026.7.20", "version": "0.19.0" },
+    { "tag": "v2026.6.19", "version": "0.17.0" }
+  ],
+  "trustAndUpdateProcess": "When Hermes ships a new release: (1) read hermes_cli/__init__.py __version__ at the new tag, (2) if it is still in range, add {tag, version} to pinnedReleases here AND to installer/lib/Release.ps1 Get-DefaultPinnedReleases, (3) if a new version widens support, bump range/minVersion/maxVersionExclusive here and in the mirrors this file's test enumerates, and re-verify the plugin's installed-contract tests against it. The drift test fails until every mirror matches, so the policy can never fork silently."
+}

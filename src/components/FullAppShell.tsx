@@ -3,7 +3,7 @@ import type { Dispatch, ReactNode, SetStateAction } from 'react'
 import type { useChat } from '../hooks/useChat'
 import type { useHermesData } from '../hooks/useHermesData'
 import type { useSupportActions } from '../hooks/useSupportActions'
-import type { Connection, ScheduledTask, Screen } from '../types'
+import type { Connection, Screen, TaskActions } from '../types'
 import { MainScreen } from './MainScreen'
 import { Sidebar } from './layout/Sidebar'
 import { Topbar } from './layout/Topbar'
@@ -23,7 +23,7 @@ export function FullAppShell({
   onOpenFull,
   onMini,
   onAddTask,
-  onToggleTask,
+  taskActions,
   onAddSkill,
   onOpenConnection
 }: {
@@ -39,7 +39,7 @@ export function FullAppShell({
   onOpenFull: (surface: FullSurface) => void
   onMini: () => Promise<void>
   onAddTask: () => void
-  onToggleTask: (task: ScheduledTask) => Promise<void>
+  taskActions: TaskActions
   onAddSkill: () => void
   onOpenConnection: (connection: Connection) => void
 }) {
@@ -65,10 +65,11 @@ export function FullAppShell({
           connections={data.connections}
           runtime={data.runtime}
           versions={data.versions}
+          provider={data.provider}
           support={support}
           toast={toast}
           onAddTask={onAddTask}
-          onToggleTask={onToggleTask}
+          taskActions={taskActions}
           onAddSkill={onAddSkill}
           onOpenConnection={onOpenConnection}
         />

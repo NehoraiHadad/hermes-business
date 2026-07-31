@@ -36,6 +36,54 @@
   font-size: 10.5px;
 }
 
+.curator-notes {
+  display: flex;
+  max-width: 1120px;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 auto 17px;
+}
+
+.curator-note {
+  display: flex;
+  gap: 11px;
+  align-items: center;
+  padding: 11px 13px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 11px;
+}
+
+.curator-note--success {
+  background: #eef6ef;
+  border-color: #cfe4d1;
+}
+
+.curator-note--muted {
+  opacity: 0.85;
+}
+
+.curator-note__icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  place-items: center;
+  color: #4f8a5b;
+  background: white;
+  border-radius: 9px;
+}
+
+.curator-note strong {
+  font-size: 12px;
+}
+
+.curator-note p {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 10.5px;
+}
+
 .skills-grid {
   display: grid;
   max-width: 1120px;

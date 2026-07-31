@@ -3,8 +3,24 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $installerDirectory = Join-Path $root 'installer'
 $releaseDirectory = Join-Path $root 'release'
-$output = Join-Path $releaseDirectory 'Hermes-Business-Web-Setup-0.3.2.exe'
+$output = Join-Path $releaseDirectory 'Hermes-Business-Web-Setup-0.3.3.exe'
+$manifestPath = Join-Path $installerDirectory 'companion-release.json'
 $cacheRoot = Join-Path $env:LOCALAPPDATA 'electron-builder\Cache\nsis'
+$companionUrl = [string]$env:HERMES_BUSINESS_COMPANION_URL
+$companionSha256 = ([string]$env:HERMES_BUSINESS_COMPANION_SHA256).Trim().ToUpperInvariant()
+
+if ([string]::IsNullOrWhiteSpace($companionUrl) -or $companionUrl -notmatch '^https://') {
+  throw 'Set HERMES_BUSINESS_COMPANION_URL to the published HTTPS installer URL.'
+}
+if ($companionSha256 -notmatch '^[0-9A-F]{64}$') {
+  throw 'Set HERMES_BUSINESS_COMPANION_SHA256 to the published installer SHA-256.'
+}
+
+[ordered]@{
+  version = '0.3.3'
+  url = $companionUrl
+  sha256 = $companionSha256
+} | ConvertTo-Json | Set-Content -LiteralPath $manifestPath -Encoding UTF8
 
 New-Item -ItemType Directory -Force -Path $releaseDirectory | Out-Null
 & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" `
@@ -38,6 +54,9 @@ try {
 }
 finally {
   Pop-Location
+  if (Test-Path -LiteralPath $manifestPath) {
+    Remove-Item -LiteralPath $manifestPath -Force
+  }
 }
 
 $artifact = Get-Item -LiteralPath $output

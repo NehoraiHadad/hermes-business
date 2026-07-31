@@ -1,10 +1,14 @@
-import { ExternalLink, ShieldCheck } from 'lucide-react'
+import { ShieldCheck } from 'lucide-react'
 import type { Connection } from '../../../types'
 import { Modal } from '../../ui/Modal'
 import { ServiceIcon } from '../../ui/ServiceIcon'
+import { WhatsappCloudConnect } from './WhatsappCloudConnect'
+import { WhatsappPolicyForm } from './WhatsappPolicyForm'
+import { WhatsappQrConnect } from './WhatsappQrConnect'
 
-// WhatsApp and any other connection: explain the official vs unofficial route and
-// hand off to the guided setup inside Hermes. No credentials are captured here.
+// WhatsApp connection dialog. Exposes both Hermes-supported modes transparently
+// (official Meta Cloud vs unofficial WhatsApp Web/QR) and always surfaces the
+// fail-closed reply policy — the safety control the business owner must set.
 export function WhatsappConnect({
   connection,
   onClose,
@@ -14,31 +18,44 @@ export function WhatsappConnect({
   onClose: () => void
   onConnected: (id: string) => void
 }) {
+  const official = Boolean(connection.official)
+
   return (
     <Modal title={`חיבור ${connection.name}`} subtitle={connection.description} onClose={onClose}>
-      <div className="whatsapp-choice">
-        <ServiceIcon type="whatsapp" />
-        <h3>{connection.official ? 'המסלול הרשמי לעסק' : 'חיבור WhatsApp Web לא רשמי'}</h3>
-        <p>
-          {connection.official
-            ? 'דורש Meta Business, מספר עסקי וכתובת webhook ציבורית. יציב וללא סיכון חסימת חשבון.'
-            : 'מבוסס Baileys ומדמה WhatsApp Web. מהיר להגדרה, אך עלול להישבר או להוביל להגבלת החשבון.'}
-        </p>
-        {!connection.official ? (
+      <div className="whatsapp-connect">
+        <div className="whatsapp-connect__head">
+          <ServiceIcon type="whatsapp" />
+          <div>
+            <h3>{official ? 'WhatsApp Business הרשמי (Meta Cloud)' : 'WhatsApp Web לא רשמי (QR)'}</h3>
+            <p>
+              {official
+                ? 'חיבור יציב ומאושר של Meta. דורש חשבון עסקי, מספר ייעודי ו־webhook ציבורי.'
+                : 'חיבור מהיר דרך סריקת QR (Baileys). מדמה WhatsApp Web — עלול להישבר או להביא להגבלת החשבון.'}
+            </p>
+          </div>
+        </div>
+
+        {!official ? (
           <div className="warning-box">
             <ShieldCheck size={18} />
-            מומלץ להשתמש במספר ייעודי ולא לשלוח הודעות המוניות.
+            מומלץ בחום להשתמש במספר WhatsApp ייעודי לעסק, ולא במספר הפרטי — ולהימנע מהודעות המוניות.
           </div>
         ) : null}
-        <button
-          className="primary-button"
-          onClick={() => {
-            onConnected(connection.id)
-            onClose()
-          }}
-        >
-          פתח הגדרה מודרכת ב־Hermes <ExternalLink size={16} />
-        </button>
+
+        <WhatsappPolicyForm />
+
+        <hr className="whatsapp-connect__divider" />
+
+        {official ? (
+          <WhatsappCloudConnect onConnected={() => onConnected(connection.id)} />
+        ) : (
+          <WhatsappQrConnect
+            onConnected={() => {
+              onConnected(connection.id)
+              onClose()
+            }}
+          />
+        )}
       </div>
     </Modal>
   )

@@ -1,3 +1,18 @@
+.icon-button--danger {
+  color: #b4453d;
+}
+
+.icon-button--danger:hover {
+  background: #f7e6e4;
+}
+
+.field-hint {
+  display: block;
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 10.5px;
+}
+
 .stat-card {
   display: grid;
   min-height: 93px;

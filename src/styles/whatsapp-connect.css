@@ -1,0 +1,157 @@
+.whatsapp-connect {
+  display: grid;
+  gap: 14px;
+  text-align: right;
+}
+
+.whatsapp-connect__head {
+  display: flex;
+  gap: 11px;
+  align-items: flex-start;
+}
+
+.whatsapp-connect__head h3 {
+  margin: 0 0 4px;
+  font-size: 14px;
+}
+
+.whatsapp-connect__head p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.whatsapp-connect__divider {
+  width: 100%;
+  height: 1px;
+  margin: 2px 0;
+  border: 0;
+  background: var(--line, #e7e3da);
+}
+
+.whatsapp-qr,
+.whatsapp-cloud {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+}
+
+.whatsapp-qr__code {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 12px;
+  background: #fff;
+  border-radius: 12px;
+}
+
+.whatsapp-qr__code p,
+.whatsapp-qr__status {
+  max-width: 360px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.whatsapp-cloud__steps {
+  margin: 0;
+  padding-inline-start: 18px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.8;
+}
+
+.cloud-field {
+  display: grid;
+  width: 100%;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.copy-value {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) 32px;
+  align-items: center;
+  width: 100%;
+  gap: 8px;
+  padding: 8px 10px;
+  background: #f6f4ee;
+  border-radius: 8px;
+  font-size: 10.5px;
+}
+
+.copy-value code {
+  overflow: hidden;
+  color: #4f4b45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.copy-value button {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  cursor: pointer;
+  place-items: center;
+  color: var(--indigo);
+  background: white;
+  border: 1px solid var(--line, #e7e3da);
+  border-radius: 7px;
+}
+
+.whatsapp-policy {
+  display: grid;
+  gap: 10px;
+}
+
+.whatsapp-policy h3 {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  margin: 0;
+  font-size: 13px;
+}
+
+.policy-option {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 11px;
+  border: 1px solid var(--line, #e7e3da);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.policy-option--active {
+  border-color: #4f9d7f;
+  background: rgba(79, 157, 127, 0.07);
+}
+
+.policy-option span {
+  display: grid;
+  gap: 3px;
+}
+
+.policy-option strong {
+  font-size: 12.5px;
+}
+
+.policy-option small {
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 1.6;
+}
+
+.policy-chats {
+  display: grid;
+  gap: 5px;
+  font-size: 11px;
+}
+
+.policy-chats textarea {
+  resize: vertical;
+}

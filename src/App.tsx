@@ -9,8 +9,9 @@ import { useAssistantWindow } from './hooks/useAssistantWindow'
 import { useChat } from './hooks/useChat'
 import { useHermesData } from './hooks/useHermesData'
 import { useSupportActions } from './hooks/useSupportActions'
+import { useTaskActions } from './hooks/useTaskActions'
 import { hermesClient } from './lib/hermes-client'
-import type { Connection, ScheduledTask, Screen } from './types'
+import type { Connection, Screen } from './types'
 
 type FullSurface = 'desktop' | 'dashboard' | 'logs' | 'settings'
 
@@ -48,15 +49,7 @@ export default function App() {
     setScreen('chat')
     await windowControls.enterMini()
   }, [windowControls])
-  const toggleTask = useCallback(
-    async (task: ScheduledTask) => {
-      await hermesClient.toggleTask(task)
-      setTasks(current =>
-        current.map(item => (item.id === task.id ? { ...item, enabled: !item.enabled } : item))
-      )
-    },
-    [setTasks]
-  )
+  const taskActions = useTaskActions({ setTasks, setToast })
 
   const title =
     screen === 'chat'
@@ -140,7 +133,7 @@ export default function App() {
       onOpenFull={openFull}
       onMini={enterMiniFromChat}
       onAddTask={() => setModal('task')}
-      onToggleTask={toggleTask}
+      taskActions={taskActions}
       onAddSkill={() => setModal('skill')}
       onOpenConnection={setConnectionModal}
     />

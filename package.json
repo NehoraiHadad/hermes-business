@@ -1,9 +1,9 @@
 {
   "name": "hermes-business",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "private": true,
   "description": "A friendly always-available business assistant powered by Hermes Agent",
-  "author": "Hermes Business POC",
+  "author": "העוזר לעסק (Alpha)",
   "main": "electron/main.cjs",
   "scripts": {
     "build:plugin": "node scripts/build-plugin.mjs",
@@ -13,19 +13,29 @@
     "install:plugin": "node scripts/build-plugin.mjs && node scripts/install-plugin.mjs",
     "dev": "vite",
     "dev:desktop": "concurrently -k \"vite\" \"wait-on http://127.0.0.1:5173 && electron .\"",
-    "build": "node scripts/build-plugin.mjs && tsc -b && vite build",
+    "build": "node scripts/build-plugin.mjs && node scripts/verify-plugin.mjs && tsc -b && vite build",
+    "build:qa": "node scripts/build-plugin.mjs && node scripts/verify-plugin.mjs && tsc -b && vite build --mode qa",
     "test": "vitest run",
+    "test:plugin:policy": "python -m unittest discover -s hermes-plugin/business-whatsapp-policy/tests -p test_*.py -v",
     "test:e2e:hermes": "node scripts/e2e-hermes.mjs",
+    "test:e2e:whatsapp": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/e2e-whatsapp-onboarding.ps1",
+    "test:e2e:installed-whatsapp-ui": "node scripts/e2e-installed-whatsapp-ui.mjs",
+    "test:e2e:installed-attachment-ui": "node scripts/e2e-installed-attachment-ui.mjs",
     "test:e2e:installed-ui": "node scripts/e2e-installed-ui.mjs",
+    "test:e2e:installed-partner-ui": "node scripts/e2e-installed-partner-ui.mjs",
     "test:e2e:bootstrap-clean": "npm run build:plugin && powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/e2e-bootstrap-clean.ps1",
+    "test:e2e:bootstrap-companion": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/e2e-companion-bootstrap.ps1",
     "test:e2e:missing-hermes-ui": "node scripts/e2e-missing-hermes-ui.mjs",
     "preview": "vite preview --host 127.0.0.1",
-    "package:win": "npm run build && electron-builder --win nsis",
+    "verify:release": "npm test && npm run test:plugin:policy && npm run verify:plugin && npm run verify:bootstrap",
+    "package:win": "npm run verify:release && npm run build && electron-builder --win nsis",
+    "package:win:qa": "npm run verify:release && npm run build:qa && electron-builder --win nsis",
     "package:bootstrap": "npm run build:plugin && powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/build-bootstrap.ps1"
   },
   "dependencies": {
     "adm-zip": "0.6.0",
     "lucide-react": "^0.468.0",
+    "qrcode.react": "4.2.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-markdown": "^9.0.3"
@@ -65,12 +75,35 @@
         "to": "business-bootstrap/bootstrap.ps1"
       },
       {
+        "from": "installer/bootstrap-companion.ps1",
+        "to": "business-bootstrap/bootstrap-companion.ps1"
+      },
+      {
         "from": "hermes-plugin/business-shell/plugin.js",
         "to": "business-bootstrap/plugin.js"
       },
       {
         "from": "hermes-plugin/business-shell/skills/business-bootstrap/SKILL.md",
         "to": "business-bootstrap/business-bootstrap.SKILL.md"
+      },
+      {
+        "from": "hermes-plugin/business-partner/SKILL.md",
+        "to": "business-bootstrap/business-partner.SKILL.md"
+      },
+      {
+        "from": "hermes-plugin/business-whatsapp-policy",
+        "to": "business-bootstrap/whatsapp-policy",
+        "filter": [
+          "__init__.py",
+          "policy.py",
+          "ingest.py",
+          "contract.py",
+          "surface.py",
+          "guards.py",
+          "transport.py",
+          "registry.py",
+          "plugin.yaml"
+        ]
       }
     ],
     "directories": {

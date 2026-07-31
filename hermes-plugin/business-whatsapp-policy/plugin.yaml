@@ -1,0 +1,6 @@
+name: business-whatsapp-policy
+version: 0.1.0
+description: "Fail-closed WhatsApp read-only and selected-chat reply policy for the business shell."
+author: העוזר לעסק (Alpha)
+hooks:
+  - pre_gateway_dispatch

@@ -2,6 +2,7 @@ const { app, BrowserWindow, Menu, Tray, nativeImage, screen } = require('electro
 const path = require('node:path')
 const { state } = require('./window-state.cjs')
 const { applyMiniPin, refreshWindowSurface } = require('./window-pin.cjs')
+const { isTrustedRendererUrl } = require('./url-policy.cjs')
 
 // Construction of the tray and the BrowserWindow itself. Runtime callbacks reach
 // back into the window controller lazily to avoid a require cycle with windows.cjs.
@@ -59,6 +60,10 @@ function createWindow() {
     }
   })
   state.mainWindow = mainWindow
+  mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (!isTrustedRendererUrl(url, app.isPackaged)) event.preventDefault()
+  })
   mainWindow.on('ready-to-show', () => {
     if (!mainWindow || mainWindow.isDestroyed()) return
     mainWindow.show()

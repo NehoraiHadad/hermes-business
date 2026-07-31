@@ -1,4 +1,4 @@
-import { FileText } from 'lucide-react'
+import { FileText, Image as ImageIcon } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import type { ChatMessage } from '../../types'
 import { AssistantMark } from '../ui/AssistantMark'
@@ -13,15 +13,15 @@ export function MessageBubble({ message }: { message: ChatMessage }) {
       ) : null}
       <div className="message__content">
         <div className="message__bubble">
-          {message.attachment ? (
-            <div className="message-attachment">
-              <FileText size={18} />
+          {message.attachments?.map((attachment, index) => (
+            <div className="message-attachment" key={`${message.id}-att-${index}`}>
+              {attachment.kind === 'image' ? <ImageIcon size={18} /> : <FileText size={18} />}
               <span>
-                <strong>{message.attachment.name}</strong>
-                <small>{message.attachment.size}</small>
+                <strong>{attachment.name}</strong>
+                {attachment.size ? <small>{attachment.size}</small> : null}
               </span>
             </div>
-          ) : null}
+          ))}
           <ReactMarkdown>{message.text || (message.streaming ? ' ' : '')}</ReactMarkdown>
           {message.streaming ? <span className="typing-cursor" /> : null}
         </div>

@@ -2,7 +2,14 @@ const { app } = require('electron')
 const { createHash } = require('node:crypto')
 const fs = require('node:fs')
 const path = require('node:path')
-const { hermesHome, desktopPluginSource, bootstrapSkillSource } = require('./paths.cjs')
+const {
+  hermesHome,
+  desktopPluginSource,
+  bootstrapSkillSource,
+  companionBootstrapSource,
+  whatsappPolicyPluginSource,
+  WHATSAPP_POLICY_PLUGIN_FILES
+} = require('./paths.cjs')
 
 // Installs the bundled Desktop Plugin and its first-run bootstrap Skill into the
 // Hermes home, recording an integrity receipt. Also stages the payload for the
@@ -22,11 +29,13 @@ function stageBusinessBootstrap() {
   const sources = app.isPackaged
     ? {
         script: path.join(sourceRoot, 'bootstrap.ps1'),
+        companionModule: path.join(sourceRoot, 'bootstrap-companion.ps1'),
         plugin: path.join(sourceRoot, 'plugin.js'),
         skill: path.join(sourceRoot, 'business-bootstrap.SKILL.md')
       }
     : {
         script: path.join(sourceRoot, 'installer', 'bootstrap.ps1'),
+        companionModule: companionBootstrapSource(),
         plugin: path.join(sourceRoot, 'hermes-plugin', 'business-shell', 'plugin.js'),
         skill: path.join(sourceRoot, 'hermes-plugin', 'business-shell', 'skills', 'business-bootstrap', 'SKILL.md')
       }
@@ -35,9 +44,27 @@ function stageBusinessBootstrap() {
   }
   const stagingRoot = fs.mkdtempSync(path.join(app.getPath('temp'), 'hermes-business-bootstrap-'))
   fs.copyFileSync(sources.script, path.join(stagingRoot, 'bootstrap.ps1'))
+  fs.copyFileSync(sources.companionModule, path.join(stagingRoot, 'bootstrap-companion.ps1'))
   fs.copyFileSync(sources.plugin, path.join(stagingRoot, 'plugin.js'))
   fs.copyFileSync(sources.skill, path.join(stagingRoot, 'business-bootstrap.SKILL.md'))
+  stageWhatsappPolicyPayload(sourceRoot, stagingRoot, app.isPackaged)
   return stagingRoot
+}
+
+// The bootstrap installer reads the WhatsApp policy plugin payload from
+// <PayloadRoot>/whatsapp-policy/. Packaged builds ship it under the
+// business-bootstrap resource; the dev tree reads it from hermes-plugin/.
+function stageWhatsappPolicyPayload(sourceRoot, stagingRoot, isPackaged) {
+  const sourceDir = isPackaged
+    ? path.join(sourceRoot, 'whatsapp-policy')
+    : whatsappPolicyPluginSource()
+  const targetDir = path.join(stagingRoot, 'whatsapp-policy')
+  fs.mkdirSync(targetDir, { recursive: true })
+  for (const name of WHATSAPP_POLICY_PLUGIN_FILES) {
+    const source = path.join(sourceDir, name)
+    if (!fs.existsSync(source)) throw new Error(`The packaged WhatsApp policy payload is missing: ${name}`)
+    fs.copyFileSync(source, path.join(targetDir, name))
+  }
 }
 
 function installDesktopPlugin() {
