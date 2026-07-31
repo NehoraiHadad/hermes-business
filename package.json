@@ -18,6 +18,7 @@
     "test": "vitest run",
     "test:plugin:policy": "python -m unittest discover -s hermes-plugin/business-whatsapp-policy/tests -p test_*.py -v",
     "test:e2e:hermes": "node scripts/e2e-hermes.mjs",
+    "test:e2e:hermes-shared-state": "node scripts/e2e-hermes-shared-state.mjs",
     "test:e2e:whatsapp": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/e2e-whatsapp-onboarding.ps1",
     "test:e2e:installed-whatsapp-ui": "node scripts/e2e-installed-whatsapp-ui.mjs",
     "test:e2e:installed-attachment-ui": "node scripts/e2e-installed-attachment-ui.mjs",

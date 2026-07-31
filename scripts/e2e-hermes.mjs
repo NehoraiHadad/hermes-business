@@ -4,14 +4,20 @@
 // Behavior, opt-in env flags and the JSON report shape are preserved.
 
 import { randomBytes } from 'node:crypto'
-import { resolveHermesBinary, safeJson, sanitize, waitForHealth } from './lib/e2e-harness.mjs'
+import { rmSync } from 'node:fs'
+import { safeJson, sanitize, waitForHealth } from './lib/e2e-harness.mjs'
+import { resolveInstalledHermes, createIsolatedHome, offlineChannelEnv, liveHermesHome } from './lib/hermes-shared-home.mjs'
 import { createHermesHarness } from './lib/hermes-live.mjs'
 import { runStreaming } from './lib/probes/hermes/streaming.mjs'
 import { runClarifyProbe, runInterruptProbe, runToolProbe } from './lib/probes/hermes/optional.mjs'
 import { countSkills, runCronCycle, verifySharedSession } from './lib/probes/hermes/registry.mjs'
 
 const port = Number(process.env.HERMES_E2E_PORT || 9129)
-const { hermes, hermesHome } = resolveHermesBinary()
+// Run the installed binary but against a throwaway HERMES_HOME so the user's
+// real Hermes profile/state is never mutated (the previous resolveHermesBinary
+// default pointed HERMES_HOME at the live profile — a safety gap).
+const { hermes } = resolveInstalledHermes()
+const hermesHome = createIsolatedHome()
 const token = randomBytes(32).toString('base64url')
 const baseUrl = `http://127.0.0.1:${port}`
 const wsUrl = `ws://127.0.0.1:${port}/api/ws?token=${encodeURIComponent(token)}`
@@ -26,10 +32,11 @@ const ctx = {
   cronCreated: false
 }
 
-const harness = createHermesHarness({ hermes, hermesHome, port, token, wsUrl })
+const harness = createHermesHarness({ hermes, hermesHome, port, token, wsUrl, extraEnv: offlineChannelEnv() })
 const { rpc, stage } = harness
 
 try {
+  stage(`isolated HERMES_HOME: ${hermesHome} (live home untouched: ${liveHermesHome()})`)
   stage(`starting Hermes on 127.0.0.1:${port}`)
   harness.startServer()
 
@@ -92,4 +99,9 @@ try {
     }
   }
   harness.shutdown()
+  try {
+    rmSync(hermesHome, { recursive: true, force: true })
+  } catch {
+    // Temp home under the OS temp dir; safe to leave for the OS to reap.
+  }
 }

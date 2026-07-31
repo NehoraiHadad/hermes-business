@@ -21,7 +21,7 @@ export function flattenSkillNames(value) {
  * (`rpc`), event polling (`waitForEvent`) and the redacted `serverOutput`
  * buffer. All stdout/stderr is sanitized on capture.
  */
-export function createHermesHarness({ hermes, hermesHome, port, token, wsUrl }) {
+export function createHermesHarness({ hermes, hermesHome, port, token, wsUrl, extraEnv = {} }) {
   let server = null
   let socket = null
   let nextId = 0
@@ -37,6 +37,7 @@ export function createHermesHarness({ hermes, hermesHome, port, token, wsUrl }) 
     server = spawn(hermes, ['serve', '--host', '127.0.0.1', '--port', String(port)], {
       env: {
         ...process.env,
+        ...extraEnv,
         HERMES_HOME: hermesHome,
         HERMES_DASHBOARD_SESSION_TOKEN: token,
         HERMES_DESKTOP: '1'

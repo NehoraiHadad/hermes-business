@@ -178,10 +178,100 @@ promote, zip-slip refusal, the `zip`-requires-`entrypoint` contract, entrypoint
 shape validation, and fail-closed when the entrypoint is absent after extraction.
 
 **Not run for safety (mutation risk, not isolatable):** `e2e-installed-partner-ui`
-(activates a personality that needs a real Hermes install) and `e2e-hermes`
-(drives a real shared Hermes session). Their safety-critical assertions are
-covered green by unit tests (`partner-mode`, `sandbox-config`,
+(activates a personality that needs a real Hermes install). Its safety-critical
+assertions are covered green by unit tests (`partner-mode`, `sandbox-config`,
 `partner-settings`, `business-partner`).
+
+### 4a. Installed-Hermes shared-state E2E (isolated home, official surfaces)
+
+`e2e-hermes` and the new `e2e-hermes-shared-state` are **no longer** excluded for
+mutation risk: they now run the **installed** Hermes binary
+(`%LOCALAPPDATA%\hermes\hermes-agent\venv\Scripts\hermes.exe`) against a
+**throwaway** `HERMES_HOME` created with `mkdtemp` under the OS temp dir. A
+safety guard (`scripts/lib/hermes-shared-home.mjs` → `assertNotLiveHome`,
+unit-tested) refuses to start if `HERMES_HOME` is, or is inside, the live profile
+`%LOCALAPPDATA%\hermes`; the server is spawned with an offline channel overlay
+(`WHATSAPP_/TELEGRAM_/EMAIL_/SLACK_/…_ENABLED=0`) so no Telegram/WhatsApp/email/
+Google action can fire. The previous `resolveHermesBinary()` default (which
+pointed `HERMES_HOME` at the live profile) was the mutation-risk gap — now fixed.
+
+**One runtime, one isolated home — both the wrapper contract and the official
+surfaces.** A single `hermes serve` (headless gateway = the exact backend the
+desktop app runs; `hermes_cli/subcommands/dashboard.py`) exposes both the
+WebSocket JSON-RPC gateway (`/api/ws`, `tui_gateway/server.py`) and the REST
+routers (`hermes_cli/web_routers/{cron,skills,sessions}.py`). The business
+companion ("wrapper") speaks exactly these: RPC via `src/lib/hermes/session.ts`
+and REST via `src/lib/hermes/rest-*.ts`.
+
+| Requirement | How proven against installed Hermes | Evidence (redacted JSON) |
+|---|---|---|
+| ONE install + ONE isolated `HERMES_HOME` for both contracts | binary from install tree; home = `%TEMP%\hermes-e2e-home-*`; live home printed as untouched | `one_runtime.{install_root, isolated_home, live_home_untouched}` |
+| Session created via wrapper RPC is visible on official surfaces | `session.create` (wrapper RPC) → `GET /api/sessions` (official REST) **and** `session.list` (official RPC) both return the stored id | `session_shared_state.{visible_via_rest, visible_via_rpc_list}=true` |
+| Streaming event parsing (official behavior) | `prompt.submit` → real `message.delta` stream + `message.complete`; marker persisted and returned by `session.resume` | `live_transport.streaming.delta_events` (6–10), `marker_streamed_and_persisted=true` |
+| Stop/cancel (official behavior) | `session.interrupt` on an in-flight reply | `live_transport.interrupt.status="interrupted"` |
+| Tool activity mapped, no competing approval engine | `tool.start`/`tool.complete` (matching `tool_id`) from the official todo tool; wrapper's `respondApproval` delegates to official `approval.respond` (no second engine) | `live_transport.tool.{start_received,complete_received,same_tool_id}=true`; `approval_mapping.competing_engine=false` |
+| Skill created via one surface visible via the other | `POST /api/skills` (same `_create_skill` write path as the agent's skill tool) → `skills.manage list` (official RPC) **and** on-disk `skills/business/<name>/SKILL.md` under the isolated home | `skill_shared_state.{visible_via_rpc=true, on_disk_path}`, `skill_count=62` |
+| Scheduled task via wrapper REST in official cron state, removable | `POST /api/cron/jobs` (wrapper REST) → `cron.manage list` (official RPC) **and** on-disk `cron/jobs.json` → `DELETE /api/cron/jobs/{id}` → absent in all three | `cron_shared_state.{visible_via_rpc,visible_on_disk,removed}=true`, `disk_file` |
+| plugin/profile/memory/workspace paths identical, with evidence | resolved dirs asserted under the isolated home | `path_evidence.paths.*` + `present.{memories,skills,sessions,cron,workspace_db}=true` (all under `%TEMP%\hermes-e2e-home-*`) |
+| **business-shell Desktop plugin installed + discovered + enabled** | plugin installed via the **official disk door** (`<home>/desktop-plugins/business-shell/plugin.js` + integrity receipt, same contract as `electron/plugin-install.cjs`), then discovered/loaded through a **faithful reproduction of the shipped runtime loader** (`contrib/runtime-loader.ts` + `sdk/runtime.ts`: integrity → bare-specifier rewrite → module import → validate default `HermesPlugin` → `register`) | `plugin_shared_state.discovery.{business_shell_present,integrity_verified}=true`; `inventory.{status:"loaded",enabled:true}`; `contributions[]` = `/business` route + `sidebar.nav` + `palette` |
+| **plugin UI + official surfaces share the isolated state** | the plugin's own `host.request` door (the live gateway) returns the same rows: `session.list` sees the shared session; `cron.manage list` ok; `skills.manage list` sees the contract Skill | `plugin_shared_state.shared_state.{session_visible_via_plugin_host,cron_list_ok,bootstrap_skill_visible}=true` |
+| **plugin route serves without a provider** | the `/business` route contribution rendered via `react-dom/server` with **no** model configured | `plugin_shared_state.route_render.{provider_free:true, markup_bytes:~6180}` |
+| **plugin vs Skill distinguished** | `business-shell` = Desktop **plugin** (disk door + inventory, absent from the Skill registry); `business-bootstrap` = **Skill** (on-disk `SKILL.md` + `skills.manage`, absent from plugin contributions); `business-whatsapp-policy` = a **separate** plugin, not part of this desktop-plugin contract | `plugin_shared_state.plugin_vs_skill.*` |
+| **uninstall/cleanup = zero residue, live home never touched** | `uninstallBusinessShell` removes the plugin folder → re-scan empty; every write confined to the isolated home; temp-home deletion removes all | `plugin_shared_state.uninstall.{disk_door_empty,residue_gone,writes_confined_to_isolated_home}=true` |
+| diagnostics redacted, no secrets/content copied | every line via `sanitize`/`safeJson`; only the provider **name** appears, never a key; no transcript content copied to reports | provider shown as `openrouter`; no key/content in output |
+
+**Live vs mock provider (honest).** On this machine a provider (`openrouter`) is
+present **via environment**, so streaming/stop-cancel/tool were proven against a
+**live** provider with minimal deterministic prompts (a single exact marker; an
+interrupt that stops a long reply after the first delta; one todo-tool turn). No
+messaging/email/Google action is ever sent — an LLM completion is not an external
+channel action. When **no** provider is configured, the suite marks
+`live_transport.skipped` with a reason and the provider-free assertions (session/
+cron/skill shared-state + path evidence) still pass; those exercise real Hermes
+code with **no** model call. Set `HERMES_E2E_NO_LLM=1` to force the provider-free
+path even when a key is present.
+
+**Commands & results (this acceptance run):**
+
+```
+npm test                              # 49 files, 242 pass / 1 skip (incl. hermes-shared-home guard + plugin-loader tests)
+HERMES_E2E_NO_LLM=1 node scripts/e2e-hermes-shared-state.mjs   # ok:true — session+cron+skill shared-state, paths, AND the business-shell plugin: install→discover→enabled→same-state→provider-free route render→uninstall zero residue
+node scripts/e2e-hermes-shared-state.mjs   # + live streaming/interrupt when a provider is already available
+node scripts/e2e-hermes.mjs           # ok:true — isolated home; streaming+resume+cron cycle green
+```
+
+**Cleanup verified:** temp homes removed (0 `hermes-e2e-home-*` left in `%TEMP%`),
+the REST-created cron job and skill live only inside the deleted temp home, the
+live profile carries **0** `POC E2E`/`poc-e2e-shared` markers afterward, and the
+user's real `hermes serve` on port 9119 stays `LISTENING` (untouched). Each run
+uses its own port (9131–9135) and its own home, so nothing collides.
+
+**Gap closed — business-shell plugin installed into the isolated home.** The
+prior increment (`desktop-plugins/` absent in a fresh home) is now proven end to
+end. The suite installs the **real repository** business-shell Desktop plugin via
+the **official disk-door contract** — copy `plugin.js` into
+`<home>/desktop-plugins/business-shell/` plus an SRI integrity receipt and the
+`business-bootstrap` Skill, byte-for-byte what `electron/plugin-install.cjs`
+ships — **before** boot, so the gateway scans the Skill at startup. Discovery and
+loading then run a **faithful Node reproduction of the shipped renderer pipeline**
+(`scripts/lib/probes/hermes/plugin-loader.mjs` ≙ `apps/desktop/src/contrib/
+runtime-loader.ts` + `sdk/runtime.ts`): SRI check → bare-specifier rewrite
+(`@hermes/plugin-sdk` / `react` → live shim modules) → module import → validate
+the default `HermesPlugin` → `register(ctx)` with the same id-scoping/provenance
+as `createPluginContext`. The ONLY substitution is the module transport
+(browser `URL.createObjectURL(Blob)` → Node `data:` URLs); the rewrite,
+integrity, unsupported-import and validation logic are identical. There is **no
+gateway REST/RPC for desktop-plugin listing** — discovery is renderer-side over
+the filesystem door, which is exactly what is reproduced. New modules are each
+≤150 lines: `plugin-loader.mjs`, `plugin-install.mjs`, `plugin-sdk-shim.mjs`,
+`plugin-shared-state.mjs`, unit-tested by `plugin-loader.test.mjs`.
+
+**Cleanup (plugin):** uninstall removes the plugin folder (re-scan → 0 plugins),
+all writes are confined to the isolated temp home (`writes_confined_to_isolated_
+home=true`), and temp-home deletion leaves **0** `hermes-e2e-home-*` behind. The
+guard refuses any non-isolated `HERMES_HOME`, so the user's live
+`desktop-plugins/business-shell` (if present) is only ever **read**, never
+installed/uninstalled/modified by this suite.
 
 ---
 
