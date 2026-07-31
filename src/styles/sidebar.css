@@ -1,0 +1,85 @@
+.sidebar {
+  position: relative;
+  z-index: 5;
+  display: flex;
+  flex: 0 0 294px;
+  flex-direction: column;
+  height: 100%;
+  padding: 27px 18px 16px;
+  overflow: hidden;
+  background: #eeece5;
+  border-left: 1px solid var(--line);
+}
+
+.brand {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 0 9px 22px;
+}
+
+.brand > div:last-child {
+  display: grid;
+  line-height: 1.05;
+}
+
+.brand strong {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.5px;
+}
+
+.brand span {
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.logo {
+  position: relative;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+}
+
+.logo__wing,
+.logo__core {
+  position: absolute;
+  display: block;
+}
+
+.logo__wing {
+  top: 6px;
+  width: 18px;
+  height: 27px;
+  background: linear-gradient(150deg, #7775bf, #454481);
+  border-radius: 70% 18% 68% 20%;
+  transform: rotate(27deg);
+}
+
+.logo__wing--a {
+  right: 3px;
+}
+
+.logo__wing--b {
+  left: 3px;
+  transform: scaleX(-1) rotate(27deg);
+}
+
+.logo__core {
+  top: 13px;
+  right: 15px;
+  width: 8px;
+  height: 14px;
+  background: #f4d58a;
+  border-radius: 50% 50% 30% 30%;
+}
+
+.logo--small {
+  width: 26px;
+  height: 26px;
+  flex-basis: 26px;
+  transform: scale(0.72);
+  transform-origin: center;
+}

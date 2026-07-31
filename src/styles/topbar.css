@@ -1,0 +1,139 @@
+.app-main {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  height: 100%;
+}
+
+.topbar {
+  position: relative;
+  z-index: 4;
+  display: flex;
+  flex: 0 0 69px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 34px 10px 30px;
+  background: rgba(247, 246, 241, 0.94);
+  border-bottom: 1px solid var(--line);
+  -webkit-app-region: drag;
+}
+
+.topbar button {
+  -webkit-app-region: no-drag;
+}
+
+.topbar__title {
+  display: flex;
+  gap: 13px;
+  align-items: center;
+}
+
+.topbar h1 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 680;
+}
+
+.sync-label {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  color: #807b71;
+  font-size: 10.5px;
+}
+
+.sync-label svg {
+  color: var(--green);
+}
+
+.topbar__actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-left: 130px;
+}
+
+.icon-button {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  padding: 0;
+  place-items: center;
+  cursor: pointer;
+  color: #6f6b63;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+}
+
+.icon-button:hover {
+  background: var(--surface-soft);
+}
+
+.outline-button {
+  color: #4c4943;
+  background: #fffefb;
+  border: 1px solid var(--line-strong);
+}
+
+.outline-button:hover {
+  background: #f8f6f0;
+  border-color: #c7c1b4;
+}
+
+.outline-button--small {
+  min-height: 34px;
+  padding: 0 12px;
+  font-size: 12px;
+}
+
+.full-menu-wrap {
+  position: relative;
+}
+
+.dropdown-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  width: 245px;
+  padding: 7px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  box-shadow: var(--shadow);
+}
+
+.dropdown-menu button {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  min-height: 51px;
+  padding: 7px 9px;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  text-align: right;
+}
+
+.dropdown-menu button:hover {
+  background: var(--surface-soft);
+}
+
+.dropdown-menu button > span:nth-child(2) {
+  display: grid;
+}
+
+.dropdown-menu strong {
+  font-size: 12.5px;
+}
+
+.dropdown-menu small {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 10.5px;
+}
+

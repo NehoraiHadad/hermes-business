@@ -1,0 +1,152 @@
+.stat-card {
+  display: grid;
+  min-height: 93px;
+  padding: 15px 17px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  grid-template-columns: 38px 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 11px;
+}
+
+.stat-card__icon {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  color: #3d7658;
+  background: var(--green-soft);
+  border-radius: 10px;
+  grid-row: 1 / 3;
+}
+
+.stat-card__icon--amber {
+  color: var(--amber);
+  background: var(--amber-soft);
+}
+
+.stat-card__icon--blue {
+  color: #4a6c96;
+  background: #e7eef5;
+}
+
+.stat-card strong {
+  align-self: end;
+  font-size: 16px;
+}
+
+.stat-card small {
+  align-self: start;
+  color: var(--muted);
+  font-size: 10.5px;
+}
+
+.panel {
+  max-width: 1120px;
+  margin: 0 auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(55, 49, 39, 0.025);
+}
+
+.panel__title {
+  display: flex;
+  min-height: 58px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 19px;
+  border-bottom: 1px solid var(--line);
+}
+
+.panel__title h3 {
+  margin: 0;
+  font-size: 13.5px;
+}
+
+.panel__title > span {
+  color: var(--muted);
+  font-size: 10.5px;
+}
+
+.task-row {
+  display: flex;
+  gap: 14px;
+  min-height: 116px;
+  align-items: center;
+  padding: 17px 19px;
+  border-bottom: 1px solid var(--line);
+}
+
+.task-row:last-child {
+  border-bottom: 0;
+}
+
+.task-row__state {
+  display: grid;
+  width: 39px;
+  height: 39px;
+  flex: 0 0 39px;
+  place-items: center;
+  color: #8c877d;
+  background: #efede8;
+  border-radius: 10px;
+}
+
+.task-row__state--active {
+  color: var(--green);
+  background: var(--green-soft);
+}
+
+.task-row__main {
+  min-width: 0;
+  flex: 1;
+}
+
+.task-row__main > strong {
+  font-size: 13.5px;
+}
+
+.task-row__main > p {
+  overflow: hidden;
+  margin: 5px 0 10px;
+  color: #777269;
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-row__meta {
+  display: flex;
+  gap: 18px;
+  color: #918c82;
+  font-size: 10.5px;
+}
+
+.task-row__meta span {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+}
+
+.task-row__right {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.state-label {
+  display: inline-flex;
+  padding: 4px 8px;
+  color: #7e786e;
+  background: #efede8;
+  border-radius: 15px;
+  font-size: 9.5px;
+  font-weight: 650;
+}
+
+.state-label--active {
+  color: var(--green);
+  background: var(--green-soft);
+}

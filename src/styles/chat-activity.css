@@ -1,0 +1,38 @@
+.activity-strip {
+  display: grid;
+  gap: 6px;
+  margin: -9px 40px 22px 0;
+}
+
+.activity-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  width: fit-content;
+  min-height: 29px;
+  padding: 4px 9px;
+  color: #777269;
+  background: rgba(238, 235, 226, 0.75);
+  border-radius: 7px;
+  font-size: 11.5px;
+}
+
+.activity-row svg {
+  color: var(--indigo);
+}
+
+.activity-row small {
+  padding-right: 6px;
+  color: #9a958b;
+  border-right: 1px solid var(--line-strong);
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

@@ -1,0 +1,94 @@
+.mini-shell .chat-screen {
+  min-height: 0;
+  flex: 1;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(224, 218, 238, 0.28), transparent 38%),
+    var(--bg);
+}
+
+.mini-shell .conversation {
+  width: calc(100% - 24px);
+  padding: 15px 0 12px;
+}
+
+.mini-shell .conversation-date {
+  margin-bottom: 14px;
+}
+
+.mini-shell .empty-conversation {
+  margin-top: 9vh;
+  padding: 0 20px;
+}
+
+.mini-shell .message {
+  gap: 7px;
+  margin-bottom: 15px;
+}
+
+.mini-shell .assistant-avatar {
+  width: 25px;
+  height: 25px;
+  flex-basis: 25px;
+}
+
+.mini-shell .message__content {
+  max-width: 86%;
+}
+
+.mini-shell .message__bubble {
+  padding: 9px 11px;
+  font-size: 12px;
+  line-height: 1.58;
+}
+
+.mini-shell .activity-strip {
+  margin: -3px 28px 14px 0;
+}
+
+.mini-shell .activity-row {
+  max-width: calc(100% - 20px);
+  font-size: 10.5px;
+}
+
+.mini-shell .approval-card {
+  width: calc(100% - 22px);
+  margin: 3px auto 15px;
+  padding: 11px;
+}
+
+.mini-shell .approval-card__actions {
+  flex-wrap: wrap;
+}
+
+.mini-shell .composer-wrap {
+  padding: 7px 10px 8px;
+}
+
+.mini-shell .composer {
+  width: 100%;
+  min-height: 72px;
+  padding: 9px 10px 7px;
+  border-radius: 13px;
+}
+
+.mini-shell .composer textarea {
+  min-height: 30px;
+  font-size: 12.5px;
+}
+
+.mini-shell .composer__bottom > div {
+  display: none;
+}
+
+.mini-shell .composer-hint {
+  display: none;
+}
+
+.floating-toast--mini {
+  right: 12px;
+  bottom: 94px;
+  left: 12px;
+  width: auto;
+  font-size: 10.5px;
+}
+

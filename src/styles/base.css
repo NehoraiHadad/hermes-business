@@ -1,0 +1,63 @@
+:root {
+  font-family: "Segoe UI", "Noto Sans Hebrew", Arial, sans-serif;
+  color: #292722;
+  background: #f7f6f1;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  --bg: #f7f6f1;
+  --surface: #fffefb;
+  --surface-soft: #f1efe8;
+  --ink: #292722;
+  --muted: #79756c;
+  --line: #e6e2d8;
+  --line-strong: #d7d1c3;
+  --indigo: #5c5ba8;
+  --indigo-dark: #49498f;
+  --indigo-soft: #efeffa;
+  --green: #2a7a57;
+  --green-soft: #e7f3ec;
+  --amber: #a56b22;
+  --amber-soft: #fbf0dc;
+  --red: #a54242;
+  --shadow: 0 14px 48px rgba(55, 49, 39, 0.11);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  overflow: hidden;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button {
+  color: inherit;
+}
+
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid rgba(92, 91, 168, 0.55);
+  outline-offset: 2px;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+

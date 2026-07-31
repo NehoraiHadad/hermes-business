@@ -1,0 +1,118 @@
+.app-shell {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  background: var(--bg);
+  direction: rtl;
+}
+
+.mini-shell {
+  position: relative;
+  display: flex;
+  width: 100%;
+  height: 100%;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--ink);
+  background: var(--bg);
+}
+
+.mini-header {
+  position: relative;
+  z-index: 6;
+  display: flex;
+  flex: 0 0 96px;
+  align-items: flex-end;
+  justify-content: space-between;
+  padding: 50px 12px 10px;
+  background: rgba(255, 254, 251, 0.96);
+  border-bottom: 1px solid var(--line);
+  -webkit-app-region: drag;
+}
+
+.mini-header__identity {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  min-width: 0;
+}
+
+.mini-header__identity > span:last-child {
+  display: grid;
+  min-width: 0;
+}
+
+.mini-header__identity strong {
+  font-size: 14px;
+  font-weight: 720;
+}
+
+.mini-avatar {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  place-items: center;
+  color: white;
+  background: linear-gradient(145deg, var(--indigo), #7775bf);
+  border-radius: 11px;
+  box-shadow: 0 5px 15px rgba(76, 74, 143, 0.2);
+}
+
+.mini-status {
+  position: relative;
+  margin-top: 2px;
+  padding-right: 10px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.mini-status::before {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  width: 6px;
+  height: 6px;
+  background: #aaa399;
+  border-radius: 50%;
+  content: "";
+  transform: translateY(-50%);
+}
+
+.mini-status--online::before {
+  background: #42a172;
+  box-shadow: 0 0 0 3px rgba(66, 161, 114, 0.11);
+}
+
+.mini-header__actions {
+  display: flex;
+  gap: 3px;
+  -webkit-app-region: no-drag;
+}
+
+.mini-header__actions button {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  place-items: center;
+  cursor: pointer;
+  color: #777269;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+}
+
+.mini-header__actions button:hover,
+.mini-header__actions .mini-action--active {
+  color: var(--indigo-dark);
+  background: var(--indigo-soft);
+}
+
+.mini-powered {
+  flex: 0 0 20px;
+  color: #a39e94;
+  background: var(--bg);
+  font-size: 8.5px;
+  text-align: center;
+}

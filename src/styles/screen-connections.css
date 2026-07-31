@@ -1,0 +1,148 @@
+.connections-panel {
+  overflow: hidden;
+}
+
+.connections-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.connection-card {
+  display: flex;
+  gap: 13px;
+  min-height: 120px;
+  align-items: center;
+  padding: 19px;
+  border-bottom: 1px solid var(--line);
+}
+
+.connection-card:nth-child(odd) {
+  border-left: 1px solid var(--line);
+}
+
+.connection-card:nth-last-child(-n + 2) {
+  border-bottom: 0;
+}
+
+.service-icon {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  place-items: center;
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  font-size: 22px;
+  font-weight: 750;
+}
+
+.service-icon--google {
+  color: #4285f4;
+  box-shadow: inset -4px -4px 0 #fbbc05;
+}
+
+.service-icon--telegram {
+  color: white;
+  background: #36a8e1;
+  border-color: #36a8e1;
+}
+
+.service-icon--telegram svg {
+  transform: rotate(12deg);
+}
+
+.service-icon--whatsapp {
+  color: white;
+  background: #36b86c;
+  border-color: #36b86c;
+}
+
+.connection-card__content {
+  min-width: 0;
+  flex: 1;
+}
+
+.connection-card__content > div {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+}
+
+.connection-card h3 {
+  margin: 0;
+  font-size: 13.5px;
+}
+
+.connection-card p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 10.8px;
+}
+
+.risk-note {
+  display: block;
+  margin-top: 5px;
+  color: #a16828;
+  font-size: 9.3px;
+}
+
+.unofficial-tag {
+  padding: 2px 6px;
+  color: #986326;
+  background: var(--amber-soft);
+  border-radius: 10px;
+  font-size: 8.5px;
+  font-weight: 700;
+}
+
+.connected-button {
+  min-height: 34px;
+  padding: 0 11px;
+  color: var(--green);
+  background: var(--green-soft);
+  border: 1px solid transparent;
+  font-size: 11px;
+}
+
+.privacy-note,
+.diagnostic-safety {
+  display: flex;
+  gap: 11px;
+  max-width: 1120px;
+  align-items: flex-start;
+  margin: 16px auto 0;
+  padding: 13px 15px;
+  color: #5e665e;
+  background: #eff4ef;
+  border-radius: 10px;
+}
+
+.privacy-note svg,
+.diagnostic-safety svg {
+  flex: 0 0 auto;
+  color: var(--green);
+}
+
+.privacy-note strong {
+  font-size: 11.5px;
+}
+
+.privacy-note p,
+.diagnostic-safety p {
+  margin: 3px 0 0;
+  font-size: 10.5px;
+}
+
+.success-toast {
+  display: flex;
+  gap: 8px;
+  max-width: 1120px;
+  align-items: center;
+  margin: -10px auto 17px;
+  padding: 10px 13px;
+  color: var(--green);
+  background: var(--green-soft);
+  border-radius: 8px;
+  font-size: 11.5px;
+}

@@ -1,0 +1,107 @@
+import { Paperclip, Plus, Send, Sparkles, Square } from 'lucide-react'
+import { FormEvent, useEffect, useRef, useState } from 'react'
+import type { Activity, Approval, ChatMessage, ClarifyRequest } from '../../types'
+import { ActivityStrip } from './ActivityStrip'
+import { ApprovalCard } from './ApprovalCard'
+import { ClarifyCard } from './ClarifyCard'
+import { MessageBubble } from './MessageBubble'
+
+export function ChatScreen({
+  messages,
+  activities,
+  approval,
+  clarify,
+  busy,
+  onSend,
+  onStop,
+  onApproval,
+  onClarify
+}: {
+  messages: ChatMessage[]
+  activities: Activity[]
+  approval: Approval | null
+  clarify: ClarifyRequest | null
+  busy: boolean
+  onSend: (text: string) => void
+  onStop: () => void
+  onApproval: (choice: 'once' | 'deny') => void
+  onClarify: (answer: string) => void
+}) {
+  const [text, setText] = useState('')
+  const endRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  }, [messages, activities, approval, clarify])
+
+  const submit = (event: FormEvent) => {
+    event.preventDefault()
+    const value = text.trim()
+    if (!value || busy) return
+    setText('')
+    onSend(value)
+  }
+
+  return (
+    <main className="chat-screen">
+      <div className="chat-scroll">
+        <div className="conversation">
+          <div className="conversation-date">היום</div>
+          {!messages.length && !busy ? (
+            <div className="empty-conversation">
+              <span>
+                <Sparkles size={20} />
+              </span>
+              <strong>מה נעשה היום?</strong>
+              <p>אפשר לשאול, לנסח הודעה, לסכם מידע או להתחיל משימה חדשה.</p>
+            </div>
+          ) : null}
+          {messages.map(message => (
+            <MessageBubble key={message.id} message={message} />
+          ))}
+          <ActivityStrip activities={activities} />
+          {approval ? <ApprovalCard approval={approval} onRespond={onApproval} /> : null}
+          {clarify ? <ClarifyCard request={clarify} onRespond={onClarify} /> : null}
+          <div ref={endRef} />
+        </div>
+      </div>
+      <div className="composer-wrap">
+        <form className="composer" onSubmit={submit}>
+          <textarea
+            rows={1}
+            disabled={busy}
+            value={text}
+            onChange={event => setText(event.target.value)}
+            onKeyDown={event => {
+              if (event.key === 'Enter' && !event.shiftKey) submit(event)
+            }}
+            placeholder="מה תרצה לעשות?"
+            aria-label="הודעה לעוזר"
+          />
+          <div className="composer__bottom">
+            <div>
+              <button type="button" className="composer-icon" aria-label="צירוף קובץ">
+                <Paperclip size={18} />
+              </button>
+              <button type="button" className="composer-icon" aria-label="פעולות נוספות">
+                <Plus size={18} />
+              </button>
+            </div>
+            {busy ? (
+              <button type="button" className="send-button send-button--stop" onClick={onStop} aria-label="עצור תשובה">
+                <Square size={15} fill="currentColor" />
+              </button>
+            ) : (
+              <button type="submit" className="send-button" disabled={!text.trim()} aria-label="שלח">
+                <Send size={17} />
+              </button>
+            )}
+          </div>
+        </form>
+        <p className="composer-hint">
+          התשובות עשויות לכלול טעויות. פעולות משמעותיות יוצגו לך לאישור לפני ביצוע.
+        </p>
+      </div>
+    </main>
+  )
+}

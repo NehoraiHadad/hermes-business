@@ -1,0 +1,100 @@
+.approval-card {
+  display: flex;
+  gap: 12px;
+  max-width: 650px;
+  margin: 4px 41px 24px 0;
+  padding: 15px;
+  background: #fffdf7;
+  border: 1px solid #dfcda8;
+  border-radius: 12px;
+  box-shadow: 0 5px 18px rgba(90, 68, 31, 0.08);
+}
+
+.approval-card__icon {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  place-items: center;
+  color: #9b6a25;
+  background: var(--amber-soft);
+  border-radius: 10px;
+}
+
+.approval-card__body {
+  flex: 1;
+}
+
+.approval-card__body > strong {
+  font-size: 13.5px;
+}
+
+.approval-card p {
+  margin: 5px 0 11px;
+  color: #716a5d;
+  font-size: 12px;
+}
+
+.approval-card pre {
+  max-width: 100%;
+  padding: 9px;
+  overflow: auto;
+  direction: ltr;
+  color: #5d584f;
+  background: #f2eee5;
+  border-radius: 7px;
+  font-size: 10px;
+  text-align: left;
+}
+
+.approval-card__actions {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+}
+
+.primary-button {
+  color: white;
+  background: var(--indigo);
+  border: 1px solid var(--indigo);
+}
+
+.primary-button--small {
+  min-height: 33px;
+  padding: 0 12px;
+  font-size: 11.5px;
+}
+
+.ghost-button {
+  color: #5f5b54;
+  background: transparent;
+  border: 1px solid transparent;
+}
+
+.ghost-button:hover {
+  background: var(--surface-soft);
+}
+
+.ghost-button--danger {
+  min-height: 33px;
+  padding: 0 11px;
+  color: var(--red);
+  font-size: 11.5px;
+}
+
+.link-button {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+  padding: 5px;
+  cursor: pointer;
+  color: var(--indigo);
+  background: transparent;
+  border: 0;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.link-button:hover {
+  text-decoration: underline;
+}

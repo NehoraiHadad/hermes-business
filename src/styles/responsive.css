@@ -1,0 +1,46 @@
+@media (max-width: 1180px) {
+  .sidebar {
+    flex-basis: 262px;
+  }
+
+  .topbar__actions {
+    margin-left: 100px;
+  }
+
+  .content-screen {
+    padding-right: 28px;
+    padding-left: 28px;
+  }
+
+  .skills-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-height: 760px) {
+  .sidebar {
+    padding-top: 20px;
+  }
+
+  .brand {
+    padding-bottom: 15px;
+  }
+
+  .main-nav__item {
+    height: 38px;
+  }
+
+  .session-row {
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+
+  .onboarding__card {
+    min-height: 610px;
+  }
+
+  .onboarding__content {
+    min-height: 430px;
+    padding-top: 32px;
+  }
+}

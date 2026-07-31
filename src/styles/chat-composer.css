@@ -1,0 +1,89 @@
+.composer-wrap {
+  flex: 0 0 auto;
+  padding: 9px 34px 17px;
+  background: linear-gradient(transparent, var(--bg) 22%);
+}
+
+.composer {
+  width: min(790px, calc(100% - 64px));
+  min-height: 92px;
+  margin: 0 auto;
+  padding: 12px 13px 10px;
+  background: var(--surface);
+  border: 1px solid #d9d4c9;
+  border-radius: 14px;
+  box-shadow: 0 7px 24px rgba(54, 49, 40, 0.08);
+}
+
+.composer:focus-within {
+  border-color: #aaa7cb;
+  box-shadow: 0 8px 28px rgba(76, 74, 143, 0.11);
+}
+
+.composer textarea {
+  width: 100%;
+  min-height: 35px;
+  padding: 4px 3px;
+  resize: none;
+  color: var(--ink);
+  background: transparent;
+  border: 0;
+  outline: 0;
+  font-size: 13px;
+}
+
+.composer textarea::placeholder {
+  color: #9c978d;
+}
+
+.composer__bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.composer__bottom > div {
+  display: flex;
+}
+
+.composer-icon {
+  display: grid;
+  width: 32px;
+  height: 30px;
+  padding: 0;
+  place-items: center;
+  cursor: pointer;
+  color: #8b867c;
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+}
+
+.composer-icon:hover {
+  color: #5d5951;
+  background: var(--surface-soft);
+}
+
+.send-button {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  place-items: center;
+  cursor: pointer;
+  color: white;
+  background: var(--indigo);
+  border: 0;
+  border-radius: 9px;
+}
+
+.send-button--stop {
+  background: #5b5851;
+}
+
+.composer-hint {
+  margin: 7px auto 0;
+  color: #a09b91;
+  font-size: 9.5px;
+  text-align: center;
+}

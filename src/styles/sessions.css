@@ -1,0 +1,96 @@
+.sessions-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 9px 9px;
+  color: #6f6b63;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.sessions-title button,
+.sessions-title button:hover {
+  padding: 2px;
+  cursor: pointer;
+  color: #827d73;
+  background: transparent;
+  border: 0;
+}
+
+.sidebar-search {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  height: 36px;
+  margin: 0 4px 9px;
+  padding: 0 10px;
+  color: #8d887e;
+  background: rgba(255, 255, 255, 0.62);
+  border: 1px solid transparent;
+  border-radius: 8px;
+}
+
+.sidebar-search:focus-within {
+  background: white;
+  border-color: #c9c5dc;
+}
+
+.sidebar-search input {
+  width: 100%;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  font-size: 12.5px;
+}
+
+.session-list {
+  min-height: 0;
+  overflow: auto;
+  scrollbar-width: thin;
+}
+
+.session-row {
+  display: grid;
+  width: 100%;
+  padding: 10px 11px;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: 9px;
+  text-align: right;
+}
+
+.session-row:hover {
+  background: rgba(255, 255, 255, 0.52);
+}
+
+.session-row--active {
+  background: #fffefb;
+  box-shadow: 0 1px 4px rgba(52, 48, 40, 0.06);
+}
+
+.session-row__title {
+  overflow: hidden;
+  color: #3d3a35;
+  font-size: 12.8px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-row__preview {
+  overflow: hidden;
+  margin-top: 4px;
+  color: #827d74;
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-row__meta {
+  margin-top: 5px;
+  color: #a09a8f;
+  font-size: 10.5px;
+}
