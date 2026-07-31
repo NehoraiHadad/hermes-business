@@ -1,0 +1,3 @@
+[8660:0731/065153.662:VERBOSE1:configured_proxy_resolution_service.cc(1162)] Failed configuring with PAC script, falling-back to manual proxy servers.
+[8660:0731/065153.662:VERBOSE1:configured_proxy_resolution_service.cc(1162)] Failed configuring with PAC script, falling-back to manual proxy servers.
+[8660:0731/065206.387:VERBOSE1:network_delegate.cc(36)] NetworkDelegate::NotifyBeforeURLRequest: ws://127.0.0.1:9119/api/ws?token=JG1YWxGNnt_4FNlTxKX9c1w3M9WMb2M2dtARARwNlc4
