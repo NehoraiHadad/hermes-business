@@ -2,6 +2,7 @@ import type { ScheduledTask, Skill } from '../../types'
 import type { HermesMessagingPlatform } from '../connections'
 import { normalizeScheduledTask } from '../hermes-shapes'
 import { buildSkillContent } from '../skill-content'
+import { createProviderApi, type HermesProviderApi } from './providers'
 
 export type HermesUpdateStatus = {
   install_method?: string
@@ -14,7 +15,7 @@ export type HermesUpdateStatus = {
 
 export type ApiFn = <T>(endpoint: string, init?: { method?: string; body?: unknown }) => Promise<T>
 
-export interface HermesRest {
+export interface HermesRest extends HermesProviderApi {
   listTasks(): Promise<ScheduledTask[]>
   createTask(task: Pick<ScheduledTask, 'name' | 'prompt' | 'schedule'>): Promise<unknown>
   toggleTask(task: ScheduledTask): Promise<unknown>
@@ -23,7 +24,6 @@ export interface HermesRest {
   listMessagingPlatforms(): Promise<HermesMessagingPlatform[]>
   testMessagingPlatform(id: string): Promise<{ ok?: boolean; state?: string; message?: string }>
   connectTelegram(token: string, userId: string): Promise<{ ok?: boolean; state?: string; message?: string }>
-  connectProvider(provider: string, apiKey: string): Promise<{ ok: boolean; model: string }>
   healthCheck(): Promise<{ health: { ok?: boolean }; status: Record<string, unknown> }>
   checkUpdate(force?: boolean): Promise<HermesUpdateStatus>
   startUpdate(): Promise<{ ok?: boolean; message?: string }>
@@ -37,8 +37,10 @@ export interface HermesRest {
 export function createHermesRest(api: ApiFn): HermesRest {
   const testMessagingPlatform: HermesRest['testMessagingPlatform'] = id =>
     api(`/api/messaging/platforms/${encodeURIComponent(id)}/test?profile=default`, { method: 'POST' })
+  const providers = createProviderApi(api)
 
   return {
+    ...providers,
     async listTasks() {
       const result = await api<{ jobs?: Array<Record<string, unknown>> } | Array<Record<string, unknown>>>(
         '/api/cron/jobs?profile=default'
@@ -103,33 +105,6 @@ export function createHermesRest(api: ApiFn): HermesRest {
         verification.message ||
           'Hermes שמר את הפרטים, אבל Telegram עדיין לא דיווח על חיבור פעיל. בדוק את ה־token ונסה שוב.'
       )
-    },
-
-    async connectProvider(provider, apiKey) {
-      const keys: Record<string, string> = {
-        openrouter: 'OPENROUTER_API_KEY',
-        anthropic: 'ANTHROPIC_API_KEY',
-        gemini: 'GEMINI_API_KEY',
-        openai: 'OPENAI_API_KEY'
-      }
-      const key = keys[provider]
-      if (!key) throw new Error('Provider is not supported by this quick setup')
-      const validation = await api<{ ok: boolean; reachable: boolean; message?: string }>('/api/providers/validate', {
-        method: 'POST',
-        body: { key, value: apiKey }
-      })
-      if (!validation.ok && validation.reachable) throw new Error(validation.message || 'The API key was rejected')
-      await api('/api/env', { method: 'PUT', body: { key, value: apiKey } })
-      const recommended = await api<{ model: string }>(
-        `/api/model/recommended-default?provider=${encodeURIComponent(provider)}`
-      )
-      if (recommended.model) {
-        await api('/api/model/set', {
-          method: 'POST',
-          body: { scope: 'main', provider, model: recommended.model, confirm_expensive_model: true }
-        })
-      }
-      return { ok: true, model: recommended.model }
     },
 
     async healthCheck() {

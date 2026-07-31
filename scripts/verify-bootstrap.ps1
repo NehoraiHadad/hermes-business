@@ -27,4 +27,34 @@ if ([string]::IsNullOrWhiteSpace([string]$release.tag)) {
   throw 'Bootstrap selected a release without an immutable tag.'
 }
 
-Write-Host "Bootstrap parser and live compatible-release resolution passed: $($release.name) [$($release.tag)]."
+$isolationRoot = Join-Path $root ".tmp-hermes-home\bootstrap-isolation-$([guid]::NewGuid().ToString('N'))"
+New-Item -ItemType Directory -Force -Path $isolationRoot | Out-Null
+try {
+  $previousErrorPreference = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  $isolationOutput = & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" `
+    -NoProfile `
+    -ExecutionPolicy Bypass `
+    -File $bootstrap `
+    -PayloadRoot $root `
+    -HermesHome $isolationRoot `
+    -SkipHermesInstall `
+    -SkipGatewaySetup `
+    -NoLaunch 2>&1
+  $isolationExitCode = $LASTEXITCODE
+  $ErrorActionPreference = $previousErrorPreference
+  if ($isolationExitCode -eq 0) {
+    throw 'An explicit empty HermesHome incorrectly reused a global Hermes installation.'
+  }
+  if (($isolationOutput -join "`n") -notmatch 'Hermes is not installed') {
+    throw "The isolated missing-Hermes branch returned an unexpected error:`n$($isolationOutput -join "`n")"
+  }
+}
+finally {
+  $ErrorActionPreference = 'Stop'
+  if (Test-Path -LiteralPath $isolationRoot) {
+    Remove-Item -LiteralPath $isolationRoot -Recurse -Force
+  }
+}
+
+Write-Host "Bootstrap parser, explicit-home isolation, and live compatible-release resolution passed: $($release.name) [$($release.tag)]."

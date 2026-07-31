@@ -130,3 +130,12 @@
   color: #6b7e72;
   font-size: 9.5px;
 }
+
+.runtime-detection--error {
+  color: var(--red);
+  background: #f9e8e8;
+}
+
+.runtime-detection--error small {
+  color: #8d5555;
+}

@@ -31,6 +31,39 @@ const approvalProbePath = path.join(os.tmpdir(), `hermes-business-approval-probe
 const diagnosticsPath = path.join(os.tmpdir(), `hermes-business-diagnostics-e2e-${Date.now()}.zip`)
 const taskName = `בדיקת POC ${Date.now()}`
 const durableSkillName = 'poc-weekly-lead-summary'
+let page = null
+let originalApprovalMode = null
+
+async function gatewayRpc(targetPage, method, params) {
+  return targetPage.evaluate(
+    async request => {
+      const runtime = await window.hermesDesktop.getRuntime()
+      return new Promise((resolve, reject) => {
+        const socket = new WebSocket(runtime.wsUrl)
+        const timer = window.setTimeout(() => {
+          socket.close()
+          reject(new Error(`Gateway RPC timed out: ${request.method}`))
+        }, 20_000)
+        socket.addEventListener('open', () => {
+          socket.send(JSON.stringify({ jsonrpc: '2.0', id: 'e2e-config', ...request }))
+        })
+        socket.addEventListener('message', event => {
+          const frame = JSON.parse(String(event.data))
+          if (frame.id !== 'e2e-config') return
+          window.clearTimeout(timer)
+          socket.close()
+          if (frame.error) reject(new Error(frame.error.message || 'Gateway RPC failed'))
+          else resolve(frame.result)
+        })
+        socket.addEventListener('error', () => {
+          window.clearTimeout(timer)
+          reject(new Error('Gateway RPC socket failed'))
+        })
+      })
+    },
+    { method, params }
+  )
+}
 
 const electronApp = await electron.launch({
   executablePath,
@@ -39,11 +72,14 @@ const electronApp = await electron.launch({
 })
 
 try {
-  const page = await electronApp.firstWindow({ timeout: 60_000 })
+  page = await electronApp.firstWindow({ timeout: 60_000 })
   page.on('console', message => consoleMessages.push(`[${message.type()}] ${message.text()}`))
   page.on('pageerror', error => pageErrors.push(String(error?.stack || error)))
   await page.waitForLoadState('domcontentloaded')
   await page.waitForTimeout(2_000)
+  await page.waitForFunction(() => !document.body.innerText.includes('בודק אם Hermes מותקן'), null, {
+    timeout: 90_000
+  })
 
   const initial = await page.evaluate(() => ({
     bodyText: document.body?.innerText || '',
@@ -62,6 +98,46 @@ try {
   }
   if (!/העוזר|Hermes/.test(initial.bodyText)) {
     throw new Error(`Installed renderer did not show the product UI: ${initial.bodyText.slice(0, 500)}`)
+  }
+
+  await page.getByText('Hermes זוהה ופועל במחשב', { exact: true }).waitFor({ state: 'visible', timeout: 90_000 })
+  await page.locator('.onboarding__footer .primary-button').click()
+  await page.getByRole('button', { name: 'חבר ספק AI' }).click()
+  const providerDialog = page.getByRole('dialog', { name: 'חיבור לספק AI' })
+  await providerDialog.waitFor({ state: 'visible' })
+  await providerDialog.getByLabel('ספק').waitFor({ state: 'visible' })
+  const oauthTruth = await page.evaluate(async () =>
+    window.hermesDesktop.api('/api/providers/oauth?profile=default')
+  )
+  const codexConnected = Boolean(
+    oauthTruth.providers?.find(provider => provider.id === 'openai-codex')?.status?.logged_in
+  )
+  const expectedOAuthText = codexConnected ? 'חשבון ChatGPT כבר מחובר ל־Hermes.' : 'חבר באמצעות ChatGPT'
+  await providerDialog.getByText(expectedOAuthText, { exact: false }).waitFor({ state: 'visible', timeout: 30_000 })
+  if (codexConnected) {
+    await providerDialog.getByRole('button', { name: 'השתמש בחיבור הזה' }).click()
+    await providerDialog.waitFor({ state: 'hidden', timeout: 30_000 })
+  } else {
+    await providerDialog.getByRole('button', { name: 'סגור' }).click()
+  }
+
+  for (let step = 0; step < 3; step += 1) {
+    await page.locator('.onboarding__footer .primary-button').click()
+  }
+  await page.getByRole('button', { name: /Google Workspace/ }).click()
+  const googleOnboardingDialog = page.getByRole('dialog', { name: 'חיבור Google Workspace' })
+  await googleOnboardingDialog.waitFor({ state: 'visible' })
+  await googleOnboardingDialog.getByRole('button', { name: 'סגור' }).click()
+  await page.getByRole('button', { name: /Telegram/ }).click()
+  const telegramOnboardingDialog = page.getByRole('dialog', { name: 'חיבור Telegram' })
+  await telegramOnboardingDialog.waitFor({ state: 'visible' })
+  await telegramOnboardingDialog.getByRole('button', { name: 'סגור' }).click()
+  const setupUiProbe = {
+    provider: 'openai-codex',
+    codexConnected,
+    oauthActivated: codexConnected,
+    googleActionVisible: true,
+    telegramActionVisible: true
   }
 
   await page.evaluate(async () => {
@@ -195,6 +271,9 @@ try {
 
   let approvalProbe = null
   if (runApprovalProbe) {
+    const currentMode = await gatewayRpc(page, 'config.get', { key: 'approvals.mode' })
+    originalApprovalMode = currentMode?.value || 'manual'
+    await gatewayRpc(page, 'config.set', { key: 'approvals.mode', value: 'manual' })
     await composer.fill(
       [
         'בדיקת מנגנון אישור בלבד.',
@@ -241,6 +320,26 @@ try {
       }))
     return { platforms: selected, google }
   })
+  const googleFailureProbe = await page.evaluate(async () => {
+    const before = await window.hermesDesktop.getGoogleStatus()
+    let rejected = false
+    try {
+      await window.hermesDesktop.startGoogleSetup(
+        'C:\\definitely-missing-hermes-business-e2e\\client_secret.json',
+        'all'
+      )
+    } catch {
+      rejected = true
+    }
+    const after = await window.hermesDesktop.getGoogleStatus()
+    return { rejected, before, after }
+  })
+  if (
+    !googleFailureProbe.rejected ||
+    googleFailureProbe.before.authenticated !== googleFailureProbe.after.authenticated
+  ) {
+    throw new Error(`Google invalid-input flow was not safely rejected: ${JSON.stringify(googleFailureProbe)}`)
+  }
   const telegramCard = page.locator('.connection-card').filter({ hasText: 'Telegram' })
   await telegramCard.waitFor({ state: 'visible' })
   const telegramPlatform = connectionTruth.platforms.find(item => item.id === 'telegram')
@@ -371,6 +470,7 @@ try {
         ok: true,
         executablePath,
         initial,
+        setupUiProbe,
         screenshotPath,
         mini: {
           marker,
@@ -384,6 +484,7 @@ try {
         },
         integrations: {
           connectionTruth,
+          googleFailureProbe,
           skillTruth,
           taskTruth: { id: taskTruth.id, name: taskTruth.name, enabled: taskTruth.enabled, removedAfterProof: true },
           updateTruth,
@@ -397,5 +498,11 @@ try {
     )
   )
 } finally {
+  if (page && originalApprovalMode) {
+    await gatewayRpc(page, 'config.set', {
+      key: 'approvals.mode',
+      value: originalApprovalMode
+    }).catch(() => undefined)
+  }
   await electronApp.close()
 }

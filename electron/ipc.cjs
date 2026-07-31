@@ -84,6 +84,7 @@ function registerIpc() {
           '-ExecutionPolicy', 'Bypass',
           '-File', path.join(stagingRoot, 'bootstrap.ps1'),
           '-PayloadRoot', stagingRoot,
+          '-HermesHome', hermesHome(),
           '-NoLaunch'
         ],
         45 * 60_000

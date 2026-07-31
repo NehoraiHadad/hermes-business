@@ -4,6 +4,7 @@ param(
   [string]$PayloadRoot,
   [string]$HermesHome = '',
   [switch]$SkipHermesInstall,
+  [switch]$SkipGatewaySetup,
   [switch]$NoLaunch,
   [switch]$ResolveOnly
 )
@@ -14,8 +15,9 @@ $MinimumHermesVersion = [version]'0.19.0'
 $MaximumHermesVersion = [version]'0.20.0'
 $Repository = 'NousResearch/hermes-agent'
 $BootstrapVersion = '0.3.2'
+$HermesHomeWasExplicit = -not [string]::IsNullOrWhiteSpace($HermesHome)
 
-if ([string]::IsNullOrWhiteSpace($HermesHome)) {
+if (-not $HermesHomeWasExplicit) {
   $HermesHome = Join-Path $env:LOCALAPPDATA 'hermes'
 }
 $HermesHome = [System.IO.Path]::GetFullPath($HermesHome)
@@ -31,15 +33,20 @@ function Write-Step {
 }
 
 function Find-Hermes {
-  $candidates = @(
-    (Join-Path $HermesHome 'hermes-agent\venv\Scripts\hermes.exe'),
-    (Join-Path $env:LOCALAPPDATA 'hermes\hermes-agent\venv\Scripts\hermes.exe'),
-    (Join-Path $env:USERPROFILE '.hermes\hermes-agent\venv\Scripts\hermes.exe')
-  )
+  $candidates = @((Join-Path $HermesHome 'hermes-agent\venv\Scripts\hermes.exe'))
+  if (-not $HermesHomeWasExplicit) {
+    $candidates += @(
+      (Join-Path $env:LOCALAPPDATA 'hermes\hermes-agent\venv\Scripts\hermes.exe'),
+      (Join-Path $env:USERPROFILE '.hermes\hermes-agent\venv\Scripts\hermes.exe')
+    )
+  }
   foreach ($candidate in $candidates) {
     if (Test-Path -LiteralPath $candidate -PathType Leaf) {
       return [System.IO.Path]::GetFullPath($candidate)
     }
+  }
+  if ($HermesHomeWasExplicit) {
+    return $null
   }
   $command = Get-Command hermes.exe -ErrorAction SilentlyContinue
   if (-not $command) {
@@ -158,6 +165,8 @@ function Install-LatestCompatibleHermes {
     }
     $installerHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $installerPath).Hash
     Write-Step "Installer SHA256: $installerHash"
+    $stdoutPath = Join-Path $temporaryDirectory 'installer.stdout.log'
+    $stderrPath = Join-Path $temporaryDirectory 'installer.stderr.log'
 
     $process = Start-Process `
       -FilePath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" `
@@ -169,13 +178,27 @@ function Install-LatestCompatibleHermes {
         '-HermesHome', ('"{0}"' -f $HermesHome),
         '-InstallDir', ('"{0}"' -f (Join-Path $HermesHome 'hermes-agent')),
         '-NonInteractive',
+        '-Json',
         '-IncludeDesktop'
       ) `
+      -RedirectStandardOutput $stdoutPath `
+      -RedirectStandardError $stderrPath `
       -WindowStyle Hidden `
       -PassThru `
       -Wait
+    $installerOutput = @(
+      (Get-Content -Raw -LiteralPath $stdoutPath -ErrorAction SilentlyContinue),
+      (Get-Content -Raw -LiteralPath $stderrPath -ErrorAction SilentlyContinue)
+    ) -join "`n"
+    if ($installerOutput.Length -gt 6000) {
+      $installerOutput = $installerOutput.Substring($installerOutput.Length - 6000)
+    }
     if ($process.ExitCode -ne 0) {
-      throw "The official Hermes installer exited with code $($process.ExitCode)."
+      throw "The official Hermes installer exited with code $($process.ExitCode).`n$installerOutput"
+    }
+    $expectedHermes = Join-Path $HermesHome 'hermes-agent\venv\Scripts\hermes.exe'
+    if (-not (Test-Path -LiteralPath $expectedHermes -PathType Leaf)) {
+      throw "The official Hermes installer returned success without creating $expectedHermes.`n$installerOutput"
     }
   }
   finally {
@@ -300,7 +323,9 @@ try {
 
   Assert-PluginSdkContract
   Install-BusinessComponents
-  Ensure-Gateway -HermesExe $hermesExe
+  if (-not $SkipGatewaySetup) {
+    Ensure-Gateway -HermesExe $hermesExe
+  }
 
   if (-not $NoLaunch) {
     Write-Step 'Opening Hermes Desktop. Choose the business assistant item to begin guided setup.'

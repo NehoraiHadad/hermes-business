@@ -18,6 +18,7 @@
 @import './styles/screen-support.css';
 @import './styles/modal-base.css';
 @import './styles/modal-setup.css';
+@import './styles/modal-provider.css';
 @import './styles/onboarding-shell.css';
 @import './styles/onboarding-form.css';
 @import './styles/responsive.css';

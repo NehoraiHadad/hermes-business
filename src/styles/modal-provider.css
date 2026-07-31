@@ -1,0 +1,42 @@
+.modal-provider-select {
+  display: grid;
+  gap: 7px;
+  margin-bottom: 14px;
+}
+
+.modal-provider-select > span {
+  color: #5f5b54;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.modal-provider-select select {
+  width: 100%;
+  min-height: 42px;
+  padding: 9px 11px;
+  color: var(--ink);
+  background: #fbfaf6;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+}
+
+.oauth-code {
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  padding: 16px;
+  background: #f6f4ee;
+  border-radius: 10px;
+}
+
+.oauth-code small {
+  color: var(--muted);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.oauth-code strong {
+  color: var(--indigo);
+  font-size: 24px;
+  letter-spacing: 0.12em;
+}

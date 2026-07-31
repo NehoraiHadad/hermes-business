@@ -15,6 +15,17 @@ function hermesHome() {
 }
 
 function findHermes() {
+  const explicitHome = Boolean(process.env.HERMES_HOME)
+  if (explicitHome) {
+    const explicitCandidates = process.platform === 'win32'
+      ? [
+          path.join(hermesHome(), 'hermes-agent', 'venv', 'Scripts', 'hermes.exe'),
+          path.join(hermesHome(), 'bin', 'hermes.exe')
+        ]
+      : [path.join(hermesHome(), 'hermes-agent', 'venv', 'bin', 'hermes')]
+    return explicitCandidates.find(candidate => fs.existsSync(candidate)) || null
+  }
+
   const probe = spawnSync(process.platform === 'win32' ? 'where.exe' : 'which', ['hermes'], {
     encoding: 'utf8',
     windowsHide: true

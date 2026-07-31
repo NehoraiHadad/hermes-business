@@ -21,7 +21,7 @@ export function Modal({
       onMouseDown={event => event.target === event.currentTarget && onClose()}
     >
       <section className={`modal ${wide ? 'modal--wide' : ''}`} role="dialog" aria-modal="true" aria-label={title}>
-        <button className="modal__close icon-button" onClick={onClose}>
+        <button className="modal__close icon-button" aria-label="סגור" onClick={onClose}>
           <X size={18} />
         </button>
         <div className="modal__heading">

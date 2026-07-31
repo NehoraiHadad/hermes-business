@@ -274,7 +274,7 @@ tokens, raw logs, שיחות, מיילים, קבצי עסק או פרטי לקו
 
 ## תוצאות קבלה — 31 ביולי 2026
 
-- `17/17` בדיקות עברו.
+- `23/23` בדיקות עברו.
 - Plugin contract, bootstrap resolver ו־TypeScript/Vite build עברו.
 - `npm audit --omit=dev` החזיר `0` חולשות; Electron שודרג ל־`43.2.0`.
 - נשארו 16 advisories מסוג high בתלויות כלי האריזה של electron-builder;
@@ -288,3 +288,57 @@ tokens, raw logs, שיחות, מיילים, קבצי עסק או פרטי לקו
 - EXE `0.3.2`, קיצורי Desktop/Start Menu ואייקון המוצר אומתו.
 - Google ו־Telegram זמינים אך לא מחוברים ללא credentials של המשתמש.
 - build ה־POC אינו חתום; release מסחרי דורש certificate וחתימת קוד.
+
+## תוספת אימות — התקנה, OAuth ואשף
+
+ה־bootstrap נבדק מול `HermesHome` ריק וקצר תחת `%TEMP%`, בלי אפשרות ליפול חזרה להתקנה
+הגלובלית. הבדיקה הורידה את `v2026.7.30`, התקינה Hermes Agent `0.19.1`, אימתה את חוזה
+Desktop Plugin SDK, התקינה את ה־Plugin ואת `business-bootstrap`, והשוותה את hashes
+של הקבצים ל־install receipt. סביבת הבדיקה נמחקה לאחר ההוכחה.
+
+למתקין הרשמי מועברים `-NonInteractive -Json -IncludeDesktop`. מצב JSON חשוב משום
+שה־catch האינטראקטיבי של `install.ps1` עלול להדפיס כשל בלי exit code לא־אפס. המעטפת
+לוכדת stdout/stderr, דורשת קיום ממשי של `venv\Scripts\hermes.exe`, ואינה מסתפקת בקוד
+היציאה.
+
+OpenAI Codex מחובר דרך חוזה OAuth הרשמי:
+
+```text
+GET    /api/providers/oauth?profile=default
+POST   /api/providers/oauth/openai-codex/start?profile=default
+GET    /api/providers/oauth/openai-codex/poll/<session>?profile=default
+DELETE /api/providers/oauth/sessions/<session>?profile=default
+```
+
+במחשב הבדיקה `logged_in=true`; בחירת “השתמש בחיבור הזה” הפעילה את provider
+`openai-codex`, ו־inference + Streaming עברו. אסימון OAuth אינו נחשף ל־renderer.
+גם API keys נשמרים רק לאחר `/api/providers/validate` עם `ok=true`; כשל רשת או מפתח
+דחוי אינו נכתב ל־Hermes.
+
+אשף ההקמה נבדק בשני מצבים:
+
+- `HERMES_HOME` ריק: זוהה `installed=false` והוצג כפתור התקנה פעיל.
+- Hermes קיים: הוצג מצב פועל, מסך Provider הציג את Codex OAuth הקיים, וכפתורי
+  Google Workspace ו־Telegram פתחו את תהליכי החיבור הרשמיים.
+
+Google נבדק גם במסלול כשל בטוח: קובץ client secret חסר נדחה, וסטטוס האימות נשאר
+ללא שינוי. השלמת consent אמיתי עדיין דורשת קובץ Google של המשתמש. Telegram נשאר
+לא מוגדר עד שיוזנו Bot Token ו־allowed user ID אמיתיים.
+
+## מטריצת קבלה
+
+| דרישה | מצב | ראיה |
+|---|---|---|
+| התקנה בלי Terminal | עבר | clean bootstrap ל־Hermes Home ריק + NSIS מותקן exit 0 |
+| חיבור Provider | עבר | Codex OAuth `logged_in=true`, activation ו־inference אמיתי |
+| היכרות עם המשתמש והעסק | עבר | `business-bootstrap` הפעיל `clarify.request/respond` |
+| חיבור שירות חיצוני | ממתין ל־credentials | Google ו־Telegram מחוברים לחוזים הרשמיים; אין client secret או Bot Token |
+| שיחה ו־Streaming | עבר | `message.delta`, Stop ו־`message.complete` בבינארי המותקן |
+| הצגת ואישור פעולות | עבר | מצב manual זמני; destructive delete נדחה והמצב הוחזר ל־smart |
+| משימה מתוזמנת | עבר | create, list, pause ו־cleanup דרך Cron API |
+| Skills של Hermes | עבר | Skill קיים + Skill חדש שנראה ב־Skills API ובממשק המלא |
+| State משותף | עבר | Session מה־Companion נמצא מיד דרך `session.list` |
+| תקינות וחבילת אבחון | עבר | health/update + ZIP עם שני קבצי allowlist בלבד |
+
+אין חסם קוד ידוע ל־Google או Telegram. ההשלמה היחידה שלא ניתן לבצע אוטונומית היא
+consent לחשבון חיצוני ופרטי גישה שבכוונה אינם נמצאים ב־repository או בחבילת האבחון.

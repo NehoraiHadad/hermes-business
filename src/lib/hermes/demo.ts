@@ -129,6 +129,26 @@ export function createDemoBackend(): DemoBackend {
         cron: 'running'
       } as T
     }
+    if (endpoint === '/api/providers/oauth?profile=default') {
+      return {
+        providers: [
+          { id: 'openai-codex', name: 'OpenAI Codex', flow: 'device_code', status: { logged_in: true } }
+        ]
+      } as T
+    }
+    if (endpoint.includes('/api/providers/oauth/openai-codex/start')) {
+      return {
+        session_id: 'demo-oauth',
+        flow: 'device_code',
+        user_code: 'DEMO-CODE',
+        verification_url: 'https://chatgpt.com',
+        expires_in: 600,
+        poll_interval: 1
+      } as T
+    }
+    if (endpoint.includes('/api/providers/oauth/openai-codex/poll/')) {
+      return { session_id: 'demo-oauth', status: 'approved' } as T
+    }
     if (endpoint.includes('/api/providers/validate')) return { ok: true, reachable: true } as T
     if (endpoint.includes('/api/model/recommended-default')) {
       return { provider: 'openrouter', model: 'anthropic/claude-sonnet-4.5' } as T

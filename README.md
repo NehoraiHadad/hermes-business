@@ -35,9 +35,9 @@ POC עובד ל־Windows שמוסיף שתי דרכי שימוש מעל **אות
 release/העוזר לעסק Setup 0.3.2.exe
 ```
 
-- גודל: `102,594,498` bytes.
+- גודל: `102,600,376` bytes.
 - SHA-256:
-  `FD14ED6E33861AA0BA02A97D818F831F471A6AF10E27123ADA40897A3B6AF6EE`
+  `38B35C36E46837A4470BEE8D34CCFE1F3C2A41A19BFA98629C6067A9CAC8EB6D`
 - מתקין per-user אחד הכולל את ה־Companion.
 - בהפעלה ראשונה מזהה Hermes, ובמידת הצורך מפעיל את ה־bootstrap הרשמי.
 - מתקין את ה־Plugin ואת `business-bootstrap`, ומפעיל Gateway ברקע.
@@ -49,9 +49,9 @@ release/העוזר לעסק Setup 0.3.2.exe
 release/Hermes-Business-Web-Setup-0.3.2.exe
 ```
 
-- גודל: `108,285` bytes.
+- גודל: `108,505` bytes.
 - SHA-256:
-  `6739B8EF226D5C18A6A4ED7E05C27B4749ED315249F528ACAA2C637A2AE352F9`
+  `FEA08C4AFEB6B5CBA105EDAF1EC82890F9D41F36BC30BCC542E8C63A60E0830F`
 - אינו אורז Hermes או Chromium.
 - בוחר את ה־release הרשמי החדש ביותר בטווח התאימות `>=0.19.0 <0.20.0`.
 - מתקין Hermes Desktop, את ה־Plugin ואת ה־Skill, ומבצע Gateway health check.
@@ -70,6 +70,10 @@ npm test
 npm run verify:plugin
 npm run verify:bootstrap
 npm run build
+npm run test:e2e:bootstrap-clean
+npm run test:e2e:missing-hermes-ui
+npm run test:e2e:hermes
+npm run test:e2e:installed-ui
 npm run package:win
 npm run package:bootstrap
 ```
@@ -104,7 +108,7 @@ electron/          runtime, IPC, חלונות, אבחון, Google ו־plugin ins
 נבדקו מול Hermes Agent `0.19.0`; resolver המתקין מצא גם release רשמי תואם
 `0.19.1` (`v2026.7.30`).
 
-- `17/17` בדיקות עברו.
+- `23/23` בדיקות עברו.
 - TypeScript/Vite build, Plugin contract ו־bootstrap resolver עברו.
 - המתקין המלא והמתקין הזעיר הותקנו בשקט עם exit code `0`.
 - האפליקציה המותקנת עברה E2E מול Hermes חי ללא console/page errors.
