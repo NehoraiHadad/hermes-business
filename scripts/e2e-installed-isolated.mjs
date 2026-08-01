@@ -32,6 +32,7 @@ import { resolveAttestedArtifact } from './lib/isolated-e2e/attestation-gate.mjs
 import { runApprovalCase } from './lib/isolated-e2e/approval-case.mjs'
 import { assessAndGateIsolation, computeRunVerdict } from './lib/isolated-e2e/isolation-run.mjs'
 import { finalizeTeardown } from './lib/isolated-e2e/teardown.mjs'
+import { reapProcessTree } from '../electron/process-util.cjs'
 
 const runApproval = process.env.HERMES_BUSINESS_E2E_APPROVAL === '1'
 // AUTOMATED EXACT-ARTIFACT capture: the orchestrator injects the immutable staged
@@ -94,6 +95,7 @@ const { HERMES_HOME, ...cleanEnv } = process.env // never let a stray HERMES_HOM
 const launchEnv = { ...cleanEnv, ...isolatedLaunchEnv({ home: tempHome, port: isolatedPort }) }
 
 let electronApp = null
+let electronProcess = null
 try {
   electronApp = await launchInstalledApp({
     executablePath,
@@ -101,6 +103,7 @@ try {
     userDataDir: tempUserDataDir('hermes-iso-e2e'),
     env: launchEnv
   })
+  electronProcess = electronApp.process()
   const { page } = await openFirstWindow(electronApp)
   await verifyBoot({ page, consoleMessages: [], pageErrors: [], screenshotPath: path.join(os.tmpdir(), `hermes-iso-boot-${process.pid}.png`) })
 
@@ -135,6 +138,10 @@ try {
 } catch (error) {
   report.error = String(error?.message || error)
 } finally {
+  // Reap the full Electron → Hermes serve child tree before deleting the isolated
+  // home. A graceful window close can return before the venv Python grandchild
+  // releases Windows file handles, making teardown nondeterministically fail.
+  if (electronProcess) reapProcessTree(electronProcess)
   try {
     if (electronApp) await electronApp.close()
   } catch {

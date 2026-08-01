@@ -1,15 +1,36 @@
 {
   "schema_version": 1,
   "category": "approval",
-  "status": "blocked",
+  "status": "passed",
   "app_version": "0.4.0-alpha.1",
   "hermes_range": ">=0.19.0 <0.20.0",
-  "git_head": "9062da7e904c34f50bad9ebb26ce349036acccfc",
+  "git_head": "835bd38b18fe39892883c459f38da7234732ced5",
   "git_state": "working-tree",
-  "captured_at": "2026-08-01T11:37:07.428Z",
-  "tool": "release evidence lifecycle",
+  "subject_scheme": 3,
+  "subject_fingerprint": "c9aa7d3cf0e8651a034059b4b2296e8000312345e1980d4d74dd1750532260bb",
+  "captured_at": "2026-08-01T22:23:09.342Z",
+  "tool": "e2e-installed-isolated.mjs (real gateway approval.request/respond)",
   "redacted": true,
   "summary": {
-    "reason": "requires packaged recapture after onboarding and cron backend changes; version bumped to 0.4.0-alpha.1 (product branding/icon packaging change) — requires recapture before release"
+    "wiring": {
+      "official_method": "approval.respond",
+      "competing_engine": false,
+      "delegates_to_official": true
+    },
+    "unit_coverage": true,
+    "live_ui_denial_probe": {
+      "status": "passed",
+      "artifact_attested": true,
+      "qa_namespace_applied": true,
+      "isolated_runtime": true,
+      "via_real_event_path": true,
+      "official_method": "approval.respond",
+      "requested": true,
+      "request_command_present": true,
+      "denied": true,
+      "deny_resolved_count": 1,
+      "no_side_effect": true,
+      "renderer_modal_faked": false
+    }
   }
 }

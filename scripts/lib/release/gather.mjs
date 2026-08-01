@@ -20,6 +20,8 @@ import { classifyShippedPes, isPe } from './pe-inventory.mjs'
 import { authenticateProvenance } from './provenance.mjs'
 import { canonicalJson } from './binding.mjs'
 import { resolveReleaseTools } from './tool-discovery.mjs'
+import { selectVersionedInstaller } from './exact-artifact.mjs'
+import { classifyProvenance } from '../git-provenance.mjs'
 
 /** MEDIUM 9 / TOOL WIRING — resolve the deterministic bundled tools on THIS machine
  * via the ONE recursive validated resolver, preferring project-pinned vendor copies
@@ -91,9 +93,10 @@ function headSubject(root) {
 export function measureInstallers(root) {
   const dir = path.join(root, 'release')
   if (!existsSync(dir)) return []
-  return readdirSync(dir)
-    .filter(n => n.toLowerCase().endsWith('.exe'))
-    .sort()
+  const version = readJson(path.join(root, 'package.json'))?.version || ''
+  const selected = selectVersionedInstaller(readdirSync(dir), version)
+  if (!selected.ok) return []
+  return [selected.name]
     .map(name => {
       const buf = readFileSync(path.join(dir, name))
       return { name, version: versionFromInstallerName(name), bytes: buf.length, sha256: sha256(buf) }
@@ -210,11 +213,14 @@ export function gatherReleaseState({ root = repoRoot(), channel = 'public', prob
     release_binding_digest: releaseReport?.release_binding_digest ?? null,
     installer_sha256: installers[0]?.sha256 ?? null
   }
+  const head = currentHead(root)
+  const attestationProvenance = classifyProvenance(attestation?.source_head, head, { git, cwd: root })
   return {
     channel,
     productName: pkg.build?.productName || pkg.name,
     packageVersion: pkg.version,
-    currentHead: currentHead(root),
+    currentHead: head,
+    attestationProvenance,
     currentFingerprint: computeSourceFingerprint(root).fingerprint,
     headSubject: headSubject(root),
     dirtyInputs: dirtyInputs(root),

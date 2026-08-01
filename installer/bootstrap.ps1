@@ -11,7 +11,8 @@ param(
   [switch]$AllowInsecureCompanionUrl,
   [switch]$NoLaunch,
   [switch]$ResolveOnly,
-  [switch]$VerifyInstallerOnly
+  [switch]$VerifyInstallerOnly,
+  [string]$BootstrapVersion = ''
 )
 
 # bootstrap.ps1 — thin Windows network installer for the העוזר לעסק (Alpha) shell.
@@ -27,7 +28,13 @@ $ProgressPreference = 'SilentlyContinue'
 $MinimumHermesVersion = [version]'0.19.0'
 $MaximumHermesVersion = [version]'0.20.0'
 $Repository = 'NousResearch/hermes-agent'
-$BootstrapVersion = '0.3.3'
+if ([string]::IsNullOrWhiteSpace($BootstrapVersion)) {
+  $packagePath = Join-Path (Split-Path -Parent $PSScriptRoot) 'package.json'
+  if (-not (Test-Path -LiteralPath $packagePath -PathType Leaf)) {
+    throw 'BootstrapVersion is required outside the source checkout.'
+  }
+  $BootstrapVersion = [string](Get-Content -Raw -LiteralPath $packagePath | ConvertFrom-Json).version
+}
 
 # --- Load the shared library (single source of truth for every primitive). ---
 $LibraryRoot = Join-Path $PSScriptRoot 'lib'

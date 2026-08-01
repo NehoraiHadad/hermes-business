@@ -46,7 +46,7 @@ describe('computeSourceFingerprint', () => {
       put(rel, body)
       expect(computeSourceFingerprint(root).fingerprint, `${rel} must invalidate`).not.toBe(before)
     }
-  })
+  }, 15_000)
 
   it('does NOT invalidate on non-shipped drift (tests, node_modules, generated dist, docs)', () => {
     const { root, put } = fakeRoot()

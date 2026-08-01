@@ -32,7 +32,11 @@ export function preflightRelease(state) {
     if (at.artifact_kind !== 'win-unpacked-current') add('attestation-kind', `artifact_kind ${JSON.stringify(at.artifact_kind)}`)
     if (at.app_version !== state.packageVersion) add('attestation-version', `attested ${at.app_version} != package.json ${state.packageVersion}`)
     if (at.source_fingerprint !== state.currentFingerprint) add('attestation-fingerprint-stale', `attested fingerprint ${short(at.source_fingerprint)} != current ${short(state.currentFingerprint)}`)
-    if (at.source_head && state.currentHead && at.source_head !== state.currentHead) add('attestation-head-stale', `attested head ${short(at.source_head)} != HEAD ${short(state.currentHead)}`)
+    const provenance = state.attestationProvenance?.relation
+      || (at.source_head === state.currentHead ? 'equal' : 'unknown')
+    if (!['equal', 'evidence-descendant'].includes(provenance)) {
+      add('attestation-head-stale', `attested head ${short(at.source_head)} has ${provenance} relation to HEAD ${short(state.currentHead)}`)
+    }
   }
 
   // 3. EXACT expected artifact set + versioned names (finding 9).

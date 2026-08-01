@@ -5,11 +5,13 @@ ManifestDPIAware true
 !include "LogicLib.nsh"
 
 !define PRODUCT_NAME "העוזר לעסק — התקנה מקוונת"
-!define PRODUCT_VERSION "0.3.3"
+!ifndef PRODUCT_VERSION
+  !error "PRODUCT_VERSION must be supplied by scripts/build-bootstrap.ps1"
+!endif
 
 Name "${PRODUCT_NAME}"
 Caption "${PRODUCT_NAME}"
-OutFile "..\release\Hermes-Business-Web-Setup-0.3.3.exe"
+OutFile "..\release\Hermes-Business-Web-Setup-${PRODUCT_VERSION}.exe"
 Icon "..\build\icon.ico"
 InstallDir "$TEMP\HermesBusinessBootstrap"
 RequestExecutionLevel user
@@ -45,6 +47,7 @@ Section "Install"
   File "lib\FileOps.ps1"
   File "lib\ZipPolicy.ps1"
   File "lib\SafeZip.ps1"
+  File "lib\SemVer.ps1"
   File "lib\HermesEnv.ps1"
   File "lib\Release.ps1"
   File "lib\ReleaseSelection.ps1"
@@ -96,7 +99,7 @@ Section "Install"
   SetOutPath "$INSTDIR"
 
   DetailPrint "Detecting or installing Hermes Agent..."
-  nsExec::ExecToLog '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File "$INSTDIR\bootstrap.ps1" -PayloadRoot "$INSTDIR"'
+  nsExec::ExecToLog '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File "$INSTDIR\bootstrap.ps1" -PayloadRoot "$INSTDIR" -BootstrapVersion "${PRODUCT_VERSION}"'
   Pop $0
   ${If} $0 != 0
     MessageBox MB_ICONSTOP|MB_OK "ההתקנה לא הושלמה. פרטים נשמרו ב-$LOCALAPPDATA\HermesBusinessBootstrap\install.log"

@@ -7,6 +7,7 @@ import { reapProcessTree } from '../../../electron/process-util.cjs'
 import { safeJson } from '../e2e-harness.mjs'
 import { isPortFree, removeTempHome } from '../isolated-runtime.mjs'
 import { hermesHomeMarker, markerDelta } from '../isolated-marker.mjs'
+import { reapOwnedGateway } from './gateway-process.mjs'
 
 /** Reap any hermes process bound to the isolated port (belt-and-suspenders). */
 export function killIsolatedPortProcess(isolatedPort) {
@@ -90,6 +91,10 @@ export async function finalizeTeardown({
   forensicDir,
   runApproval
 }) {
+  // Hermes' Windows venv launcher can detach/reparent away from Electron. Its
+  // profile-owned PID record is therefore the authoritative second teardown
+  // boundary; ownership validation prevents ever touching the live gateway.
+  const gateway = reapOwnedGateway(tempHome)
   killIsolatedPortProcess(isolatedPort)
   osReleaseBeat()
   const removed = removeTempHome(tempHome)
@@ -103,6 +108,8 @@ export async function finalizeTeardown({
   // mutation fails both, and unknown drift fails closed via the stable digest.
   const liveUntouched = delta.profile_defining_unchanged
   report.teardown = {
+    isolated_gateway_pid_found: gateway.pid !== null,
+    isolated_gateway_reaped: gateway.reaped,
     temp_home_removed: removed.removed,
     isolated_port_free: portFree,
     live_home_untouched: liveUntouched,

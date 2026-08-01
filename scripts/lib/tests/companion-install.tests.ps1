@@ -48,7 +48,7 @@ function Invoke-CompanionInstallTests {
     $pkg = Get-Content -Raw -LiteralPath (Join-Path $RepoRoot 'package.json') | ConvertFrom-Json
     $entrypoint = "$([string]$pkg.productName).exe"
     $r = Assert-CompanionRelease -Release ([pscustomobject]@{
-        version = '0.3.3'; url = 'https://example.test/companion-setup.exe'; sha256 = ('A' * 64); entrypoint = $entrypoint })
+        version = [string]$pkg.version; url = 'https://example.test/companion-setup.exe'; sha256 = ('A' * 64); entrypoint = $entrypoint })
     Assert-True ($r.format -eq 'nsis') "expected default nsis, got $($r.format)"
     Assert-True ($r.entrypoint -eq $entrypoint) "productName entrypoint not carried: $($r.entrypoint)"
   }

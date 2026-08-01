@@ -17,7 +17,7 @@ foreach ($module in @('Logging.ps1', 'Hashing.ps1', 'HttpRetry.ps1', 'HttpDownlo
   . (Join-Path $lib $module)
 }
 # The companion installer resolves headers from $BootstrapVersion when dot-sourced.
-$BootstrapVersion = '0.3.3'
+$BootstrapVersion = [string](Get-Content -Raw -LiteralPath (Join-Path $root 'package.json') | ConvertFrom-Json).version
 . (Join-Path $root 'installer\bootstrap-companion.ps1')
 
 $script:Passed = 0
@@ -79,7 +79,7 @@ Write-Host 'Parse checks:'
 $parseTargets = @(
   'installer\lib\Logging.ps1', 'installer\lib\Hashing.ps1', 'installer\lib\HttpRetry.ps1',
   'installer\lib\HttpDownload.ps1', 'installer\lib\FileOps.ps1', 'installer\lib\ZipPolicy.ps1',
-  'installer\lib\SafeZip.ps1', 'installer\lib\CompanionEntrypoint.ps1',
+  'installer\lib\SafeZip.ps1', 'installer\lib\SemVer.ps1', 'installer\lib\CompanionEntrypoint.ps1',
   'installer\lib\CompanionInstall.ps1',
   'installer\lib\CompanionManifest.ps1', 'installer\lib\HermesEnv.ps1',
   'installer\lib\Release.ps1', 'installer\lib\ReleaseSelection.ps1',

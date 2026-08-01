@@ -1,16 +1,69 @@
 {
   "schema_version": 1,
   "category": "shared-state",
-  "status": "blocked",
+  "status": "passed",
   "app_version": "0.4.0-alpha.1",
   "hermes_range": ">=0.19.0 <0.20.0",
-  "git_head": "985dd3a80c403e81c03c3fc9416117e41e481671",
+  "git_head": "835bd38b18fe39892883c459f38da7234732ced5",
   "git_state": "working-tree",
-  "captured_at": "2026-07-31T21:42:32.663Z",
+  "subject_scheme": 3,
+  "subject_fingerprint": "c9aa7d3cf0e8651a034059b4b2296e8000312345e1980d4d74dd1750532260bb",
+  "captured_at": "2026-08-01T22:23:45.762Z",
   "tool": "e2e-hermes-shared-state.mjs",
   "redacted": true,
   "summary": {
-    "reason": "predates the versioned subject-fingerprint contract and cannot be honestly re-attested without recapture; the attested electron + hermes-plugin subjects have drifted since the working-tree capture; version bumped to 0.4.0-alpha.1 (product branding/icon packaging change) — requires recapture before release",
-    "recapture": "node scripts/e2e-hermes-shared-state.mjs then node scripts/capture-evidence.mjs shared-state <raw>, then npm run verify:evidence"
+    "ok": true,
+    "health": true,
+    "provider_free": true,
+    "live_home_untouched": true,
+    "session_shared": {
+      "via_rest": true,
+      "via_rpc": true
+    },
+    "cron_shared": {
+      "via_rpc": true,
+      "on_disk": true,
+      "removed": true
+    },
+    "skill_shared": {
+      "via_rpc": true,
+      "skill_count": 63
+    },
+    "path_evidence": {
+      "under_isolated_home": true,
+      "present": {
+        "home": true,
+        "plugins": true,
+        "desktop_plugins": true,
+        "memories": true,
+        "skills": true,
+        "sessions": true,
+        "cron": true,
+        "workspace_db": true
+      }
+    },
+    "plugin": {
+      "installed": true,
+      "integrity_verified": true,
+      "status": "loaded",
+      "enabled": true,
+      "contributions_count": 3,
+      "route_provider_free": true,
+      "shared_state": {
+        "provider_ready": true,
+        "session_visible_via_plugin_host": true,
+        "cron_list_ok": true,
+        "bootstrap_skill_visible": true
+      },
+      "uninstall": {
+        "disk_door_empty": true,
+        "residue_gone": true,
+        "writes_confined_to_isolated_home": true
+      }
+    },
+    "approval_mapping": {
+      "official_method": "approval.respond",
+      "competing_engine": false
+    }
   }
 }

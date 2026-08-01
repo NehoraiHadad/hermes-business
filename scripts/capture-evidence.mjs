@@ -20,6 +20,7 @@ import {
   reduceThinInstaller
 } from './lib/evidence-reducers.mjs'
 import { hasManualBindingOverride } from './lib/release/evidence-capture.mjs'
+import { parseJsonInput } from './lib/json-input.mjs'
 
 const bool = v => (v == null ? null : Boolean(v))
 
@@ -36,7 +37,7 @@ const rawPath = positionals[0]
 function readRaw(p) {
   if (!p) return null
   const text = p === '-' ? readFileSync(0, 'utf8') : readFileSync(p, 'utf8')
-  return JSON.parse(text)
+  return parseJsonInput(text)
 }
 const raw = readRaw(rawPath)
 const nowIso = new Date().toISOString()
@@ -51,7 +52,7 @@ if (category === 'shared-state') {
   // Prefer the real isolated-runtime denial probe when its raw is supplied; the
   // wiring facts (the companion wrapper delegates to the official approval.respond
   // with no competing engine) are code invariants asserted by the unit suite.
-  const isoRaw = flags.isolated ? JSON.parse(readFileSync(flags.isolated, 'utf8')) : (raw?.approval ? raw : null)
+  const isoRaw = flags.isolated ? readRaw(flags.isolated) : (raw?.approval ? raw : null)
   if (isoRaw) {
     const probe = reduceIsolatedApproval(isoRaw)
     const summary = {

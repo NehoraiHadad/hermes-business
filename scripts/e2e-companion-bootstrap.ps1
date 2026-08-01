@@ -3,7 +3,8 @@ param([switch]$Keep)
 
 $ErrorActionPreference = 'Stop'
 $root = [System.IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))
-$installer = Get-ChildItem -LiteralPath (Join-Path $root 'release') -Filter '*Setup 0.3.3.exe' |
+$productVersion = [string](Get-Content -Raw -LiteralPath (Join-Path $root 'package.json') | ConvertFrom-Json).version
+$installer = Get-ChildItem -LiteralPath (Join-Path $root 'release') -Filter "*Setup $productVersion.exe" |
   Where-Object { $_.Length -gt 1MB } |
   Sort-Object Length -Descending |
   Select-Object -First 1
@@ -34,7 +35,7 @@ try {
   $sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $servedInstaller).Hash
   $port = Get-FreePort
   $manifestJson = [ordered]@{
-    version = '0.3.3'
+    version = $productVersion
     url = "http://127.0.0.1:$port/companion-setup.exe"
     sha256 = $sha256
   } | ConvertTo-Json

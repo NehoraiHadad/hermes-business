@@ -11,21 +11,18 @@ emails) and `redactPaths` (home/temp/drive paths) as a backstop.
 
 - `schema.json` — JSON Schema for every envelope (including `subject_scheme` +
   `subject_fingerprint`).
-- `shared-state.json` — installed-Hermes shared-state E2E
+- `shared-state.json` — **passed** installed-Hermes shared-state E2E
   (`e2e-hermes-shared-state.mjs`, provider-free) against a **throwaway**
-  `HERMES_HOME`. Currently **blocked**: it predates the subject-fingerprint
-  contract and its attested electron + hermes-plugin subjects have drifted, so it
-  cannot be honestly re-attested without a fresh capture.
-- `thin-installer.json` — hermetic thin network installer
-  (`e2e-thin-network-installer.ps1`): download → SHA-256 → safe-extract. Currently
-  **blocked**: predates the subject-fingerprint contract; recapture required.
-- `approval.json` — **blocked**, pending a packaged recapture after the onboarding
-  and cron backend changes. When re-captured it proves the approval wiring (the
+  `HERMES_HOME`: shared Session, Scheduler, Skill and Plugin state, with the live
+  profile byte-untouched.
+- `thin-installer.json` — **passed** hermetic thin network installer
+  (`e2e-thin-network-installer.ps1`): download → SHA-256 → safe-extract.
+- `approval.json` — **passed** against the current attested packaged build. It proves
+  the approval wiring (the
   companion wrapper delegates to the official `approval.respond`; no competing
   engine) **and** the live denial probe against the isolated packaged runtime.
   Produced by `e2e-installed-isolated.mjs`.
-- `packaged-e2e.json` — **blocked**, pending a packaged recapture after the
-  onboarding and cron backend changes. When re-captured it proves the packaged
+- `packaged-e2e.json` — **passed** against the current attested packaged build. It proves the packaged
   companion boots against an isolated, harness-owned temp `HERMES_HOME`, the
   isolated session count is 0, the live profile is unchanged, and teardown leaves
   no residual. Produced by `e2e-installed-isolated.mjs`.

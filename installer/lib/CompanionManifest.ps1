@@ -57,7 +57,7 @@ function Assert-CompanionRelease {
   if ([string]::IsNullOrWhiteSpace($rawVersion) -or [string]::IsNullOrWhiteSpace($rawUrl)) {
     throw 'The companion release manifest is missing version or URL.'
   }
-  $version = [version]$rawVersion
+  $version = ConvertTo-BusinessSemVer $rawVersion
   $uri = [uri]$rawUrl
   $sha = $rawSha.Trim().ToUpperInvariant()
   # 'format' is optional and defaults to the production NSIS installer. 'zip' is a
@@ -68,8 +68,10 @@ function Assert-CompanionRelease {
   if ($format -notin @('nsis', 'zip')) {
     throw "Unsupported companion release format '$format' (expected 'nsis' or 'zip')."
   }
-  if ($version -lt [version]'0.3.3' -or $version -ge [version]'0.4.0') {
-    throw "Companion $version is outside the tested range [0.3.3, 0.4.0)."
+  $range = Get-CompanionVersionRange -BootstrapVersion $BootstrapVersion
+  if ((Compare-BusinessSemVer $version $range.minimum) -lt 0 -or
+      (Compare-BusinessSemVer $version $range.maximumExclusive) -ge 0) {
+    throw "Companion $rawVersion is outside the tested range [$($range.minimum.raw), $($range.maximumExclusive.raw))."
   }
   if ($uri.Scheme -ne 'https' -and -not ($AllowInsecureUrl -and $uri.IsLoopback)) {
     throw 'The companion installer URL must use HTTPS.'
@@ -86,5 +88,5 @@ function Assert-CompanionRelease {
   # strictly under the install root is re-checked after install (see
   # Resolve-CompanionEntrypoint via Invoke-CompanionInstall).
   $entrypoint = Assert-CompanionEntrypoint -Entrypoint ([string]$Release.entrypoint)
-  return [pscustomobject]@{ version = $version; uri = $uri; sha256 = $sha; format = $format; entrypoint = $entrypoint }
+  return [pscustomobject]@{ version = $version.raw; uri = $uri; sha256 = $sha; format = $format; entrypoint = $entrypoint }
 }

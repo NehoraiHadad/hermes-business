@@ -15,13 +15,14 @@
 
 import { createHash } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
-import { readFileSync, readdirSync, existsSync } from 'node:fs'
+import { readFileSync, existsSync } from 'node:fs'
 import path from 'node:path'
 import { repoRoot, productExeName } from './lib/source-fingerprint.mjs'
 import { unpackedDir } from './lib/build-attestation.mjs'
 import { verifySigntool } from './lib/release/signtool.mjs'
 import { classifySignature, signerApproved } from './lib/release/signing.mjs'
 import { resolveReleaseTools } from './lib/release/tool-discovery.mjs'
+import { measureInstallers } from './lib/release/gather.mjs'
 
 const root = repoRoot()
 const channel = process.argv.includes('--channel') ? process.argv[process.argv.indexOf('--channel') + 1] : 'public'
@@ -65,7 +66,7 @@ if (!allowlist.thumbprints.length && !allowlist.subjects.length) {
 const exeDir = unpackedDir(root)
 const targets = [
   path.join(exeDir, productExeName(root)),
-  ...readdirSync(path.join(root, 'release')).filter(n => n.toLowerCase().endsWith('.exe')).map(n => path.join(root, 'release', n))
+  ...measureInstallers(root).map(item => path.join(root, 'release', item.name))
 ].filter(existsSync)
 
 for (const exe of targets) {

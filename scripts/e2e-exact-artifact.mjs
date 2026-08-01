@@ -19,7 +19,8 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import path from 'node:path'
 import { repoRoot } from './lib/source-fingerprint.mjs'
 import { readAttestation, unpackedDir } from './lib/build-attestation.mjs'
-import { measureCandidate, assessExactArtifactRun } from './lib/release/exact-artifact.mjs'
+import { measureCandidate, assessExactArtifactRun, selectVersionedInstaller } from './lib/release/exact-artifact.mjs'
+import { parseJsonInput } from './lib/json-input.mjs'
 
 const root = repoRoot()
 const channel = process.argv.includes('--channel') ? process.argv[process.argv.indexOf('--channel') + 1] : 'public'
@@ -33,8 +34,10 @@ function blockedAndExit(reason) {
 
 // ── 1. immutable candidate measurement ───────────────────────────────────────
 const releaseDir = path.join(root, 'release')
-const installerName = existsSync(releaseDir) ? readdirSync(releaseDir).filter(n => n.toLowerCase().endsWith('.exe')).sort()[0] : null
-if (!installerName) blockedAndExit('no packaged installer (.exe) under release/ — package first (dir → finalize-payload → nsis).')
+const packageVersion = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8')).version
+const selected = selectVersionedInstaller(existsSync(releaseDir) ? readdirSync(releaseDir) : [], packageVersion)
+if (!selected.ok) blockedAndExit(selected.errors.join('; '))
+const installerName = selected.name
 const installerPath = path.join(releaseDir, installerName)
 const installerSha256 = createHash('sha256').update(readFileSync(installerPath)).digest('hex')
 
@@ -60,15 +63,15 @@ const run = spawnSync(node, [path.join(root, 'scripts', 'e2e-installed-isolated.
 })
 // The harness emits ONE JSON object as its final stdout line (redaction-safe).
 let harnessReport = null
-const lines = String(run.stdout || '').trim().split(/\r?\n/).filter(Boolean)
-for (let i = lines.length - 1; i >= 0; i -= 1) {
-  try { harnessReport = JSON.parse(lines[i]); break } catch { /* keep scanning up */ }
-}
+try { harnessReport = parseJsonInput(run.stdout || '') } catch { /* handled below */ }
 if (!harnessReport) blockedAndExit(`isolated harness produced no parseable report (exit ${run.status}). ${String(run.stderr || '').slice(0, 300)}`)
 
 // ── 3+4. assess (nonce present + equal + exact artifact) and machine-write ────
 const verdict = assessExactArtifactRun({ candidate, harnessReport })
-if (!verdict.ok) blockedAndExit(`exact-artifact lifecycle not proven: ${verdict.errors.join('; ')}`)
+if (!verdict.ok) {
+  const detail = JSON.stringify({ error: harnessReport.error, artifact: harnessReport.artifact, approval: harnessReport.approval, teardown: harnessReport.teardown })
+  blockedAndExit(`exact-artifact lifecycle not proven: ${verdict.errors.join('; ')}; report=${detail}`)
+}
 
 // TOCTOU: the installer must not have changed while the harness ran.
 const installerShaNow = createHash('sha256').update(readFileSync(installerPath)).digest('hex')
@@ -80,4 +83,10 @@ const cap = spawnSync(node, [path.join(root, 'scripts', 'capture-evidence.mjs'),
   stdio: ['pipe', 'inherit', 'inherit']
 })
 if (cap.status !== 0) { console.error('e2e-exact-artifact: capture-evidence rejected the machine-captured raw.'); process.exit(1) }
+const approvalCap = spawnSync(node, [path.join(root, 'scripts', 'capture-evidence.mjs'), 'approval', '--isolated', '-'], {
+  cwd: root,
+  input: `${JSON.stringify(verdict.raw)}\n`,
+  stdio: ['pipe', 'inherit', 'inherit']
+})
+if (approvalCap.status !== 0) { console.error('e2e-exact-artifact: approval evidence rejected the isolated raw.'); process.exit(1) }
 console.log(`Exact-artifact lifecycle PROVEN — running_nonce ${String(verdict.raw.running_nonce).slice(0, 12)}… == candidate; machine binding ${verdict.binding.capture_method}.`)

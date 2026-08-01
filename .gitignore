@@ -8,6 +8,9 @@ coverage/
 # scripts/gen-build-attestation.mjs before every packaged build and copied into
 # the artifact via build.extraResources — it must never be committed.
 build/build-attestation.json
+build/release-manifest.json
+build/release-report.json
+build/pe-extract/
 *.tsbuildinfo
 *.log
 .DS_Store

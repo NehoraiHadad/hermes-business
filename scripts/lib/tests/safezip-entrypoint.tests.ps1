@@ -25,12 +25,12 @@ function Invoke-SafeZipEntrypointTests {
 
   Test-Case 'zip release without an entrypoint is rejected' {
     $threw = $false
-    try { Assert-CompanionRelease -Release ([pscustomobject]@{ version = '0.3.3'; url = 'https://x/y.zip'; sha256 = $ValidSha; format = 'zip' }) | Out-Null }
+    try { Assert-CompanionRelease -Release ([pscustomobject]@{ version = $BootstrapVersion; url = 'https://x/y.zip'; sha256 = $ValidSha; format = 'zip' }) | Out-Null }
     catch { $threw = $true; Assert-True ($_.Exception.Message -match 'entrypoint') "unexpected: $($_.Exception.Message)" }
     Assert-True $threw 'a zip release without an entrypoint was accepted'
   }
   Test-Case 'zip release with a valid entrypoint normalizes' {
-    $r = Assert-CompanionRelease -Release ([pscustomobject]@{ version = '0.3.3'; url = 'https://x/y.zip'; sha256 = $ValidSha; format = 'zip'; entrypoint = 'app/hermes-business.exe' })
+    $r = Assert-CompanionRelease -Release ([pscustomobject]@{ version = $BootstrapVersion; url = 'https://x/y.zip'; sha256 = $ValidSha; format = 'zip'; entrypoint = 'app/hermes-business.exe' })
     Assert-True ($r.entrypoint -eq 'app/hermes-business.exe') "entrypoint not normalized: $($r.entrypoint)"
   }
   Test-Case 'entrypoint validator rejects traversal / absolute / colon / non-exe / dir' {

@@ -14,10 +14,10 @@
 // Nothing here is committed; the tracked docs reference this generator, not any
 // specific digest, so they never make a claim that a later build falsifies.
 
-import { createHash } from 'node:crypto'
-import { readFileSync, readdirSync, writeFileSync, existsSync } from 'node:fs'
+import { writeFileSync, existsSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { measureInstallers } from './lib/release/gather.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const releaseDir = path.join(root, 'release')
@@ -27,23 +27,14 @@ if (!existsSync(releaseDir)) {
   process.exit(1)
 }
 
-const installers = readdirSync(releaseDir)
-  .filter(name => name.toLowerCase().endsWith('.exe'))
-  .sort()
+const installers = measureInstallers(root)
 
 if (installers.length === 0) {
-  console.error('No installer .exe files found under release/.')
+  console.error('Expected exactly one current-version companion installer under release/.')
   process.exit(1)
 }
 
-const entries = installers.map(name => {
-  const buffer = readFileSync(path.join(releaseDir, name))
-  return {
-    name,
-    bytes: buffer.length,
-    sha256: createHash('sha256').update(buffer).digest('hex')
-  }
-})
+const entries = installers.map(({ name, bytes, sha256 }) => ({ name, bytes, sha256 }))
 
 const table = entries.map(e => `${e.sha256}  ${String(e.bytes).padStart(12)}  ${e.name}`).join('\n')
 writeFileSync(path.join(releaseDir, 'SHA256SUMS.txt'), `${table}\n`)

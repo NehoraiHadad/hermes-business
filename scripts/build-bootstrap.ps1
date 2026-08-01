@@ -3,7 +3,9 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $installerDirectory = Join-Path $root 'installer'
 $releaseDirectory = Join-Path $root 'release'
-$output = Join-Path $releaseDirectory 'Hermes-Business-Web-Setup-0.3.3.exe'
+$package = Get-Content -Raw -LiteralPath (Join-Path $root 'package.json') | ConvertFrom-Json
+$productVersion = [string]$package.version
+$output = Join-Path $releaseDirectory "Hermes-Business-Web-Setup-$productVersion.exe"
 $manifestPath = Join-Path $installerDirectory 'companion-release.json'
 $cacheRoot = Join-Path $env:LOCALAPPDATA 'electron-builder\Cache\nsis'
 $companionUrl = [string]$env:HERMES_BUSINESS_COMPANION_URL
@@ -26,7 +28,7 @@ if ($companionSha256 -notmatch '^[0-9A-F]{64}$') {
 }
 
 [ordered]@{
-  version = '0.3.3'
+  version = $productVersion
   url = $companionUrl
   sha256 = $companionSha256
   entrypoint = $companionEntrypoint
@@ -57,7 +59,7 @@ if (-not $makeNsisPath -or -not (Test-Path -LiteralPath $makeNsisPath)) {
 
 Push-Location $installerDirectory
 try {
-  & $makeNsisPath '/V2' 'business-bootstrap.nsi'
+  & $makeNsisPath '/V2' "/DPRODUCT_VERSION=$productVersion" 'business-bootstrap.nsi'
   if ($LASTEXITCODE -ne 0) {
     throw "NSIS failed with exit code $LASTEXITCODE."
   }

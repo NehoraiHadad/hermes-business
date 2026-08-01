@@ -15,7 +15,7 @@ param([switch]$Keep, [switch]$EmitQaArtifact)
 
 $ErrorActionPreference = 'Stop'
 $RepoRoot = [System.IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))
-$BootstrapVersion = '0.3.3'
+$BootstrapVersion = [string](Get-Content -Raw -LiteralPath (Join-Path $RepoRoot 'package.json') | ConvertFrom-Json).version
 
 foreach ($m in @('Logging.ps1', 'Hashing.ps1', 'HttpRetry.ps1', 'HttpDownload.ps1', 'FileOps.ps1', 'ZipPolicy.ps1', 'SafeZip.ps1')) {
   . (Join-Path $RepoRoot "installer\lib\$m")

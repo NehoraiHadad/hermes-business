@@ -17,7 +17,7 @@ a POC, and not a signed production release.
 
 - **Product:** העוזר לעסק — Hermes is described honestly as the engine with full
   access; the product name is **העוזר לעסק**.
-- **Version line:** 0.3.x Alpha.
+- **Version line:** 0.4.x Alpha (current build: 0.4.0-alpha.1).
 - **Toolchain (reference):** Node 22 · Python 3.13 · Electron 43 ·
   electron-builder 26 · Vite 6 · Vitest 4. Exact patch versions and the git HEAD
   at each acceptance run are recorded in the local `release/ACCEPTANCE.md`.

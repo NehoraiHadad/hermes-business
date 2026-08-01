@@ -9,7 +9,7 @@
 - התקנה פעילה: Hermes Agent `0.19.1` (`2026.7.30`).
 - release רשמי חדש ביותר שנמצא בטווח התאימות: `0.19.1` (`v2026.7.30`).
 - טווח התאימות הנתמך: `>=0.19.0 <0.20.0`.
-- מעטפת: `0.3.3`.
+- מעטפת: `0.4.0-alpha.1`.
 - Windows 11 x64, התקנת native תחת `%LOCALAPPDATA%\hermes`.
 
 ## החלטה
@@ -764,7 +764,7 @@ reducer אירועי הצ׳אט, חוזה התאימות, אימות הגיבו�
 - diagnostics ZIP עבר בדיקת allowlist.
 - המתקין המלא הותקן עם exit code `0`; מסלול מתקין הרשת עבר E2E מלא מול manifest
   מקומי מאומת, אך artifact פרסום ממתין ל־URL HTTPS אמיתי.
-- EXE `0.3.3`, קיצורי Desktop/Start Menu ואייקון המוצר אומתו.
+- EXE `0.4.0-alpha.1`, קיצורי Desktop/Start Menu ואייקון המוצר אומתו.
 - Google זמין אך לא מחובר ללא credentials והסכמה של המשתמש.
 - build ה־POC אינו חתום; release מסחרי דורש certificate וחתימת קוד.
 

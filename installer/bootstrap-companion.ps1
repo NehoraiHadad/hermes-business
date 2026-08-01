@@ -24,6 +24,7 @@ foreach ($dependency in @(
     @{ File = 'HttpDownload.ps1';        Probe = 'Save-HttpFile' },
     @{ File = 'ZipPolicy.ps1';           Probe = 'Resolve-SafeZipTarget' },
     @{ File = 'SafeZip.ps1';             Probe = 'Expand-ArchiveSafely' },
+    @{ File = 'SemVer.ps1';              Probe = 'ConvertTo-BusinessSemVer' },
     @{ File = 'CompanionEntrypoint.ps1'; Probe = 'Resolve-CompanionEntrypoint' },
     @{ File = 'CompanionInstall.ps1';    Probe = 'Invoke-CompanionInstall' },
     @{ File = 'CompanionManifest.ps1';   Probe = 'Assert-CompanionRelease' }

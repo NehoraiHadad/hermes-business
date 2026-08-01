@@ -116,8 +116,8 @@ describe('branding + version metadata for native resedit', () => {
     expect(ico.readUInt16LE(4)).toBeGreaterThan(0)
   })
 
-  it('ships a valid 0.4.0-alpha.1 prerelease that electron-builder can render numerically', () => {
-    expect(pkg.version).toBe('0.4.0-alpha.1')
+  it('ships a valid semver that electron-builder can render numerically', () => {
+    expect(pkg.version).toMatch(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/)
     // getVersionInWeirdWindowsForm() splits on '.' and parseInt()s each part; the prerelease
     // suffix must live on the patch segment so it degrades to a clean 0.4.0.0, never NaN.
     const [major, minor, patch] = pkg.version.split('.')

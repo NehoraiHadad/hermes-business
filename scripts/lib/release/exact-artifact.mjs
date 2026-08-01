@@ -14,6 +14,17 @@ import { machineCaptureBinding, BINDING_FIELDS } from './evidence-capture.mjs'
 
 export { BINDING_FIELDS }
 
+export function selectVersionedInstaller(names = [], version = '') {
+  const matches = names.filter(name =>
+    name.toLowerCase().endsWith('.exe') &&
+    name.includes(version) &&
+    !name.startsWith('Hermes-Business-Web-Setup-')
+  )
+  return matches.length === 1
+    ? { ok: true, name: matches[0], errors: [] }
+    : { ok: false, name: null, errors: [`expected exactly one companion installer for ${version}; found ${matches.length}`] }
+}
+
 /**
  * Assemble the immutable-candidate measurement from disk facts (all measured, none
  * hand-entered). `installer_sha256` from the packaged installer bytes, `build_nonce`

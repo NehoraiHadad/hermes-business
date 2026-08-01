@@ -29,7 +29,7 @@ const build = { build_nonce: NONCE, release_binding_digest: report.release_bindi
 
 function goodState(over = {}) {
   return {
-    channel: 'public', productName: PROD, packageVersion: '0.3.3', currentHead: HEAD, currentFingerprint: FP, headSubject: 'feat: x',
+    channel: 'public', productName: PROD, packageVersion: '0.3.3', currentHead: HEAD, currentFingerprint: FP, headSubject: 'feat: x', attestationProvenance: { relation: 'equal', changed: [] },
     dirtyInputs: [], attestation, installers,
     checksums: { installers: [{ name: NAME, bytes: 100, sha256: SHA }] },
     asar: { present: true, valid: true, forbidden: [], unsafe: [] },
@@ -119,6 +119,14 @@ describe('preflightRelease — each honest failure', () => {
   })
   it('dirty lockfile input blocks (finding 7)', () => {
     expect(codes(preflightRelease(goodState({ dirtyInputs: ['package-lock.json'] })))).toContain('dirty-inputs')
+  })
+  it('allows an evidence-only commit after the attested source commit', () => {
+    const v = preflightRelease(goodState({ currentHead: 'b'.repeat(40), attestationProvenance: { relation: 'evidence-descendant', changed: ['docs/evidence/approval.json'] } }))
+    expect(codes(v)).not.toContain('attestation-head-stale')
+  })
+  it('blocks a code commit after the attested source commit', () => {
+    const v = preflightRelease(goodState({ currentHead: 'b'.repeat(40), attestationProvenance: { relation: 'code-descendant', changed: ['src/main.ts'] } }))
+    expect(codes(v)).toContain('attestation-head-stale')
   })
   it('wrong signer blocks public (finding 8)', () => {
     const wrong = { ...sig, publisher: 'Evil Corp', thumbprint: null }
