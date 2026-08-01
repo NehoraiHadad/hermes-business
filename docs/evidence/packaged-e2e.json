@@ -4,10 +4,10 @@
   "status": "blocked",
   "app_version": "0.3.3",
   "hermes_range": ">=0.19.0 <0.20.0",
-  "git_head": "2abe197fce2ba34fddd259bbe2391424f29bce7b",
+  "git_head": "9062da7e904c34f50bad9ebb26ce349036acccfc",
   "git_state": "committed",
-  "captured_at": "2026-08-01T09:16:04.465Z",
+  "captured_at": "2026-08-01T11:37:07.428Z",
   "tool": "release evidence lifecycle",
   "redacted": true,
-  "summary": { "reason": "requires packaged recapture after onboarding changes" }
+  "summary": { "reason": "requires packaged recapture after onboarding and cron backend changes" }
 }
