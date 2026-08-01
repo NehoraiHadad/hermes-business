@@ -3,10 +3,10 @@ import { buildBootstrapPrompt, buildModelSnapshot } from '../../shared/onboardin
 import { EMPTY_ONBOARDING } from '../../shared/onboarding-contract.js'
 
 describe('canonical bootstrap payload', () => {
-  it('is one payload shared by React and plugin: command, snapshot, guardrails', () => {
+  it('is one dispatch argument shared by React and plugin: snapshot and guardrails', () => {
     const snapshot = { provider_ready: false, provider_state: 'runtime_only' }
     const prompt = buildBootstrapPrompt({ snapshot })
-    expect(prompt.startsWith('/business-bootstrap')).toBe(true)
+    expect(prompt).not.toContain('/business-bootstrap')
     expect(prompt).toContain('WRAPPER_VERIFIED_SNAPSHOT=' + JSON.stringify(snapshot))
     // Product intent enforced in the single source of truth:
     expect(prompt).toContain('שאל שאלה אחת קצרה בכל פעם') // one concise question at a time

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { hermesClient } from '../lib/hermes-client'
 import { handleGatewayEvent, now } from '../lib/hermes/chat-events'
 import { stageAttachments, type PendingAttachment } from '../lib/hermes/attachments'
+import { startSkillSession } from '../lib/hermes/skill-session'
 import type { Activity, Approval, ChatMessage, ClarifyRequest, Screen, Session } from '../types'
 
 // Owns the live conversation: streaming messages, tool activity, approvals and
@@ -133,21 +134,26 @@ export function useChat({ setScreen, setToast }: { setScreen: (screen: Screen) =
     [clarify]
   )
 
-  // Seed a brand new conversation with a visible user message and submit a
-  // (usually larger) prompt behind it. Used by the onboarding handoff.
+  // Seed a new conversation by resolving the requested Skill through Hermes'
+  // official dispatcher, then submit its expanded message on that same session.
   const beginConversation = useCallback(
-    async ({ userMessage, submitText }: { userMessage: string; submitText: string }) => {
-      const created = await hermesClient.createSession()
-      setScreen('chat')
-      setRuntimeSession(created.session_id)
-      setActiveSession(created.stored_session_id)
-      setMessages([{ id: `seed-${Date.now()}`, role: 'user', text: userMessage }])
-      window.setTimeout(() => {
-        void hermesClient.submit(created.session_id, submitText).catch(error => {
-          setBusy(false)
-          setToast(error instanceof Error ? error.message : 'שמירת ההיכרות ב־Hermes נכשלה')
+    async ({ userMessage, skillName, instruction }: { userMessage: string; skillName: string; instruction: string }) => {
+      try {
+        await startSkillSession(hermesClient, {
+          name: skillName,
+          arg: instruction,
+          onCreated: created => {
+            setScreen('chat')
+            setRuntimeSession(created.session_id)
+            setActiveSession(created.stored_session_id)
+            setMessages([{ id: `seed-${Date.now()}`, role: 'user', text: userMessage }])
+          }
         })
-      }, 300)
+      } catch (error) {
+        setBusy(false)
+        setToast(error instanceof Error ? error.message : 'שמירת ההיכרות ב־Hermes נכשלה')
+        throw error
+      }
     },
     [setScreen, setToast]
   )

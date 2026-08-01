@@ -35,6 +35,10 @@ export function createDemoRpc(state: DemoState) {
       const filename = String(params.filename || 'uploaded.pdf')
       return { attached: true, filename, pages_attached: 1, count: 1, text: '' } as T
     }
+    if (method === 'command.dispatch') {
+      const name = String(params.name || '')
+      return { type: 'skill', name, message: String(params.arg || ''), display: `/${name}` } as T
+    }
     if (method === 'prompt.submit') return submitDemoPrompt(params, emit) as Promise<T>
     return { ok: true } as T
   }

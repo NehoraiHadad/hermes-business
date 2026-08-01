@@ -66,6 +66,22 @@ export function validateTelegramPolicy(
   return { policy: { version: 1, mode, reply_chats } }
 }
 
+export function isDefaultTelegramPolicy(policy: TelegramPolicy): boolean {
+  return policy.mode === 'read_only' && policy.reply_chats.length === 0
+}
+
+// A fresh connection should answer its owner without opening replies to anyone
+// else. An explicit UI choice always wins, including read_only (no replies).
+export function resolveTelegramConnectPolicy(
+  saved: TelegramPolicy,
+  ownerId: string,
+  explicit?: TelegramPolicy
+): TelegramPolicyValidation {
+  if (explicit) return { policy: explicit }
+  if (!isDefaultTelegramPolicy(saved)) return { policy: saved }
+  return validateTelegramPolicy('selected_chats', ownerId)
+}
+
 export function describeTelegramPolicy(policy: TelegramPolicy): string {
   if (policy.mode === 'full_access') {
     return 'גישה מלאה: העוזר עונה לכל משתמש שמורשה על ידי Telegram/Hermes.'

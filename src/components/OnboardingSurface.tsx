@@ -1,9 +1,9 @@
 import type { ReactNode } from 'react'
 import { hermesClient } from '../lib/hermes-client'
 import { buildOnboardingPrompt } from '../lib/onboarding-prompt'
+import { BOOTSTRAP_COMMAND } from '../../shared/onboarding-bootstrap.js'
 import { buildBusinessContext, persistBusinessContext, providerReadyForCompletion } from '../lib/business-context'
 import { buildVerifiedSnapshot } from '../lib/onboarding-snapshot'
-import { providerVerifiedForOnboarding } from '../lib/provider-validation'
 import type { ProviderStatus } from '../lib/provider-readiness'
 import type { Connection, OnboardingData, ScheduledTask, Skill } from '../types'
 import { Onboarding } from './onboarding/Onboarding'
@@ -33,7 +33,7 @@ export function OnboardingSurface({
   onInstall: () => Promise<unknown>
   onProvider: () => void
   onConnection: (id: string) => void
-  beginConversation: (input: { userMessage: string; submitText: string }) => Promise<void>
+  beginConversation: (input: { userMessage: string; skillName: string; instruction: string }) => Promise<void>
   // introStarted=false means the DURABLE setup completed but the guided intro chat did
   // not start — a distinct, retryable outcome, never a silent success.
   onFinished: (result: { introStarted: boolean }) => void
@@ -45,26 +45,6 @@ export function OnboardingSurface({
     // authoritative state proves one is ready (usable), regardless of a configured key.
     if (!providerReadyForCompletion(snapshot)) {
       throw new Error('צריך ספק AI פעיל ומאומת לפני סיום ההיכרות. חבר/י ספק AI ונסה/י שוב.')
-    }
-    // AND require FRESH, live validation EVIDENCE for the EXACT active provider+model.
-    // A configured/usable heuristic is not enough — a reachable:false, expired, wrong-model
-    // or wrong-provider record (or none at all) cannot complete onboarding.
-    const evidence = window.hermesDesktop?.getProviderEvidence
-      ? await window.hermesDesktop.getProviderEvidence().catch(() => null)
-      : null
-    const activeModel = await hermesClient
-      .api<{ model?: string; provider?: string }>('/api/model/info')
-      .catch(() => ({} as { model?: string; provider?: string }))
-    if (
-      !providerVerifiedForOnboarding({
-        providerUsable: snapshot.provider_usable === true,
-        activeProvider: String(activeModel.provider || ''),
-        activeModel: activeModel.model || null,
-        validation: evidence,
-        now: new Date().toISOString()
-      })
-    ) {
-      throw new Error('צריך אימות חי ועדכני של ספק ה־AI והמודל לפני סיום ההיכרות. חבר/י מחדש את הספק ונסה/י שוב.')
     }
     // Persist + verify the COMPLETE durable, ROUTABLE business-context skill (all
     // onboarding fields + authoritative provider/connection facts + checksum) BEFORE the
@@ -79,7 +59,8 @@ export function OnboardingSurface({
     try {
       await beginConversation({
         userMessage: 'סיימתי את ההיכרות הראשונית. שמור אותה ב־Hermes והמשך איתי לשאלה הבאה.',
-        submitText: buildOnboardingPrompt(data, snapshot)
+        skillName: BOOTSTRAP_COMMAND,
+        instruction: buildOnboardingPrompt(data, snapshot)
       })
     } catch {
       introStarted = false

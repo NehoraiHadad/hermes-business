@@ -1,10 +1,11 @@
 import { host } from '@hermes/plugin-sdk'
 import { flattenSkillNames } from './helpers.js'
 import { buildBootstrapPrompt, buildModelSnapshot } from '../../../shared/onboarding-bootstrap.js'
+import { submitBusinessBootstrap } from './bootstrap-session.js'
 
 // The guided first-run flow. Instead of a giant static prompt, the trusted wrapper
 // performs a bounded inspection through official host APIs, then opens one real
-// Hermes session pointed at the /business-bootstrap Skill. The handoff payload comes
+// Hermes session pointed at the business-bootstrap Skill. The handoff payload comes
 // from the single canonical builder so it can never drift from the React wrapper.
 
 export const GUIDED_SETUP_VERSION = 2
@@ -52,10 +53,7 @@ export async function startGuidedSetup(storage, { force = false } = {}) {
       title: 'הקמת העוזר לעסק',
       source: 'desktop'
     })
-    await host.request('prompt.submit', {
-      session_id: created.session_id,
-      text: guidedSetupPrompt(snapshot)
-    })
+    await submitBusinessBootstrap(created.session_id, guidedSetupPrompt(snapshot))
     const next = {
       version: GUIDED_SETUP_VERSION,
       status: 'active',

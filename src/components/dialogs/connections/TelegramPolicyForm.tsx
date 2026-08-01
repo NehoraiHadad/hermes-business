@@ -5,13 +5,20 @@ import {
   DEFAULT_TELEGRAM_POLICY,
   telegramChatsToText,
   validateTelegramPolicy,
+  type TelegramPolicy,
   type TelegramPolicyMode
 } from '../../../lib/telegram-policy'
 
 // Fail-closed reply-policy chooser for Telegram. Enforcement lives in the Hermes
 // plugin + transport guards; this only records the operator's choice through the
 // desktop bridge. The safest option is read-only and it is always the default.
-export function TelegramPolicyForm() {
+export function TelegramPolicyForm({
+  ownerId = '',
+  onExplicitPolicy
+}: {
+  ownerId?: string
+  onExplicitPolicy?: (policy: TelegramPolicy | null) => void
+}) {
   const [mode, setMode] = useState<TelegramPolicyMode>('read_only')
   const [chats, setChats] = useState('')
   const [saving, setSaving] = useState(false)
@@ -37,9 +44,17 @@ export function TelegramPolicyForm() {
     }
   }, [])
 
+  const reportChoice = (nextMode: TelegramPolicyMode, nextChats: string) => {
+    const result = validateTelegramPolicy(nextMode, nextChats)
+    onExplicitPolicy?.('policy' in result ? result.policy : null)
+  }
+
   const pick = (next: TelegramPolicyMode) => () => {
+    const nextChats = next === 'selected_chats' && !chats.trim() ? ownerId : chats
     setMode(next)
+    setChats(nextChats)
     setSaved(false)
+    reportChoice(next, nextChats)
   }
 
   const save = async () => {
@@ -52,6 +67,7 @@ export function TelegramPolicyForm() {
     setError('')
     try {
       if (!hermesClient.demo) await window.hermesDesktop?.setTelegramPolicy(result.policy)
+      onExplicitPolicy?.(result.policy)
       setSaved(true)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'שמירת המדיניות נכשלה.')
@@ -99,8 +115,10 @@ export function TelegramPolicyForm() {
             rows={4}
             value={chats}
             onChange={event => {
-              setChats(event.target.value)
+              const nextChats = event.target.value
+              setChats(nextChats)
               setSaved(false)
+              reportChoice(mode, nextChats)
             }}
             placeholder="123456789&#10;-1001234567890&#10;@my_channel"
           />

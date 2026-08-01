@@ -4,6 +4,7 @@ import {
   describeTelegramPolicy,
   normalizeTelegram,
   parseTelegramList,
+  resolveTelegramConnectPolicy,
   validateTelegramPolicy
 } from './telegram-policy'
 
@@ -52,5 +53,15 @@ describe('Telegram policy helpers', () => {
     expect(read).toContain('קריאה בלבד')
     expect(full).toContain('גישה מלאה')
     expect(sel).toContain('1')
+  })
+
+  it('defaults a fresh connection to owner-only replies', () => {
+    expect(
+      resolveTelegramConnectPolicy(
+        { version: 1, mode: 'read_only', reply_chats: [] },
+        '007',
+        undefined
+      )
+    ).toEqual({ policy: { version: 1, mode: 'selected_chats', reply_chats: ['7'] } })
   })
 })

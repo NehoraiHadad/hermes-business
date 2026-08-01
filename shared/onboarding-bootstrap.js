@@ -1,5 +1,5 @@
 // The ONE canonical agent-handoff payload. Both the React/Electron wrapper and the
-// Hermes Desktop plugin build their /business-bootstrap prompt and verified snapshot
+// Hermes Desktop plugin build the argument dispatched to the business-bootstrap Skill
 // from here, so the product intent (one concise question at a time, connect official
 // integrations, confirm before sensitive actions, no false completion, persist into
 // Profile/Memory/Skills — never a giant system prompt) lives in a single place.
@@ -7,7 +7,7 @@
 import { normalizeOnboarding } from './onboarding-contract.js'
 import { resolveProviderStatus, resolveModelReadiness } from './provider-readiness.js'
 
-export const BOOTSTRAP_COMMAND = '/business-bootstrap'
+export const BOOTSTRAP_COMMAND = 'business-bootstrap'
 
 const LINES = [
   'המשך את הקמת העוזר לעסק. This is guided first-run setup for a non-technical business owner.',
@@ -23,7 +23,7 @@ const LINES = [
 
 export function buildBootstrapPrompt(input = {}) {
   const { snapshot = {}, data } = input
-  const lines = [BOOTSTRAP_COMMAND, ...LINES, '', `WRAPPER_VERIFIED_SNAPSHOT=${JSON.stringify(snapshot)}`]
+  const lines = [...LINES, '', `WRAPPER_VERIFIED_SNAPSHOT=${JSON.stringify(snapshot)}`]
   if (data) lines.push('', JSON.stringify(normalizeOnboarding(data), null, 2))
   return lines.join('\n')
 }

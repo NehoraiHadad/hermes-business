@@ -1,4 +1,5 @@
 import { resolveClientMode } from './hermes/core'
+import { createHermesCommands, type HermesCommands } from './hermes/command'
 import { createDemoBackend, type DemoBackend } from './hermes/demo'
 import { createHermesRest, type HermesRest, type HermesUpdateStatus } from './hermes/rest'
 import { createHermesSessions, type HermesSessions } from './hermes/session'
@@ -8,7 +9,7 @@ export type { HermesUpdateStatus }
 
 // Coherent public facade over the split transport/session/rest/demo modules.
 // The rest of the app depends only on this surface and the exported singleton.
-export interface HermesClient extends HermesSessions, HermesRest {}
+export interface HermesClient extends HermesSessions, HermesRest, HermesCommands {}
 
 export class HermesClient {
   readonly demo: boolean
@@ -28,6 +29,7 @@ export class HermesClient {
     Object.assign(
       this,
       createHermesSessions((method, params) => this.rpc(method, params)),
+      createHermesCommands((method, params) => this.rpc(method, params)),
       createHermesRest(
         (endpoint, init) => this.api(endpoint, init),
         () => window.hermesDesktop?.ensureGateway() || Promise.resolve(),

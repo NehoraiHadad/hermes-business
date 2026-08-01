@@ -4,6 +4,7 @@ import { h } from '../dom.js'
 import { Card, Field } from '../ui.js'
 import { EMPTY_ONBOARDING, ONBOARDING_STEPS, STORAGE_KEYS, normalizeOnboarding } from '../../../../shared/onboarding-contract.js'
 import { buildBootstrapPrompt } from '../../../../shared/onboarding-bootstrap.js'
+import { submitBusinessBootstrap } from '../bootstrap-session.js'
 
 // A quick fallback questionnaire used only when the guided setup session cannot
 // start. Field keys and defaults come from the shared canonical contract, so any
@@ -27,7 +28,7 @@ export function Onboarding({ storage, onDone, onCancel }) {
         title: `היכרות עם ${form.businessName || 'העסק'}`,
         source: 'desktop'
       })
-      await host.request('prompt.submit', { session_id: created.session_id, text: prompt })
+      await submitBusinessBootstrap(created.session_id, prompt)
       storage.set(STORAGE_KEYS.pluginComplete, true)
       host.notify({
         kind: 'success',

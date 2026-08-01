@@ -497,13 +497,13 @@ function resolveModelReadiness(model) {
 }
 
 // The ONE canonical agent-handoff payload. Both the React/Electron wrapper and the
-// Hermes Desktop plugin build their /business-bootstrap prompt and verified snapshot
+// Hermes Desktop plugin build the argument dispatched to the business-bootstrap Skill
 // from here, so the product intent (one concise question at a time, connect official
 // integrations, confirm before sensitive actions, no false completion, persist into
 // Profile/Memory/Skills — never a giant system prompt) lives in a single place.
 
 
-const BOOTSTRAP_COMMAND = '/business-bootstrap';
+const BOOTSTRAP_COMMAND = 'business-bootstrap';
 
 const LINES = [
   'המשך את הקמת העוזר לעסק. This is guided first-run setup for a non-technical business owner.',
@@ -519,7 +519,7 @@ const LINES = [
 
 function buildBootstrapPrompt(input = {}) {
   const { snapshot = {}, data } = input;
-  const lines = [BOOTSTRAP_COMMAND, ...LINES, '', `WRAPPER_VERIFIED_SNAPSHOT=${JSON.stringify(snapshot)}`];
+  const lines = [...LINES, '', `WRAPPER_VERIFIED_SNAPSHOT=${JSON.stringify(snapshot)}`];
   if (data) lines.push('', JSON.stringify(normalizeOnboarding(data), null, 2));
   return lines.join('\n')
 }
@@ -566,9 +566,26 @@ function buildModelSnapshot(input = {}) {
   }
 }
 
+// Resolve the installed Skill through Hermes before submitting the expanded
+// model-facing message. A literal slash prompt bypasses this official path.
+async function submitBusinessBootstrap(sessionId, arg) {
+  const dispatch = await host.request('command.dispatch', {
+    session_id: sessionId,
+    name: BOOTSTRAP_COMMAND,
+    arg
+  });
+  if (dispatch?.type !== 'skill' || dispatch?.name !== BOOTSTRAP_COMMAND) {
+    throw new Error(`Hermes did not resolve /${BOOTSTRAP_COMMAND} as the requested Skill.`)
+  }
+  if (typeof dispatch.message !== 'string' || !dispatch.message.trim()) {
+    throw new Error(`Hermes resolved /${BOOTSTRAP_COMMAND}, but returned no Skill message.`)
+  }
+  await host.request('prompt.submit', { session_id: sessionId, text: dispatch.message });
+}
+
 // The guided first-run flow. Instead of a giant static prompt, the trusted wrapper
 // performs a bounded inspection through official host APIs, then opens one real
-// Hermes session pointed at the /business-bootstrap Skill. The handoff payload comes
+// Hermes session pointed at the business-bootstrap Skill. The handoff payload comes
 // from the single canonical builder so it can never drift from the React wrapper.
 
 const GUIDED_SETUP_VERSION = 2;
@@ -616,10 +633,7 @@ async function startGuidedSetup(storage, { force = false } = {}) {
       title: 'הקמת העוזר לעסק',
       source: 'desktop'
     });
-    await host.request('prompt.submit', {
-      session_id: created.session_id,
-      text: guidedSetupPrompt(snapshot)
-    });
+    await submitBusinessBootstrap(created.session_id, guidedSetupPrompt(snapshot));
     const next = {
       version: GUIDED_SETUP_VERSION,
       status: 'active',
@@ -896,7 +910,7 @@ function Onboarding({ storage, onDone, onCancel }) {
         title: `היכרות עם ${form.businessName || 'העסק'}`,
         source: 'desktop'
       });
-      await host.request('prompt.submit', { session_id: created.session_id, text: prompt });
+      await submitBusinessBootstrap(created.session_id, prompt);
       storage.set(STORAGE_KEYS.pluginComplete, true);
       host.notify({
         kind: 'success',

@@ -1,6 +1,8 @@
 import { LoaderCircle, Send } from 'lucide-react'
 import { useState } from 'react'
 import { hermesClient } from '../../../lib/hermes-client'
+import { connectTelegramWithPolicy } from '../../../lib/telegram-connect'
+import type { TelegramPolicy } from '../../../lib/telegram-policy'
 import type { Connection } from '../../../types'
 import { Modal } from '../../ui/Modal'
 import { TelegramPolicyForm } from './TelegramPolicyForm'
@@ -19,15 +21,20 @@ export function TelegramConnect({
   const [userId, setUserId] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [explicitPolicy, setExplicitPolicy] = useState<TelegramPolicy | null | undefined>(undefined)
 
   const connect = async () => {
     setSaving(true)
     setError('')
     try {
-      // Fail closed: refuse to connect unless the reply-policy plugin is active,
-      // so a live Telegram bot is never served without the read-only guard.
-      if (!hermesClient.demo) await window.hermesDesktop?.ensureTelegramPolicy()
-      await hermesClient.connectTelegram(token, userId)
+      await connectTelegramWithPolicy({
+        token,
+        userId,
+        explicitPolicy,
+        demo: hermesClient.demo,
+        bridge: window.hermesDesktop,
+        connect: (nextToken, nextUserId) => hermesClient.connectTelegram(nextToken, nextUserId)
+      })
       onConnected(connection.id)
       onClose()
     } catch (caught) {
@@ -51,7 +58,7 @@ export function TelegramConnect({
           <p>הדבק כאן את ה־token שקיבלת ואת מזהה המשתמש שלך.</p>
         </div>
       </div>
-      <TelegramPolicyForm />
+      <TelegramPolicyForm ownerId={userId} onExplicitPolicy={setExplicitPolicy} />
       <div className="modal-form">
         <label>
           <span>Bot token</span>
@@ -66,7 +73,7 @@ export function TelegramConnect({
           <button className="ghost-button" onClick={onClose}>
             ביטול
           </button>
-          <button className="primary-button" disabled={!token || !userId || saving} onClick={connect}>
+          <button className="primary-button" disabled={!token || !userId || saving || explicitPolicy === null} onClick={connect}>
             {saving ? <LoaderCircle className="spin" size={16} /> : <Send size={16} />} חבר Telegram
           </button>
         </div>

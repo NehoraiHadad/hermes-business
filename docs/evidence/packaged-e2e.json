@@ -2,12 +2,14 @@
   "schema_version": 1,
   "category": "packaged-e2e",
   "status": "blocked",
-  "app_version": "0.3.3",
+  "app_version": "0.4.0-alpha.1",
   "hermes_range": ">=0.19.0 <0.20.0",
   "git_head": "9062da7e904c34f50bad9ebb26ce349036acccfc",
-  "git_state": "committed",
+  "git_state": "working-tree",
   "captured_at": "2026-08-01T11:37:07.428Z",
   "tool": "release evidence lifecycle",
   "redacted": true,
-  "summary": { "reason": "requires packaged recapture after onboarding and cron backend changes" }
+  "summary": {
+    "reason": "requires packaged recapture after onboarding and cron backend changes; version bumped to 0.4.0-alpha.1 (product branding/icon packaging change) — requires recapture before release"
+  }
 }

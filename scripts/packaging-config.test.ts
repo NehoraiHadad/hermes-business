@@ -57,10 +57,14 @@ describe('two-phase signing order (CRITICAL 2) is pinned in the package script',
   const win = pkg.build.win as Record<string, unknown>
   const script = String(pkg.scripts['package:win'])
 
-  it('disables electron-builder self edit/sign so afterPack rcedit is the final PE mutation', () => {
-    // With signAndEditExecutable:false electron-builder does NOT re-edit or sign the
-    // exe after afterPack, so our phase-2 signer is the last thing to touch PE bytes.
-    expect(win.signAndEditExecutable).toBe(false)
+  it('skips ONLY code signing (signExecutable:false) while keeping native resedit enabled', () => {
+    // Root cause of the missing-icon bug: signAndEditExecutable:false disabled electron-builder's
+    // native resedit pass (icon + version metadata) wholesale. The fix keeps that pass — which
+    // embeds build/icon.ico and derives the Windows-form version — and disables ONLY signing via
+    // signExecutable:false. No signing means our explicit phase-2 signer stays the sole signer.
+    expect(win.signExecutable).toBe(false)
+    // Must NOT reintroduce the wholesale disable, or the icon/metadata regress again.
+    expect(win.signAndEditExecutable).toBeUndefined()
   })
 
   it('builds `--win dir` → finalize-payload (sign+verify+manifest) → `--prepackaged … --win nsis`', () => {
@@ -89,6 +93,62 @@ describe('two-phase signing order (CRITICAL 2) is pinned in the package script',
   it('afterPack does NOT sign (it runs before the final resource edit / NSIS capture)', () => {
     const afterPack = readFileSync(new URL('./after-pack.cjs', import.meta.url), 'utf8')
     expect(/signtool|signPayload|HERMES_WIN_SIGN_CMD/i.test(afterPack)).toBe(false)
+  })
+
+  it('afterPack embeds the icon but hands NO version string to rcedit (native pass owns it)', () => {
+    // Passing the 0.4.0-alpha.1 prerelease to rcedit file-version would be a non-numeric hazard;
+    // afterPack embeds icon-only, and electron-builder's native resedit renders the numeric form.
+    const afterPack = readFileSync(new URL('./after-pack.cjs', import.meta.url), 'utf8')
+    expect(afterPack).toMatch(/rcedit\([^)]*\{\s*icon\s*\}/)
+    expect(/file-version|product-version|version-string/i.test(afterPack)).toBe(false)
+  })
+})
+
+describe('branding + version metadata for native resedit', () => {
+  const win = pkg.build.win as Record<string, unknown>
+
+  it('points the native icon pass at a real multi-size .ico', () => {
+    expect(win.icon).toBe('build/icon.ico')
+    const ico = readFileSync(new URL('../build/icon.ico', import.meta.url))
+    // ICONDIR header: reserved=0, type=1 (icon), count>=1.
+    expect(ico.readUInt16LE(0)).toBe(0)
+    expect(ico.readUInt16LE(2)).toBe(1)
+    expect(ico.readUInt16LE(4)).toBeGreaterThan(0)
+  })
+
+  it('ships a valid 0.4.0-alpha.1 prerelease that electron-builder can render numerically', () => {
+    expect(pkg.version).toBe('0.4.0-alpha.1')
+    // getVersionInWeirdWindowsForm() splits on '.' and parseInt()s each part; the prerelease
+    // suffix must live on the patch segment so it degrades to a clean 0.4.0.0, never NaN.
+    const [major, minor, patch] = pkg.version.split('.')
+    expect(Number.isNaN(parseInt(major, 10))).toBe(false)
+    expect(Number.isNaN(parseInt(minor, 10))).toBe(false)
+    expect(Number.isNaN(parseInt(patch, 10))).toBe(false)
+  })
+
+  it('keeps package.json and the lockfile version in lockstep', () => {
+    const lock = JSON.parse(
+      readFileSync(new URL('../package-lock.json', import.meta.url), 'utf8')
+    )
+    expect(lock.version).toBe(pkg.version)
+    expect(lock.packages[''].version).toBe(pkg.version)
+  })
+
+  it('exposes an author.name so electron-builder embeds a CompanyName string', () => {
+    // companyName is derived from metadata.author.name; a bare string yields no CompanyName,
+    // and the native resedit pass would then drop it from the PE version table.
+    expect(typeof pkg.author).toBe('object')
+    expect(String((pkg.author as { name?: string }).name)).toContain('העוזר לעסק')
+  })
+
+  it('carries no user-facing POC label in shipped product metadata', () => {
+    const metadata = JSON.stringify({
+      productName: pkg.build.productName,
+      shortcutName: pkg.build.nsis?.shortcutName,
+      description: pkg.description,
+      author: pkg.author
+    })
+    expect(/poc/i.test(metadata)).toBe(false)
   })
 })
 

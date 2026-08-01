@@ -14,11 +14,14 @@ describe('shipped Hermes Desktop Plugin', () => {
   })
 
   it('creates one real guided session and resumes it idempotently', async () => {
-    const request = vi.fn(async (method: string) => {
+    const request = vi.fn(async (method: string, _params?: Record<string, unknown>) => {
       if (method === 'skills.manage') return { skills: [{ name: 'business-bootstrap' }] }
       if (method === 'cron.manage') return { jobs: [] }
       if (method === 'session.create') {
         return { session_id: 'runtime-1', stored_session_id: 'stored-1' }
+      }
+      if (method === 'command.dispatch') {
+        return { type: 'skill', name: 'business-bootstrap', message: 'expanded-bootstrap-message' }
       }
       return { status: 'streaming' }
     })
@@ -42,13 +45,43 @@ describe('shipped Hermes Desktop Plugin', () => {
       'skills.manage',
       'cron.manage',
       'session.create',
+      'command.dispatch',
       'prompt.submit'
     ])
+    expect(request.mock.calls[3][1]).toMatchObject({
+      session_id: 'runtime-1',
+      name: 'business-bootstrap'
+    })
+    expect(request.mock.calls[4][1]).toEqual({
+      session_id: 'runtime-1',
+      text: 'expanded-bootstrap-message'
+    })
     expect(navigate).toHaveBeenLastCalledWith('/stored-1')
     const prompt = runtime.__helpers.guidedSetupPrompt()
-    expect(prompt).toContain('/business-bootstrap')
+    expect(prompt).not.toContain('/business-bootstrap')
     expect(prompt).toContain('WRAPPER_VERIFIED_SNAPSHOT')
     expect(prompt).toContain('Never run hermes doctor')
+  })
+
+  it('does not submit when Hermes does not resolve the bootstrap Skill', async () => {
+    const request = vi.fn(async (method: string, _params?: Record<string, unknown>) => {
+      if (method === 'skills.manage') return { skills: [{ name: 'business-bootstrap' }] }
+      if (method === 'cron.manage') return { jobs: [] }
+      if (method === 'session.create') return { session_id: 'runtime-1', stored_session_id: 'stored-1' }
+      if (method === 'command.dispatch') return { type: 'send', message: 'wrong route' }
+      return { status: 'streaming' }
+    })
+    const runtime = loadShippedPlugin({
+      request,
+      state: {
+        gateway: { get: () => 'open' },
+        model: { get: () => 'gpt-test' },
+        profile: { get: () => 'default' }
+      }
+    })
+
+    await expect(runtime.__helpers.startGuidedSetup(createStorage())).rejects.toThrow('requested Skill')
+    expect(request.mock.calls.map(call => call[0])).not.toContain('prompt.submit')
   })
 
   it('imports only symbols present in the installed Hermes Plugin SDK when Hermes is available', () => {
