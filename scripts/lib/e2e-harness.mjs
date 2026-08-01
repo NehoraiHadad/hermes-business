@@ -24,7 +24,10 @@ import path from 'node:path'
  * `jane.doe@shop.co.il` becomes `<redacted>@shop.co.il`. The placeholder ends
  * in `>` so the local-part class never abuts the surviving `@`, keeping the
  * pass idempotent. The canonical email pattern is mirrored in
- * `electron/redact.cjs` for production diagnostics.
+ * `electron/redact.cjs` for production diagnostics. (Absolute-path redaction for
+ * the E2E evidence pipeline lives in `evidence.mjs` `redactPaths`, which wraps
+ * this function; it is intentionally not duplicated here so its home-directory
+ * collapse still sees an untouched `os.homedir()`.)
  */
 export function sanitize(value) {
   return String(value || '')

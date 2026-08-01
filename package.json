@@ -38,8 +38,8 @@
     "test:e2e:missing-hermes-ui": "node scripts/e2e-missing-hermes-ui.mjs",
     "preview": "vite preview --host 127.0.0.1",
     "verify:release": "npm test && npm run test:plugin:policy && npm run verify:plugin && npm run verify:bootstrap",
-    "package:win": "npm run verify:release && npm run build && node scripts/gen-build-attestation.mjs && electron-builder --win nsis",
-    "package:win:qa": "npm run verify:release && npm run build:qa && node scripts/gen-build-attestation.mjs && electron-builder --win nsis",
+    "package:win": "npm run verify:release && npm run build && node scripts/gen-build-attestation.mjs && electron-builder --win nsis && node scripts/verify-no-update-metadata.mjs release",
+    "package:win:qa": "npm run verify:release && npm run build:qa && node scripts/gen-build-attestation.mjs && electron-builder --win nsis && node scripts/verify-no-update-metadata.mjs release",
     "package:bootstrap": "npm run build:plugin && powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/build-bootstrap.ps1"
   },
   "dependencies": {
@@ -72,6 +72,7 @@
     "appId": "com.hermes.business",
     "productName": "העוזר לעסק",
     "asar": true,
+    "publish": null,
     "files": [
       "dist/**/*",
       "electron/**/*",

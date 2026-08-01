@@ -1,5 +1,9 @@
 import { Download, LoaderCircle, RefreshCw } from 'lucide-react'
 import type { HermesUpdateStatus } from '../../../lib/hermes-client'
+// Derived, not duplicated: the supported range/floor come straight from the
+// canonical compat module so this panel can never advertise a bound that has
+// drifted from hermes-compat.json (asserted by hermes-compat-policy.test.ts).
+import { HERMES_COMPAT_RANGE, HERMES_MIN_VERSION } from '../../../lib/hermes/compat'
 
 export function SupportUpdatePanel({
   runtime,
@@ -23,7 +27,7 @@ export function SupportUpdatePanel({
       </div>
       <div className="version-row">
         <span>Hermes Agent</span>
-        <strong>{versions.hermes || runtime?.version || '0.19.0'}</strong>
+        <strong>{versions.hermes || runtime?.version || HERMES_MIN_VERSION}</strong>
         <span className="up-to-date">
           {updateStatus?.update_available ? 'יש עדכון' : updateStatus ? 'מעודכן' : 'לא נבדק'}
         </span>
@@ -39,7 +43,7 @@ export function SupportUpdatePanel({
       </p>
       {runtime && runtime.compatible === false ? (
         <p className="version-note version-note--warn">
-          גרסת Hermes המותקנת אינה בטווח הנתמך ({runtime.compatRange || '>=0.19.0 <0.20.0'}). עדכון אוטומטי חסום עד
+          גרסת Hermes המותקנת אינה בטווח הנתמך ({runtime.compatRange || HERMES_COMPAT_RANGE}). עדכון אוטומטי חסום עד
           להתאמה.
         </p>
       ) : null}

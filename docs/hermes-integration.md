@@ -430,7 +430,10 @@ fixtures של demo **מנוטרלים קשיח** ב־build ייצור ארוז. 
 ממצב ה־build ב־`vite.config.ts` (`--mode qa`); אין קובץ `.env.qa`. `npm run build` /
 `package:win` (מצב production) **אינם** אופים את הדגל, ולכן
 ב־executable שהלקוח מקבל אין נתיב קוד שמגיע ל־demo backend — `?demo=1` אינרטי לגמרי.
-build ארוז ללא גשר preload **נכשל סגור** (`bridgeMissing`) במקום לפברק נתונים.
+בנוסף, `vite.config.ts` (`stripDemoFixtures`) מחליף את מודול הכניסה ל־demo ב־stub
+שזורק בכל build שאינו demo, כך ש־`demo-api`/`demo-rpc`/`demo-data` עוברים tree-shaking
+ואינם קיימים **פיזית** ב־bundle הארוז — לא רק בלתי־נגישים. build ארוז ללא גשר preload
+**נכשל סגור** (`bridgeMissing`) במקום לפברק נתונים.
 הלוגיקה מרוכזת ב־`isDemoBuildAllowed`/`resolveClientMode` ומכוסה ב־`hermes-mode.test.ts`.
 ה־e2e של demo מותקן (`e2e-installed-attachment-ui.mjs`) רץ מול חבילת QA, לא מול הייצור.
 
@@ -576,7 +579,7 @@ reducer אירועי הצ׳אט, חוזה התאימות, אימות הגיבו�
 
 ## תוצאות קבלה — 31 ביולי 2026
 
-- בדיקות Vitest (‏56 קבצים, ‏319 עברו, ‏1 דילוג) ובדיקות מדיניות ה־WhatsApp
+- בדיקות Vitest (‏60 קבצים, ‏356 עברו, ‏1 דילוג) ובדיקות מדיניות ה־WhatsApp
   ב־Python (‏40) עברו.
 - Plugin contract, bootstrap resolver, אימות Git blob של install.ps1 הרשמי
   ו־TypeScript/Vite build עברו.

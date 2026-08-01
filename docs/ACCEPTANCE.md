@@ -90,7 +90,10 @@ SHA-256 digests are recorded in the local `release/ACCEPTANCE.md`, not here.
 Durable facts about those artifacts:
 
 - **Production companion** — NSIS one-per-user installer (electron-builder);
-  bundle bakes `VITE_ALLOW_DEMO:""` so demo fixtures are **inert**.
+  bundle bakes `VITE_ALLOW_DEMO:""` (fixtures runtime-inert) **and** physically
+  strips the demo entry module at build time (`vite.config.ts` →
+  `stripDemoFixtures`), so `demo-data`/`demo-api`/`demo-rpc` are tree-shaken out
+  and **absent** from the shipped bundle, not merely unreachable.
 - **QA companion** — `vite build --mode qa` + `electron-builder --dir`
   (unpacked only, no installer), the **only** build allowed to serve `?demo=1`
   fixtures; clearly marked `DO-NOT-DISTRIBUTE` and must be deleted before release.
@@ -118,6 +121,27 @@ Durable facts about those artifacts:
   archive's contents. The install root is a **caller** parameter and cannot be
   injected via the manifest. NSIS placement is unchanged (its trusted installer
   owns it).
+
+### Update responsibility (what self-updates, and what does not)
+
+Two independent update surfaces exist; only one is wired:
+
+- **Hermes runtime update — WIRED.** The desktop shell drives updates of the
+  *Hermes Agent* runtime it manages: `SupportUpdatePanel` → `applyUpdate`
+  (`src/lib/hermes/rest.ts`) → `window.hermesDesktop.applyUpdate` →
+  `electron/hermes-update-flow.cjs` (backup → `hermes update --yes` → compat
+  re-gate via `assertRunningVersionSupported` → rollback on failure). Bounded by
+  `hermes-compat.json` `[0.19.0, 0.20.0)`.
+- **Companion (desktop shell) self-update — NOT wired.** There is **no**
+  `electron-updater` dependency and **no** `autoUpdater` consumer, so nothing
+  reads an update feed for the companion itself. A new companion version is
+  delivered by re-running the installer/bootstrap, not by in-app self-update.
+  Accordingly `build.publish` is set to **`null`** (`package.json`) so
+  electron-builder no longer infers a GitHub provider and emits a `latest.yml` /
+  `app-update.yml` that no updater consumes and whose filename did not even match
+  the shipped Hebrew-named installer. No new updater was introduced; this only
+  removes a misleading artifact. If companion self-update is added later, wire a
+  real `electron-updater` feed and re-enable `publish` deliberately.
 
 ---
 
@@ -275,7 +299,7 @@ path even when a key is present.
 **Commands & results (this acceptance run):**
 
 ```
-npm test                              # 56 files, 319 pass / 1 skip (incl. redact + evidence-verifier/gates + build-attestation + isolated-runtime + qa-runtime/namespace + hermes-shared-home guard + plugin-loader tests)
+npm test                              # 60 files, 356 pass / 1 skip (incl. redact + diagnostics/privacy + transport + compat/packaging + evidence gates + build-attestation + isolated-runtime + qa-runtime/namespace + hermes-shared-home guard + plugin-loader tests)
 HERMES_E2E_NO_LLM=1 node scripts/e2e-hermes-shared-state.mjs   # ok:true — session+cron+skill shared-state, paths, AND the business-shell plugin: install→discover→enabled→same-state→provider-free route render→uninstall zero residue
 node scripts/e2e-hermes-shared-state.mjs   # + live streaming/interrupt when a provider is already available
 node scripts/e2e-hermes.mjs           # ok:true — isolated home; streaming+resume+cron cycle green

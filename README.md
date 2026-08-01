@@ -153,7 +153,7 @@ electron/          runtime, IPC, חלונות, אבחון, Google ו־plugin ins
 נבדקו מול Hermes Agent `0.19.0`; resolver המתקין מצא גם release רשמי תואם
 `0.19.1` (`v2026.7.30`).
 
-- בדיקות Vitest (‏56 קבצים, ‏319 עברו, ‏1 דילוג) ובדיקות מדיניות ה־WhatsApp
+- בדיקות Vitest (‏60 קבצים, ‏356 עברו, ‏1 דילוג) ובדיקות מדיניות ה־WhatsApp
   ב־Python (‏40) עברו.
 - TypeScript/Vite build, Plugin contract, bootstrap resolver ואימות Git blob של
   המתקין הרשמי עברו.

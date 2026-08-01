@@ -2,6 +2,13 @@ $ErrorActionPreference = 'Stop'
 
 $root = Split-Path -Parent $PSScriptRoot
 $bootstrap = Join-Path $root 'installer\bootstrap.ps1'
+
+# Derive the supported range from the canonical manifest (hermes-compat.json) so
+# this verifier can never drift from the single source of truth. The JS drift
+# test asserts this file reads the manifest and carries no hardcoded bound.
+$compat = Get-Content -Raw -LiteralPath (Join-Path $root 'hermes-compat.json') | ConvertFrom-Json
+$minHermesVersion = [version]$compat.minVersion
+$maxHermesVersionExclusive = [version]$compat.maxVersionExclusive
 $source = Get-Content -Raw -LiteralPath $bootstrap
 $null = [scriptblock]::Create($source)
 $pwsh = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
@@ -76,8 +83,8 @@ try {
   if (-not $jsonLine) { throw "Bootstrap did not return release metadata:`n$($resolveOutput -join "`n")" }
   $release = $jsonLine | ConvertFrom-Json
   $version = [version]$release.version
-  if ($version -lt [version]'0.19.0' -or $version -ge [version]'0.20.0') {
-    throw "Bootstrap selected incompatible Hermes $version."
+  if ($version -lt $minHermesVersion -or $version -ge $maxHermesVersionExclusive) {
+    throw "Bootstrap selected incompatible Hermes $version (supported $($compat.range))."
   }
   if ([string]::IsNullOrWhiteSpace([string]$release.tag)) {
     throw 'Bootstrap selected a release without an immutable tag.'

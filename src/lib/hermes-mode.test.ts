@@ -48,9 +48,11 @@ describe('resolveClientMode', () => {
   })
 })
 
-// The build-time capability gate is what physically keeps fixtures out of the
-// shipping executable: dev always allows; production allows ONLY when an
-// explicit QA/test build baked VITE_ALLOW_DEMO.
+// The runtime capability gate: dev always allows; production allows ONLY when an
+// explicit QA/test build baked VITE_ALLOW_DEMO. Fixtures are ALSO physically
+// stripped from a non-demo bundle by vite.config.ts (stripDemoFixtures); this
+// gate governs whether the code path is reachable, that strip governs whether
+// the fixtures ship at all.
 describe('isDemoBuildAllowed', () => {
   it('allows demo in a dev server regardless of the flag', () => {
     expect(isDemoBuildAllowed({ DEV: true })).toBe(true)

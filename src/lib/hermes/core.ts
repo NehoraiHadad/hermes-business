@@ -49,9 +49,12 @@ export const PROVIDER_API_KEYS: Record<string, string> = {
 // only in a dev server (`vite dev`) or an explicit QA/test build that bakes in
 // `VITE_ALLOW_DEMO`. That flag is derived from the build mode in
 // vite.config.ts (`vite build --mode qa`); there is no `.env.qa` file. A normal
-// production `vite build` / `package:win` release bakes nothing, so the fixture
-// backend is physically absent from the shipping executable — `?demo=1` there
-// is inert. This is the hard wall the packaged product must never cross.
+// production `vite build` / `package:win` release bakes nothing, so `?demo=1`
+// is inert here. Belt-and-suspenders: vite.config.ts (stripDemoFixtures)
+// replaces the demo entry module with a throwing stub in any non-demo build, so
+// the fixtures (demo-api/demo-rpc/demo-data) are also PHYSICALLY absent from the
+// shipping executable — tree-shaken out, not merely unreachable. This runtime
+// gate and that build strip are the hard wall the packaged product never crosses.
 export function isDemoBuildAllowed(
   env: { DEV: boolean; VITE_ALLOW_DEMO?: string } = import.meta.env
 ): boolean {
