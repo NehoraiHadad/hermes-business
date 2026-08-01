@@ -1,34 +1,15 @@
 {
   "schema_version": 1,
   "category": "approval",
-  "status": "passed",
+  "status": "blocked",
   "app_version": "0.3.3",
   "hermes_range": ">=0.19.0 <0.20.0",
-  "git_head": "de4f807567fc77b6d1d8ff004ca88ddfbfcee59a",
+  "git_head": "76443e26b11c03e76f8869604768ea44e0826983",
   "git_state": "committed",
-  "captured_at": "2026-08-01T06:22:16.270Z",
-  "tool": "e2e-installed-isolated.mjs (real gateway approval.request/respond)",
+  "captured_at": "2026-08-01T06:39:28.530Z",
+  "tool": "release evidence lifecycle",
   "redacted": true,
   "summary": {
-    "wiring": {
-      "official_method": "approval.respond",
-      "competing_engine": false,
-      "delegates_to_official": true
-    },
-    "unit_coverage": true,
-    "live_ui_denial_probe": {
-      "status": "passed",
-      "artifact_attested": true,
-      "qa_namespace_applied": true,
-      "isolated_runtime": true,
-      "via_real_event_path": true,
-      "official_method": "approval.respond",
-      "requested": true,
-      "request_command_present": true,
-      "denied": true,
-      "deny_resolved_count": 1,
-      "no_side_effect": true,
-      "renderer_modal_faked": false
-    }
+    "reason": "requires recapture after a verifier code change"
   }
 }
