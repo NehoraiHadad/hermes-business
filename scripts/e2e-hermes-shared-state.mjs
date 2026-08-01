@@ -8,22 +8,17 @@
 // without a paid model. Streaming/tool/interrupt (which need a model) are
 // delegated to the existing probes only when a provider is configured or the
 // deterministic local mock is enabled (HERMES_E2E_MOCK_PROVIDER=1).
+//
+// The probe orchestration + teardown live in ./lib/e2e-shared-state-proofs.mjs;
+// this file only sequences boot -> health -> session -> report.
 
 import { randomBytes } from 'node:crypto'
-import { rmSync } from 'node:fs'
 import { resolveInstalledHermes, createIsolatedHome, offlineChannelEnv, liveHermesHome } from './lib/hermes-shared-home.mjs'
 import { safeJson, sanitize, waitForHealth } from './lib/e2e-harness.mjs'
 import { createHermesHarness } from './lib/hermes-live.mjs'
 import { createRestClient } from './lib/hermes-rest.mjs'
-import {
-  proveCronSharedState,
-  proveSkillSharedState,
-  proveSessionSharedState,
-  provePathEvidence
-} from './lib/probes/hermes/shared-state.mjs'
-import { proveLiveTransport } from './lib/probes/hermes/live-provider.mjs'
-import { installBusinessShell } from './lib/probes/hermes/plugin-install.mjs'
-import { provePluginSharedState } from './lib/probes/hermes/plugin-shared-state.mjs'
+import { installBusinessShell, installBusinessShellBackend } from './lib/probes/hermes/plugin-install.mjs'
+import { collectSharedStateReport, makeCleanup } from './lib/e2e-shared-state-proofs.mjs'
 
 const port = Number(process.env.HERMES_E2E_PORT || 9131)
 const { hermes, installRoot } = resolveInstalledHermes()
@@ -35,29 +30,18 @@ const stamp = Date.now()
 
 const ctx = {
   jobName: `POC E2E cron ${stamp}`,
+  pausedJobName: `POC E2E paused ${stamp}`,
   skillName: `poc-e2e-shared-${stamp}`,
   sessionTitle: `POC E2E shared session ${stamp}`,
   cronCreated: false,
+  pausedCreated: false,
   skillCreated: false
 }
 
 const harness = createHermesHarness({ hermes, hermesHome, port, token, wsUrl, extraEnv: offlineChannelEnv() })
 const { rpc, stage } = harness
 const rest = createRestClient({ baseUrl, token })
-
-async function cleanup() {
-  if (ctx.cronCreated) {
-    try {
-      const cron = await rpc('cron.manage', { action: 'list' }, 15_000)
-      const job = cron.jobs?.find(j => j.name === ctx.jobName)
-      if (job) await rpc('cron.manage', { action: 'remove', name: job.id || job.name }, 15_000)
-    } catch { /* best effort */ }
-  }
-  harness.shutdown()
-  try {
-    rmSync(hermesHome, { recursive: true, force: true })
-  } catch { /* temp dir removed on next boot regardless */ }
-}
+const cleanup = makeCleanup({ harness, rpc, hermesHome, ctx })
 
 try {
   stage(`installed binary: ${installRoot}`)
@@ -67,6 +51,13 @@ try {
   // contract BEFORE boot, so the gateway scans its bootstrap Skill at startup.
   const pluginInstall = installBusinessShell(hermesHome)
   stage(`installed business-shell plugin (official disk door): ${pluginInstall.target}`)
+
+  // Install + enable the READ-ONLY companion backend BEFORE boot, so the web
+  // server mounts /api/plugins/business-shell/ at startup. This is the
+  // paused-inclusive source of truth (list_jobs(include_disabled=True)) the
+  // desktop plugin reaches via its namespace-locked ctx.rest.
+  const backendInstall = installBusinessShellBackend(hermesHome)
+  stage(`installed + enabled business-shell companion backend: ${backendInstall.namespace} (${backendInstall.enabledVia})`)
 
   harness.startServer()
 
@@ -94,47 +85,24 @@ try {
   if (!listed.sessions?.some(s => s.id === storedSessionId)) {
     throw new Error('session not visible via official session.list RPC')
   }
-  const sessionShared = await proveSessionSharedState(harness, rest, storedSessionId)
-  const cronShared = await proveCronSharedState(harness, rest, hermesHome, ctx)
-  const skillShared = await proveSkillSharedState(harness, rest, hermesHome, ctx)
-  const pathEvidence = provePathEvidence(hermesHome)
-  const pluginShared = await provePluginSharedState({
+
+  const report = await collectSharedStateReport({
     harness,
+    rest,
     home: hermesHome,
+    ctx,
     storedSessionId,
-    install: pluginInstall
+    pluginInstall,
+    backendInstall,
+    health,
+    providerReady,
+    installRoot,
+    liveHome: liveHermesHome(),
+    runLlm: providerReady && process.env.HERMES_E2E_NO_LLM !== '1',
+    stamp,
+    sessionTitle: ctx.sessionTitle
   })
-
-  // Streaming + stop/cancel + tool events require a model. Prove them with the
-  // live provider when one is present; otherwise mark honestly as not proven.
-  const runLlm = providerReady && process.env.HERMES_E2E_NO_LLM !== '1'
-  const liveTransport = runLlm
-    ? await proveLiveTransport(harness, {
-        expected: `HERMES_POC_STREAM_OK_${stamp}`,
-        sessionTitle: `${ctx.sessionTitle} (transport)`
-      })
-    : { skipped: true, reason: providerReady ? 'HERMES_E2E_NO_LLM=1' : 'no provider configured in isolated home' }
-
-  console.log(
-    safeJson({
-      ok: true,
-      one_runtime: { install_root: installRoot, isolated_home: hermesHome, live_home_untouched: liveHermesHome() },
-      health: health.status || health.ok || 'healthy',
-      provider_ready: providerReady,
-      provider_note: providerReady ? 'live provider configured in isolated home' : 'provider-free: no model called',
-      session_shared_state: { stored_session_id: storedSessionId, visible_via_rpc_list: true, ...sessionShared },
-      cron_shared_state: cronShared,
-      skill_shared_state: skillShared,
-      path_evidence: pathEvidence,
-      plugin_shared_state: pluginShared,
-      live_transport: liveTransport,
-      approval_mapping: {
-        official_method: 'approval.respond',
-        wrapper_delegates_via: 'src/lib/hermes/session.ts respondApproval -> approval.respond',
-        competing_engine: false
-      }
-    })
-  )
+  console.log(safeJson(report))
 } catch (error) {
   console.error(sanitize(error instanceof Error ? error.stack : String(error)))
   if (harness.serverOutput.length) console.error(harness.serverOutput.slice(-20).join('').slice(-4000))

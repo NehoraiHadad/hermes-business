@@ -12,6 +12,7 @@ import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import yaml from 'js-yaml'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 export const repoRoot = path.resolve(here, '../../../..')
@@ -21,6 +22,8 @@ export const BOOTSTRAP_SKILL = 'business-bootstrap'
 
 const pluginSource = path.join(repoRoot, 'hermes-plugin', 'business-shell', 'plugin.js')
 const skillSource = path.join(repoRoot, 'hermes-plugin', 'business-shell', 'skills', BOOTSTRAP_SKILL, 'SKILL.md')
+const backendSourceDir = path.join(repoRoot, 'hermes-plugin', 'business-shell', 'dashboard')
+const BACKEND_FILES = ['manifest.json', 'plugin_api.py']
 
 function sri(bytes) {
   return `sha256-${createHash('sha256').update(bytes).digest('base64')}`
@@ -57,6 +60,71 @@ export function installBusinessShell(home) {
  *  reconciliation (dropPlugin). The Skill has a distinct lifecycle and stays. */
 export function uninstallBusinessShell(home) {
   rmSync(path.join(home, 'desktop-plugins', PLUGIN_ID), { recursive: true, force: true })
+}
+
+/** Add `id` to `plugins.enabled` in `<home>/config.yaml`, the exact allow-list
+ *  the web server's dashboard-plugin mount gate reads
+ *  (hermes_cli/plugins_cmd.py::_get_enabled_set, consumed by
+ *  _mount_plugin_api_routes / _plugin_api_runtime_gate). A dashboard-only plugin
+ *  isn't agent-discoverable, so `hermes plugins enable` can't resolve it — the
+ *  config allow-list is the sanctioned enable for a backend-route plugin. Mirrors
+ *  cmd_enable exactly: adds to plugins.enabled AND drops from plugins.disabled
+ *  (disabled precedence would otherwise block a both-listed plugin from loading). */
+export function enablePluginInConfig(home, id) {
+  const configPath = path.join(home, 'config.yaml')
+  let config = {}
+  if (existsSync(configPath)) {
+    let loaded
+    try {
+      loaded = yaml.load(readFileSync(configPath, 'utf8'))
+    } catch {
+      throw new Error(`Refusing to overwrite ${configPath}: it is not valid YAML.`)
+    }
+    if (loaded == null) config = {}
+    else if (typeof loaded === 'object' && !Array.isArray(loaded)) config = loaded
+    else throw new Error(`Refusing to overwrite ${configPath}: it is not a YAML mapping.`)
+  }
+  const plugins =
+    config.plugins && typeof config.plugins === 'object' && !Array.isArray(config.plugins) ? config.plugins : {}
+  const enabled = Array.isArray(plugins.enabled) ? plugins.enabled : []
+  if (!enabled.includes(id)) enabled.push(id)
+  plugins.enabled = enabled
+  // Mirror `hermes plugins enable`: enabled.add(id) AND disabled.discard(id).
+  // Hermes' disabled list takes precedence, so an id left in disabled would never
+  // load even after being added to enabled.
+  plugins.disabled = Array.isArray(plugins.disabled) ? plugins.disabled.filter(entry => entry !== id) : []
+  config.plugins = plugins
+  writeFileSync(configPath, yaml.dump(config), 'utf8')
+  return configPath
+}
+
+/** Install the companion READ-ONLY backend plugin — the paused-inclusive source
+ *  of truth — via the official dashboard-plugin contract, then enable it. Files
+ *  land under `<home>/plugins/business-shell/dashboard/`; Hermes' web server
+ *  mounts the router at `/api/plugins/business-shell/` at startup (behind the
+ *  same dashboard auth as every /api route). Idempotent + transactional: the
+ *  copy and the enable happen together so a half-install can't leave a mounted
+ *  route the client can't reach or vice-versa. */
+export function installBusinessShellBackend(home) {
+  const targetDir = path.join(home, 'plugins', PLUGIN_ID, 'dashboard')
+  mkdirSync(targetDir, { recursive: true })
+  const files = {}
+  for (const name of BACKEND_FILES) {
+    const src = path.join(backendSourceDir, name)
+    if (!existsSync(src)) throw new Error(`companion backend payload missing: ${name}`)
+    const dest = path.join(targetDir, name)
+    writeFileSync(dest, readFileSync(src))
+    files[name] = dest
+  }
+  const configPath = enablePluginInConfig(home, PLUGIN_ID)
+  return { targetDir, files, configPath, namespace: `/api/plugins/${PLUGIN_ID}`, enabledVia: 'config.yaml plugins.enabled' }
+}
+
+/** Remove ONLY the companion backend plugin folder. The config allow-list entry
+ *  is harmless without the files (the mount gate simply finds nothing to mount)
+ *  and the isolated home is discarded wholesale after the run. */
+export function uninstallBusinessShellBackend(home) {
+  rmSync(path.join(home, 'plugins', PLUGIN_ID), { recursive: true, force: true })
 }
 
 /** Enumerate `<home>/desktop-plugins/<name>/plugin.js` — the exact set the

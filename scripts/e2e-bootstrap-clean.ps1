@@ -20,6 +20,15 @@ Copy-Item -LiteralPath (Join-Path $root 'hermes-plugin\business-shell\skills\bus
 Copy-Item -LiteralPath (Join-Path $root 'installer\bootstrap-companion.ps1') `
   -Destination (Join-Path $payloadRoot 'bootstrap-companion.ps1')
 
+# Companion backend payload (paused-inclusive source of truth) — installed +
+# enabled inside the business-shell transaction by the bootstrap.
+$dashboardPayload = Join-Path $payloadRoot 'dashboard'
+New-Item -ItemType Directory -Force -Path $dashboardPayload | Out-Null
+foreach ($backendFile in @('manifest.json', 'plugin_api.py')) {
+  Copy-Item -LiteralPath (Join-Path $root "hermes-plugin\business-shell\dashboard\$backendFile") `
+    -Destination (Join-Path $dashboardPayload $backendFile)
+}
+
 $policyPayload = Join-Path $payloadRoot 'whatsapp-policy'
 New-Item -ItemType Directory -Force -Path $policyPayload | Out-Null
 foreach ($policyFile in @('__init__.py', 'policy.py', 'ingest.py', 'contract.py', 'surface.py', 'guards.py', 'transport.py', 'registry.py', 'guard_core.py', 'surface_core.py', 'dispatch.py', 'telegram_policy.py', 'telegram_contract.py', 'telegram_surface.py', 'telegram_transport.py', 'telegram_registry.py', 'plugin.yaml')) {
@@ -48,12 +57,20 @@ try {
   $receipt = Join-Path $hermesHome 'desktop-plugins\business-shell\install-receipt.json'
   $policyDir = Join-Path $hermesHome 'plugins\business-whatsapp-policy'
   $policyInit = Join-Path $policyDir '__init__.py'
-  # The plugin, skill and policy now install as one transactional unit with a
-  # single completion receipt at the business-shell plugin directory.
-  foreach ($required in @($hermesExe, $plugin, $skill, $receipt, $policyInit)) {
+  $backendApi = Join-Path $hermesHome 'plugins\business-shell\dashboard\plugin_api.py'
+  $backendManifest = Join-Path $hermesHome 'plugins\business-shell\dashboard\manifest.json'
+  # The plugin, skill, policy AND companion backend now install as one
+  # transactional unit with a single completion receipt at the plugin directory.
+  foreach ($required in @($hermesExe, $plugin, $skill, $receipt, $policyInit, $backendApi, $backendManifest)) {
     if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
       throw "Clean bootstrap did not create required file: $required"
     }
+  }
+  # The dashboard-only backend is enabled via the config.yaml allow-list the mount
+  # gate reads (it is not agent-discoverable, so it never appears in plugins list).
+  $configText = Get-Content -Raw -LiteralPath (Join-Path $hermesHome 'config.yaml')
+  if ($configText -notmatch 'business-shell') {
+    throw "Clean bootstrap did not enable business-shell in config.yaml.`n$configText"
   }
 
   $enabledPlugins = (& $hermesExe plugins list --plain --no-bundled 2>&1 | Out-String)

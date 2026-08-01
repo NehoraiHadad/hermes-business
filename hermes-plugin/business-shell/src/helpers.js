@@ -4,7 +4,9 @@ import { useEffect, useState } from 'react'
 // no side effects at module load — safe for the contract test that evaluates the
 // bundled plugin in a bare VM.
 
-export const PAUSED_CRON_CACHE_TTL_MS = 24 * 60 * 60 * 1000
+// Legacy key: earlier builds shadowed paused cron jobs in plugin storage. That
+// store is never trusted again — see purgeLegacyPausedCache below.
+export const LEGACY_PAUSED_CACHE_KEY = 'pausedCronJobs'
 
 const TOOL_COPY = {
   google_calendar: 'בודק את היומן…',
@@ -24,9 +26,13 @@ export function friendlyToolName(raw) {
 }
 
 export function humanSchedule(raw) {
+  // Accept either the official human string (schedule_display) or the structured
+  // schedule dict. For a dict we pull a known display/expr field — never String()
+  // the object, which would render "[object Object]"; an unknown shape degrades to
+  // the Hermes-schedule fallback below.
   const schedule =
     raw && typeof raw === 'object'
-      ? String(raw.display || raw.expr || raw.cron || raw.value || '')
+      ? String(raw.schedule_display || raw.display || raw.expr || raw.cron || raw.value || '')
       : String(raw || '')
   const known = {
     '0 8 * * 0-4': 'ימים א׳–ה׳ בשעה 08:00',
@@ -36,19 +42,33 @@ export function humanSchedule(raw) {
   return known[schedule] || schedule || 'לפי לוח הזמנים של Hermes'
 }
 
-export function readPausedCronCache(storage) {
-  const now = Date.now()
-  const cached = storage.get('pausedCronJobs', [])
-  const fresh = Array.isArray(cached)
-    ? cached.filter(job => {
-        const cachedAt = Date.parse(String(job?.cachedAt || ''))
-        return Number.isFinite(cachedAt) && now - cachedAt < PAUSED_CRON_CACHE_TTL_MS
-      })
-    : []
-  if (fresh.length !== (Array.isArray(cached) ? cached.length : 0)) {
-    storage.set('pausedCronJobs', fresh)
-  }
-  return fresh
+// A job is paused when the OFFICIAL record says so — never a local flag. The
+// authoritative schema carries state==='paused'; enabled===false and the legacy
+// paused flag are honored too so both doors and older normalizers agree.
+export function isJobPaused(job) {
+  return Boolean(job && (job.state === 'paused' || job.enabled === false || job.paused === true))
+}
+
+// Single source of truth for the scheduled-task list: normalize a cron.manage
+// result to { jobs, pausedListingSupported }. In Hermes 0.19.x the gateway RPC
+// door (cronjob action:'list' -> list_jobs(include_disabled=False)) is
+// active-only, so pausedListingSupported is true only if the surface itself
+// returned a paused job. That lets a future paused-inclusive Hermes render them
+// inline, while today's active-only door is reported honestly (no cache).
+export function summarizeCronJobs(result) {
+  const jobs = Array.isArray(result?.jobs) ? result.jobs : Array.isArray(result) ? result : []
+  return { jobs, pausedListingSupported: jobs.some(isJobPaused) }
+}
+
+// One-time, non-authoritative cleanup of the legacy paused-task cache, confined
+// to plugin storage. Returns how many stale rows were dropped. The value is
+// never read back as truth — pause/resume state lives only in official Hermes.
+export function purgeLegacyPausedCache(storage) {
+  const legacy = storage.get(LEGACY_PAUSED_CACHE_KEY, null)
+  if (legacy == null) return 0
+  if (typeof storage.remove === 'function') storage.remove(LEGACY_PAUSED_CACHE_KEY)
+  else storage.set(LEGACY_PAUSED_CACHE_KEY, null)
+  return Array.isArray(legacy) ? legacy.length : 0
 }
 
 export function flattenSkillNames(value) {

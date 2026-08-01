@@ -10,18 +10,14 @@ const {
   whatsappPolicyPluginSource,
   WHATSAPP_POLICY_PLUGIN_FILES
 } = require('./paths.cjs')
+const { safeWrite } = require('./atomic-write.cjs')
+const { installCompanionBackend, stageBackendPayload } = require('./backend-install.cjs')
 
 // Installs the bundled Desktop Plugin and its first-run bootstrap Skill into the
 // Hermes home, recording an integrity receipt. Also stages the payload for the
-// PowerShell bootstrap installer when Hermes is not yet present.
-
-function safeWrite(filePath, content) {
-  fs.mkdirSync(path.dirname(filePath), { recursive: true })
-  const temporary = `${filePath}.${process.pid}.tmp`
-  fs.writeFileSync(temporary, content, { encoding: 'utf8', mode: 0o600 })
-  fs.copyFileSync(temporary, filePath)
-  fs.unlinkSync(temporary)
-}
+// PowerShell bootstrap installer when Hermes is not yet present. The read-only
+// companion backend (dashboard/) install + config enable live in
+// backend-install.cjs so this file stays focused on the desktop-plugin contract.
 
 function stageBusinessBootstrap() {
   const packagedRoot = path.join(process.resourcesPath, 'business-bootstrap')
@@ -48,6 +44,9 @@ function stageBusinessBootstrap() {
   fs.copyFileSync(sources.plugin, path.join(stagingRoot, 'plugin.js'))
   fs.copyFileSync(sources.skill, path.join(stagingRoot, 'business-bootstrap.SKILL.md'))
   stageWhatsappPolicyPayload(sourceRoot, stagingRoot, app.isPackaged)
+  // The companion backend ships in the SAME staged payload so the bootstrap can
+  // install desktop plugin + backend as one transaction (see BusinessInstall.ps1).
+  stageBackendPayload(sourceRoot, stagingRoot, app.isPackaged)
   return stagingRoot
 }
 
@@ -98,7 +97,9 @@ function installDesktopPlugin() {
       2
     )}\n`
   )
-  return { ok: true, target, integrity, bootstrapSkill: skillTarget, bootstrapSkillIntegrity: skillIntegrity }
+  const backend = installCompanionBackend()
+
+  return { ok: true, target, integrity, bootstrapSkill: skillTarget, bootstrapSkillIntegrity: skillIntegrity, backend }
 }
 
 module.exports = { installDesktopPlugin, stageBusinessBootstrap }

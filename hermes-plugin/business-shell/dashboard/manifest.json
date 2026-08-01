@@ -1,0 +1,9 @@
+{
+  "name": "business-shell",
+  "label": "Hermes לעסק (backend)",
+  "description": "Read-only companion backend for the business-shell desktop plugin. Surfaces active+paused scheduled tasks straight from Hermes' authoritative scheduler — one source of truth, no parallel store.",
+  "version": "0.1.0",
+  "tab": { "hidden": true },
+  "slots": [],
+  "api": "plugin_api.py"
+}

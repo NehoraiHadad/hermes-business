@@ -24,22 +24,50 @@ function Install-BusinessPayload {
   # so that a failure to *enable* it rolls back the plugin + skill too.
   $policySource = Join-Path $PayloadRoot 'whatsapp-policy'
   $policyPresent = Test-Path -LiteralPath $policySource -PathType Container
-  $activate = $null
   if ($policyPresent) {
     $policyTargetDir = Join-Path $HermesHome 'plugins\business-whatsapp-policy'
     foreach ($name in @('__init__.py', 'policy.py', 'ingest.py', 'contract.py', 'surface.py', 'guards.py', 'transport.py', 'registry.py', 'guard_core.py', 'surface_core.py', 'dispatch.py', 'telegram_policy.py', 'telegram_contract.py', 'telegram_surface.py', 'telegram_transport.py', 'telegram_registry.py', 'plugin.yaml')) {
       $files += @{ Source = (Join-Path $policySource $name); Target = (Join-Path $policyTargetDir $name) }
     }
-    $activate = {
-      Write-Step 'Activating the WhatsApp reply-policy plugin via `hermes plugins enable`.'
-      & $HermesExe plugins enable business-whatsapp-policy --no-allow-tool-override
-      if ($LASTEXITCODE -ne 0) {
-        throw "Enabling the WhatsApp reply-policy plugin failed with exit code $LASTEXITCODE."
-      }
-    }
   }
   else {
     Write-Step "WhatsApp policy payload not present at $policySource; installing plugin + skill only."
+  }
+
+  # READ-ONLY companion backend (dashboard/manifest.json + plugin_api.py) — the
+  # paused-inclusive source of truth. It rides the SAME transaction so that a
+  # failure to enable it (or its health check) rolls back the desktop plugin,
+  # skill and policy together, AND the config enablement is restored (see the
+  # Backup/Restore-HermesConfig around the activate below).
+  $backendPresent = Test-DashboardPayloadPresent -PayloadRoot $PayloadRoot
+  if ($backendPresent) {
+    $files += Get-DashboardPayloadFiles -PayloadRoot $PayloadRoot -HermesHome $HermesHome
+  }
+  else {
+    Write-Step "Companion backend payload not present at $PayloadRoot\dashboard; installing without the paused-inclusive door."
+  }
+
+  # Single activation for the whole unit. Config.yaml is snapshotted first so
+  # enabling either plugin can be rolled back atomically with the files.
+  $activate = {
+    $configBackup = Backup-HermesConfig -HermesHome $HermesHome
+    try {
+      if ($policyPresent) {
+        Write-Step 'Activating the WhatsApp reply-policy plugin via `hermes plugins enable`.'
+        & $HermesExe plugins enable business-whatsapp-policy --no-allow-tool-override
+        if ($LASTEXITCODE -ne 0) {
+          throw "Enabling the WhatsApp reply-policy plugin failed with exit code $LASTEXITCODE."
+        }
+      }
+      if ($backendPresent) {
+        Enable-DashboardPluginInConfig -HermesHome $HermesHome -PluginId 'business-shell'
+        Assert-BackendHealthy -HermesHome $HermesHome -PluginId 'business-shell'
+      }
+    }
+    catch {
+      Restore-HermesConfig -Backup $configBackup
+      throw
+    }
   }
 
   $receiptExtra = [ordered]@{
@@ -49,9 +77,13 @@ function Install-BusinessPayload {
     whatsAppPolicyIncluded    = $policyPresent
     whatsAppPolicyEnabled     = $policyPresent
     whatsAppPolicyFailClosed  = 'read_only'
+    companionBackendIncluded  = $backendPresent
+    companionBackendEnabled   = $backendPresent
+    dashboardManifestSha256   = if ($backendPresent) { Get-Sha256Hash -Path (Join-Path $PayloadRoot 'dashboard\manifest.json') } else { $null }
+    dashboardApiSha256        = if ($backendPresent) { Get-Sha256Hash -Path (Join-Path $PayloadRoot 'dashboard\plugin_api.py') } else { $null }
   }
 
-  Write-Step 'Installing the Hermes business plugin, first-run skill and reply-policy as one transaction.'
+  Write-Step 'Installing the Hermes business plugin, first-run skill, reply-policy and companion backend as one transaction.'
   Invoke-PayloadTransaction `
     -HermesHome $HermesHome `
     -Label 'business-shell' `

@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react'
 import { Button, Input, evaluateRuntimeReadiness, host, useValue } from '@hermes/plugin-sdk'
 import { h } from '../dom.js'
-import { readPausedCronCache, useAsync } from '../helpers.js'
+import { summarizeCronJobs, useAsync } from '../helpers.js'
 import { Card, Metric } from '../ui.js'
 import { ActivityStrip } from './activity-strip.js'
 import { HomeQuickActions } from './home-quick-actions.js'
@@ -26,10 +26,8 @@ export function Overview({ onOnboarding, storage }) {
       : sessionRows
     return rows.slice(0, 8)
   }, [sessionQuery, sessions.value])
-  const activeJobs = Array.isArray(cron.value?.jobs) ? cron.value.jobs : Array.isArray(cron.value) ? cron.value : []
-  const pausedJobs = readPausedCronCache(storage)
-  const activeJobIds = new Set(activeJobs.map(job => job.id || job.name).filter(Boolean))
-  const jobs = [...activeJobs, ...pausedJobs.filter(job => !activeJobIds.has(job.id || job.name))]
+  // Active tasks straight from the official cron.manage door — no local cache.
+  const { jobs } = summarizeCronJobs(cron.value)
 
   return h(
     React.Fragment,
@@ -75,7 +73,7 @@ export function Overview({ onOnboarding, storage }) {
         h(Metric, { label: 'פרופיל פעיל', value: profile || 'default', tone: 'good' }),
         h(Metric, {
           label: 'פעילות',
-          value: `${sessionCount} שיחות אחרונות · ${jobs.length} משימות`,
+          value: `${sessionCount} שיחות אחרונות · ${jobs.length} משימות פעילות`,
           tone: 'good'
         })
       )

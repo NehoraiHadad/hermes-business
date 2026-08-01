@@ -89,13 +89,34 @@ export async function loadRuntimePlugin({ source, bytes, integrity, sdk, React }
   return plugin
 }
 
+/** Faithful reproduction of the official `pluginPathSuffix`
+ *  (apps/desktop/src/hermes.ts): normalize to a leading-slash suffix and reject
+ *  any `..` segment so a relative path can't normalize out of the plugin's
+ *  namespace into a core route or another plugin's API. The namespace IS the
+ *  boundary. */
+export function pluginPathSuffix(path) {
+  const raw = String(path == null ? '' : path)
+  const suffix = raw.startsWith('/') ? raw : `/${raw}`
+  if (suffix.split(/[/?#]/).some(seg => seg === '..')) {
+    throw new Error(`pluginRest: path '${raw}' escapes the plugin namespace`)
+  }
+  return suffix
+}
+
 /**
  * A faithful PluginContext (contrib/plugin.ts createPluginContext): register /
  * registerMany scope the id to `<pluginId>:<localId>` and stamp
  * `source: 'plugin:<pluginId>'`, and storage is namespaced per plugin. Captured
  * contributions ARE the inventory the settings "Plugins" page renders.
+ *
+ * `rest` mirrors the official `pluginRest`: it is namespace-locked BY
+ * CONSTRUCTION to `/api/plugins/<pluginId>` and rejects `..`. A caller may
+ * inject `restFetch({ path, method, body })` (e.g. the live isolated gateway's
+ * REST client) to exercise the plugin's own backend door end-to-end; with no
+ * fetcher there is no desktop bridge, matching the shipped renderer where
+ * `window.hermesDesktop.api` is required.
  */
-export function createCaptureContext(pluginId) {
+export function createCaptureContext(pluginId, { restFetch } = {}) {
   const contributions = []
   const store = new Map()
   const scope = c => ({ ...c, id: `${pluginId}:${c.id}`, source: `plugin:${pluginId}` })
@@ -110,8 +131,12 @@ export function createCaptureContext(pluginId) {
       cs.forEach(register)
       return () => {}
     },
-    rest: async () => {
-      throw new Error('ctx.rest is not part of the business-shell contract')
+    rest: async (path, opts = {}) => {
+      const suffix = pluginPathSuffix(path) // throws on namespace escape, before any I/O
+      if (typeof restFetch !== 'function') {
+        throw new Error('Hermes desktop bridge unavailable')
+      }
+      return restFetch({ path: `/api/plugins/${pluginId}${suffix}`, method: opts.method, body: opts.body })
     },
     socket: () => () => {},
     storage: {

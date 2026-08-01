@@ -1,6 +1,6 @@
 # אינטגרציית Hermes — ממצאים והחלטת ארכיטקטורה
 
-עודכן: 31 ביולי 2026
+עודכן: 1 באוגוסט 2026
 
 המסמך מתאר את החוזים שנבדקו בקוד ובהתקנה חיה, ולא הנחות מוקדמות על Hermes.
 
@@ -394,10 +394,26 @@ runtime מסונתז ו־README ואינה קוראת/עוברת על ה־home, 
 
 ## Scheduled Tasks
 
-ה־Companion משתמש ב־Cron API הרשמי עם `profile=default`. חוזי ה־REST המדויקים
-(מ־`hermes_cli/web_routers/cron.py`):
+שני משטחים מציגים משימות מתוזמנות, ו**שניהם קוראים את אותו scheduler רשמי יחיד
+של Hermes** (`cron/jobs.py`, המאוחסן ב־`<HERMES_HOME>/cron`) עם `profile=default`.
+אין store מקביל, אין cache, ואין scheduler חלופי. המפתח לכל הסעיף הזה הוא ההבדל
+בין שני שערי הקריאה של Hermes:
 
-- `GET /api/cron/jobs` — list.
+- `cron.jobs.list_jobs(include_disabled=False)` הוא ברירת המחדל של המנוע —
+  **פעילות בלבד** (הוא מסנן `enabled=False`).
+- `cron.jobs.list_jobs(include_disabled=True)` מחזיר **פעילות + מושהות**.
+
+### Companion — REST Cron הרשמי (כבר כולל paused)
+
+ה־Companion (לקוח Electron מול `hermes serve`) פונה ישירות ל־Cron API הרשמי. חוזי
+ה־REST המדויקים (route הדשבורד ב־`hermes_cli/web_server.py`, בהתאמה למקבילו
+ב־`gateway/platforms/api_server.py`):
+
+- `GET /api/cron/jobs` — list. **החוזה הרשמי כולל משימות מושהות:** ב־Hermes
+  `0.19.1` ה־route הזה קורא במפורש `list_jobs(include_disabled=True)`
+  (`web_server.py::list_cron_jobs → _call_cron_for_profile(name, "list_jobs",
+  True)`), ולכן משטח ה־REST של ה־Companion רואה פעילות ומושהות מהקופסה — בלי
+  שכבה נוספת.
 - `POST /api/cron/jobs` — create (גוף `CronJobCreate`).
 - `POST /api/cron/jobs/{id}/pause` ו־`/resume` — הפעלה/השהיה.
 - `PUT /api/cron/jobs/{id}` — **עריכה** אטומית עם גוף `{ updates: {...} }` (חוזה
@@ -410,8 +426,87 @@ runtime מסונתז ו־README ואינה קוראת/עוברת על ה־home, 
 נפתחת בדיאלוג ממולא מראש. התאמת schedule תומכת גם בגרסה הישנה כמחרוזת וגם במבנה
 `{display, expr}`. המשתמש רואה “ימים א׳–ה׳ בשעה 08:00”, לא ביטוי Cron.
 
-ב־E2E משימה נוצרה, נמצאה דרך `/api/cron/jobs`, הושהתה ונמחקה לאחר ההוכחה. בדיקות
-היחידה (`cron-rest.test.ts`) מקבעות את חוזי ה־PUT/`{updates}`, trigger ו־delete.
+### Desktop Plugin — פער ה־paused ופתרון ה־backend הקריא־בלבד
+
+ה־Desktop Plugin (`business-shell`) אינו פונה ל־REST ההוא. הוא רץ בתוך Hermes המלא
+ומדבר עם ה־Gateway דרך JSON-RPC. שער ה־Cron של ה־Gateway, `cron.manage` (פעולת
+`list`), הוא **פעיל בלבד** — הוא מסתמך על ברירת המחדל `include_disabled=False`.
+המשמעות: ברגע שמשימה מושהית, היא **נעלמת** מהמסך העסקי הפשוט, אף שהיא עדיין קיימת
+ב־scheduler הרשמי. המוצר דורש שמשימות מושהות יישארו גלויות עם pill “מושהה” ומתג
+resume.
+
+הפתרון **אינו** store צל (שהיה סוטה ומשקר), אלא **plugin backend קריא־בלבד של
+המשתמש**, שקורא את אותו scheduler סמכותי:
+
+- **מיקום ורישום.** הקובץ `<HERMES_HOME>/plugins/business-shell/dashboard/
+  plugin_api.py` חושף `router` של FastAPI. ה־web server הרשמי של Hermes ממַנה אותו
+  בהפעלה תחת `/api/plugins/business-shell/` דרך `hermes_cli/web_server.py::
+  _mount_plugin_api_routes`, מאחורי אותו middleware של אימות דשבורד ככל route
+  אחר תחת `/api` — ה־plugin **יורש** את האימות של Hermes ואינו מוסיף אימות משלו.
+  ה־import של ה־backend מוגבל רשמית למקורות `bundled`/`user`; plugin מסוג `project`
+  (מ־CWD) לעולם אינו מיובא כקוד Python (הקשחת GHSA-5qr3-c538-wm9j).
+- **הגעה מה־plugin.** ה־Desktop Plugin קורא אותו דרך `ctx.rest('/cron/jobs')`.
+  ה־door הזה **נעול־namespace בבנייה** ל־prefix של ה־plugin עצמו
+  (`/api/plugins/business-shell`): הוא דוחה `..` ואינו יכול לפנות ל־route ליבה או
+  ל־namespace של plugin אחר. לכן זו רק תצוגה כוללת־paused של אותו scheduler רשמי.
+- **המקור האחד.** ה־backend עונה ל־`/cron/jobs` בקריאה
+  `cron.jobs.list_jobs(include_disabled=True)` — **בדיוק אותה קריאה** של route
+  הליבה `/api/cron/jobs`. התהליך הרץ הוא תהליך הפרופיל הפעיל (עם ה־`HERMES_HOME`
+  שלו), כך שקריאה in-process פותרת את המשימות של הפרופיל הנכון. אין cache ואין
+  store מקביל.
+- **מוטציות נשארות רשמיות.** ה־door הזה קריא־בלבד בלבד. יצירה, השהיה, resume
+  ומחיקה נשארות פעולות scheduler רשמיות דרך ה־RPC `cron.manage` (וב־Companion דרך
+  ה־REST הרשמי). ה־paused door מוסיף **ראייה** בלבד, לא כתיבה.
+- **הקרנת שדות בטוחה.** ה־backend מקרין כל שורת scheduler ל־allow-list מינימלי
+  (`id, name, enabled, schedule, schedule_display, state, next_run_at`, ועוד
+  aliases ישנים) **לפני** שהיא עוזבת את התהליך. מסך ה־automations מציג רק זהות,
+  קצב אנושי, ה־pill/מתג ואת ההרצה הבאה — לעולם לא prompt, יעד מסירה או תוכן עסקי.
+  לכן prompt, נמען או secret אינם יכולים לדלוף דרך משטח ה־paused, גם אם שורת
+  scheduler נושאת אותם.
+- **fallback מנוון (degraded).** כל שגיאת scheduler ב־backend **נכשלת סגור** לגוף
+  תקין וריק (`{jobs: [], paused_listing_supported: false, degraded: true}`) —
+  לעולם לא טקסט חריגה שעלול להדהד prompt או path. ה־plugin מזהה את הדגל הזה (וגם
+  door חסר, SDK ישן, או remote OAuth שבו `ctx.rest` הוא no-op) ומתדרדר **בכנות**
+  ל־door הפעיל־בלבד `cron.manage`, במקום להעמיד פנים שיש תמיכת paused.
+- **סמנטיקת enable של הקונפיג.** plugin דשבורד־בלבד אינו agent-discoverable, ולכן
+  `hermes plugins enable` אינו יכול לפתור אותו; ההפעלה המאושרת היא ה־allow-list
+  `plugins.enabled` ב־`<HERMES_HOME>/config.yaml` שאותה קורא ה־mount gate. ה־enable
+  משכפל את `hermes plugins enable` **במדויק**: להוסיף את המזהה ל־`plugins.enabled`
+  **וגם** להסיר אותו מ־`plugins.disabled`. חוקיות ההפעלה היא לכן **enabled וגם
+  not-disabled** — משום ש־`disabled` של Hermes גובר, מזהה שנמצא בשתי הרשימות לעולם
+  אינו נטען. גם ה־installer (`electron/backend-install.cjs`) וגם ה־gate של
+  ה־PowerShell (`installer/lib/enable_plugin.py`, `--check`) אוכפים את הסמנטיקה
+  הזאת ונכשלים־סגור על YAML פגום, מסמך שאינו mapping, אזכור בהערה, או רישום
+  disabled-only.
+- **התקנה אטומית עם rollback.** `installCompanionBackend` מצלם snapshot של
+  `config.yaml` ושל קובצי ה־backend הקיימים **לפני** כל כתיבה, מפעיל בקונפיג
+  **תחילה**, ורק אז כותב את ה־payload ל־`<HERMES_HOME>/plugins/business-shell/
+  dashboard/`. אם commit ה־payload נכשל אחרי הפעלת הקונפיג, **שניהם** מגולגלים
+  לאחור לבתים הקודמים המדויקים (וספרייה שלא הייתה קיימת נמחקת), כך שלעולם לא נשאר
+  קונפיג שמצהיר על door מותקן בלי קבצים מאחוריו. ההתקנה best-effort ולא־פטאלית: היא
+  לעולם אינה חוסמת את התקנת ה־Desktop Plugin, אלא מתדרדרת ל־door הפעיל־בלבד.
+
+מחיקה והרצה־עכשיו נשארות פעולות בלתי הפיכות שדורשות אישור ב־UI, בשני המשטחים.
+
+### ראיות בדיקה
+
+- **בדיקת יחידה.** `cron-rest.test.ts` מקבעת את חוזי ה־REST של ה־Companion
+  (`PUT`/`{updates}`, trigger, delete). מבחני Python של ה־enable
+  (`installer/lib/test_enable_plugin.py`, `test_enable_disabled_precedence.py`)
+  מקבעים את סמנטיקת ה־enabled-וגם-not-disabled ואת ה־rollback־סגור.
+- **E2E חי ומבודד — cross-door.** `provePausedCronCrossDoor`
+  (`scripts/lib/probes/hermes/shared-state.mjs`, דרך
+  `test:e2e:hermes-shared-state`) יוצר משימה מול Hermes חי ב־`HERMES_HOME` מבודד
+  אחד, משהה אותה דרך `cron.manage`, ומוכיח: ה־list הפעיל־בלבד של `cron.manage`
+  **משמיט** אותה, בעוד `GET /api/cron/jobs` (REST) **וגם** קובץ ה־`cron/jobs.json`
+  על הדיסק מסכימים שהיא `enabled:false`. אחרי resume היא חוזרת ל־list — מוכיח
+  scheduler אחד ללא cache.
+- **E2E חי ומבודד — plugin door.** `provePluginPausedDoor`
+  (`scripts/lib/probes/hermes/plugin-paused-door.mjs`) קורא את המשימה המושהית חזרה
+  דרך ה־door הנעול־namespace `ctx.rest('/cron/jobs')`, מאמת שהיא מופיעה
+  `enabled:false`, ש**אין** בה `prompt`/`deliver` (ההקרנה הבטוחה עבדה), ושניסיון
+  escape של `..` נדחה לפני כל I/O. ה־home המבודד נמחק בסוף — הפרופיל החי לעולם
+  אינו נוגע.
 
 ### צירוף קבצים ו־PDF
 
@@ -604,7 +699,9 @@ reducer אירועי הצ׳אט, חוזה התאימות, אימות הגיבו�
   הגיעה ל־Hermes ונחסמה בהיעדר הרשאה, וה־allowlist הנוכחי מאשר את השולח; הודעת
   בדיקת־חיבור אחת בלבד נשלחה ואומתה דרך שליחת Hermes הרשמית. סבב טרי ומלא של
   הודעה מהמשתמש → סוכן → תשובה לאחר ההרשאה נותר הצעד הידני האחרון, לא בדיקה אוטומטית.
-- Skill ו־Scheduled Task עברו מול APIs הרשמיים.
+- Skill ו־Scheduled Task עברו מול APIs הרשמיים. פער ה־paused של `cron.manage`
+  הפעיל־בלבד נסגר דרך ה־plugin backend הקריא־בלבד (`plugin_api.py` →
+  `list_jobs(include_disabled=True)`), והוכח cross-door מול Hermes חי ב־home מבודד.
 - diagnostics ZIP עבר בדיקת allowlist.
 - המתקין המלא הותקן עם exit code `0`; מסלול מתקין הרשת עבר E2E מלא מול manifest
   מקומי מאומת, אך artifact פרסום ממתין ל־URL HTTPS אמיתי.
@@ -662,7 +759,7 @@ Google נבדק גם במסלול כשל בטוח, וזהו המסלול המכ�
 | חיבור שירות חיצוני | עבר (אוטומטי: כרטיס+דיאלוג+ראיה מכונתית) | Telegram: אימות כרטיס מול `/api/messaging/platforms` + דיאלוג חיבור + `telegram.json` (polling תקין, bot תקף, מאזין יחיד ללא webhook, inbound היסטורי הגיע ונחסם בהיעדר הרשאה, allowlist נוכחי מאשר, הודעת בדיקה אחת נשלחה); סבב טרי מלא לאחר הרשאה = תצפית ידנית; Google: כשל בטוח אוטומטי, ממתין ל־consent |
 | שיחה ו־Streaming | עבר | `message.delta`, Stop ו־`message.complete` בבינארי המותקן |
 | הצגת ואישור פעולות | עבר | מצב manual זמני; destructive delete נדחה והמצב הוחזר ל־smart |
-| משימה מתוזמנת | עבר | create, list, pause ו־cleanup דרך Cron API |
+| משימה מתוזמנת | עבר | create, list, pause ו־cleanup דרך Cron API; המשימה המושהית גלויה גם ב־REST/דיסק וגם דרך ה־plugin backend door הקריא־בלבד (`list_jobs(include_disabled=True)`), ונעדרת מ־`cron.manage` הפעיל־בלבד — scheduler אחד ללא cache |
 | Skills של Hermes | עבר | Skill קיים + Skill חדש שנראה ב־Skills API ובממשק המלא |
 | State משותף | עבר | Session מה־Companion נמצא מיד דרך `session.list` |
 | תקינות וחבילת אבחון | עבר | health/update + ZIP עם שני קבצי allowlist בלבד |

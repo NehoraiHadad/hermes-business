@@ -50,6 +50,48 @@ export async function proveCronSharedState(harness, rest, home, ctx) {
   return { rest_created: true, visible_via_rpc: true, visible_on_disk: true, removed: true, job_id: jobId, disk_file: onDisk.file }
 }
 
+/** Cross-door proof for PAUSED jobs, no cache. Create via REST, pause via the
+ *  plugin's cron.manage door, then assert the pause is authoritative in the
+ *  OTHER doors (REST enabled:false + on-disk) while the active-only cron.manage
+ *  list omits it — nothing resurrects a shadow row. Resume and clean up. */
+export async function provePausedCronCrossDoor(harness, rest, home, ctx) {
+  const { rpc, stage } = harness
+  const name = ctx.pausedJobName
+  await rest('POST', withProfile('/api/cron/jobs'), {
+    name,
+    schedule: '0 0 1 1 *',
+    prompt: 'E2E paused cross-door marker. Never runs outside this acceptance test.',
+    deliver: 'local'
+  })
+  ctx.pausedCreated = true
+  const before = (await rpc('cron.manage', { action: 'list' })).jobs?.find(j => j.name === name)
+  if (!before) throw new Error('cross-door cron job not visible via cron.manage before pause')
+  const jobId = before.id || before.name
+
+  await rpc('cron.manage', { action: 'pause', name: jobId })
+  const afterPause = await rpc('cron.manage', { action: 'list' })
+  if (afterPause.jobs?.some(j => j.name === name)) {
+    throw new Error('paused job still listed by active-only cron.manage — a shadow cache is masking the pause')
+  }
+  const restList = await rest('GET', withProfile('/api/cron/jobs'))
+  const restJob = (Array.isArray(restList) ? restList : restList?.jobs || []).find(j => j.name === name)
+  if (!restJob) throw new Error('paused job not visible via REST /api/cron/jobs')
+  if (restJob.enabled !== false) throw new Error('REST does not report the job paused (enabled:false)')
+  const diskJob = readJobsFile(home).jobs.find(j => j.name === name)
+  if (!diskJob || diskJob.enabled !== false) throw new Error('on-disk cron/jobs.json does not show the job paused')
+  stage('paused via plugin cron.manage: REST + on-disk agree (enabled:false); active-only list omits it, no cache')
+
+  await rpc('cron.manage', { action: 'resume', name: jobId })
+  if (!(await rpc('cron.manage', { action: 'list' })).jobs?.some(j => j.name === name)) {
+    throw new Error('resumed job did not return to cron.manage list')
+  }
+  await rest('DELETE', withProfile(`/api/cron/jobs/${encodeURIComponent(jobId)}`))
+  ctx.pausedCreated = false
+  stage('resumed job reappears in the plugin door; removed via REST, official state agrees')
+  // eslint-disable-next-line max-len
+  return { paused_via: 'cron.manage (plugin door)', paused_visible_via_rest: true, paused_visible_on_disk: true, hidden_from_active_only_plugin_list: true, resumed: true, no_cache: true }
+}
+
 /** Wrapper REST creates a skill; official RPC skills.manage + on-disk SKILL.md must see it. */
 export async function proveSkillSharedState(harness, rest, home, ctx) {
   const { rpc, stage } = harness

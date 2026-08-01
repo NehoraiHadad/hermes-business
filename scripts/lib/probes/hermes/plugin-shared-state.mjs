@@ -11,6 +11,7 @@ import { flattenSkillNames } from '../../hermes-live.mjs'
 import { AREAS, createCaptureContext, loadRuntimePlugin } from './plugin-loader.mjs'
 import { buildSdk } from './plugin-sdk-shim.mjs'
 import { BOOTSTRAP_SKILL, PLUGIN_ID, repoRoot, scanDesktopPlugins, uninstallBusinessShell } from './plugin-install.mjs'
+import { provePluginPausedDoor } from './plugin-paused-door.mjs'
 
 const under = (child, parent) => path.resolve(child).toLowerCase().startsWith(path.resolve(parent).toLowerCase() + path.sep)
 
@@ -18,7 +19,7 @@ const under = (child, parent) => path.resolve(child).toLowerCase().startsWith(pa
  * @param install receipt from installBusinessShell(home), performed BEFORE the
  *   server booted so the gateway scans the bootstrap Skill at startup.
  */
-export async function provePluginSharedState({ harness, home, storedSessionId, install }) {
+export async function provePluginSharedState({ harness, home, storedSessionId, install, rest, backendInstall }) {
   const { rpc, stage } = harness
 
   // 1) Discovery — the disk door the renderer walks: <home>/desktop-plugins/*.
@@ -36,7 +37,14 @@ export async function provePluginSharedState({ harness, home, storedSessionId, i
   const plugin = await loadRuntimePlugin({ source, bytes, integrity: install.integrity, sdk, React })
   if (plugin.id !== PLUGIN_ID) throw new Error(`unexpected plugin id ${plugin.id}`)
   const enabled = plugin.defaultEnabled ?? true // pluginActive(): no decision -> defaultEnabled
-  const { ctx, contributions } = createCaptureContext(plugin.id)
+  // The plugin's ctx.rest is namespace-locked to /api/plugins/<id>; inject the
+  // live isolated gateway's REST client as the transport so register() installs
+  // a door that reaches the companion backend end-to-end (auth via the same
+  // token, exactly as the shipped renderer's window.hermesDesktop.api).
+  const restFetch = rest
+    ? ({ path, method = 'GET', body }) => rest(method, path, body)
+    : undefined
+  const { ctx, contributions } = createCaptureContext(plugin.id, { restFetch })
   plugin.register(ctx)
 
   const route = contributions.find(c => c.area === AREAS.routes)
@@ -63,6 +71,21 @@ export async function provePluginSharedState({ harness, home, storedSessionId, i
     throw new Error('bootstrap Skill from the plugin install contract is not visible via skills.manage')
   }
   stage('plugin host.request door shares the isolated session/cron/skill state with official surfaces')
+
+  // 3.5) Paused-inclusive listing through the plugin's OWN namespace-locked door.
+  //      Extracted to plugin-paused-door.mjs: create -> pause -> read back via
+  //      ctx.rest('/cron/jobs') and prove one source of truth (no cache), the
+  //      namespace escape rejection, and no prompt/business-content leak.
+  const pausedListing = await provePluginPausedDoor({
+    rest,
+    sdk,
+    ctx,
+    restFetch,
+    backendInstall,
+    storedSessionId,
+    contributions,
+    stage
+  })
 
   // 4) Render the plugin route provider-free — opening the surface needs no model.
   const markup = renderToStaticMarkup(route.render())
@@ -112,6 +135,7 @@ export async function provePluginSharedState({ harness, home, storedSessionId, i
       skill_count: skillNames.size
     },
     route_render: { provider_free: true, markup_bytes: markup.length },
+    paused_listing: pausedListing,
     plugin_vs_skill: distinction,
     uninstall: { disk_door_empty: afterScan.length === 0, residue_gone: residueGone, writes_confined_to_isolated_home: allWritesIsolated }
   }

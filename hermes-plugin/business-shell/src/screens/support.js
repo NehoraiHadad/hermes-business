@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { Button, evaluateRuntimeReadiness, host, useValue } from '@hermes/plugin-sdk'
 import { h } from '../dom.js'
-import { readPausedCronCache, useAsync } from '../helpers.js'
+import { summarizeCronJobs, useAsync } from '../helpers.js'
 import { Card, Metric, SectionTitle } from '../ui.js'
 
 // System health for a non-technical owner. Every button drives an official Hermes
@@ -16,8 +16,8 @@ export function Support({ storage }) {
   const cron = useAsync(() => host.request('cron.manage', { action: 'list' }), [refresh])
   const [logs, setLogs] = useState('')
   const [checking, setChecking] = useState(false)
-  const activeJobs = Array.isArray(cron.value?.jobs) ? cron.value.jobs : Array.isArray(cron.value) ? cron.value : []
-  const pausedJobs = readPausedCronCache(storage)
+  // Active tasks from the official cron.manage door — no local paused cache.
+  const { jobs: activeJobs } = summarizeCronJobs(cron.value)
   const platformEntries = Object.values(status.value?.gateway_platforms || status.value?.platforms || {})
   const connectedPlatforms = platformEntries.filter(platform => {
     const state = String(platform?.state || platform?.status || '').toLowerCase()
@@ -86,8 +86,8 @@ export function Support({ storage }) {
           tone: connectedPlatforms ? 'good' : 'warn'
         }),
         h(Metric, {
-          label: 'משימות',
-          value: `${activeJobs.length} פעילות · ${pausedJobs.length} מושהות`,
+          label: 'משימות פעילות',
+          value: `${activeJobs.length} פעילות`,
           tone: activeJobs.length ? 'good' : 'warn'
         })
       ),

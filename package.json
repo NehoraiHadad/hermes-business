@@ -60,6 +60,7 @@
     "concurrently": "^9.1.0",
     "electron": "43.2.0",
     "electron-builder": "26.15.3",
+    "js-yaml": "4.3.0",
     "playwright-core": "^1.54.1",
     "rcedit": "^5.0.2",
     "rollup": "4.62.3",
@@ -97,6 +98,14 @@
       {
         "from": "hermes-plugin/business-shell/plugin.js",
         "to": "business-bootstrap/plugin.js"
+      },
+      {
+        "from": "hermes-plugin/business-shell/dashboard",
+        "to": "business-bootstrap/dashboard",
+        "filter": [
+          "manifest.json",
+          "plugin_api.py"
+        ]
       },
       {
         "from": "hermes-plugin/business-shell/skills/business-bootstrap/SKILL.md",

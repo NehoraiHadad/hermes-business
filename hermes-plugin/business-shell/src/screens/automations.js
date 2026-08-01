@@ -1,50 +1,38 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { Badge, Button, host } from '@hermes/plugin-sdk'
 import { h } from '../dom.js'
-import { humanSchedule, readPausedCronCache, useAsync } from '../helpers.js'
+import { humanSchedule, isJobPaused, purgeLegacyPausedCache, useAsync } from '../helpers.js'
+import { loadScheduledTasks } from '../cron-source.js'
 import { Card, SectionTitle } from '../ui.js'
 import { NewTaskForm } from './automation-form.js'
 
-// Scheduled-task management. Hermes remains the source of truth; a short-lived
-// local cache only bridges paused jobs that the gateway omits from its list.
+// Scheduled-task management. Hermes is the ONLY source of truth: the list comes
+// from this plugin's own namespace-locked backend door, which reads the
+// authoritative scheduler list_jobs(include_disabled=True) — active AND paused,
+// one store, no local cache. If that companion backend isn't available the
+// loader falls back to the active-only cron.manage RPC and we say so honestly
+// instead of shadowing ghost rows. Mutations stay official cron.manage ops.
 export function Automations({ storage }) {
   const [refresh, setRefresh] = useState(0)
-  const [pausedJobs, setPausedJobs] = useState(() => readPausedCronCache(storage))
-  const result = useAsync(() => host.request('cron.manage', { action: 'list' }), [refresh])
-  const activeJobs = Array.isArray(result.value?.jobs)
-    ? result.value.jobs
-    : Array.isArray(result.value)
-      ? result.value
-      : []
-  const activeIds = new Set(activeJobs.map(job => job.id || job.name).filter(Boolean))
-  const jobs = [
-    ...activeJobs,
-    ...pausedJobs.filter(job => !activeIds.has(job.id || job.name))
-  ]
+  const result = useAsync(() => loadScheduledTasks(), [refresh])
+  const jobs = result.value?.jobs || []
+  const pausedListingSupported = Boolean(result.value?.pausedListingSupported)
 
-  function savePausedJobs(next) {
-    setPausedJobs(next)
-    storage.set('pausedCronJobs', next)
-  }
+  // Non-authoritative, one-time cleanup of any legacy paused-task cache.
+  useEffect(() => {
+    purgeLegacyPausedCache(storage)
+  }, [])
 
   async function toggle(job) {
     const id = job.id || job.name
     if (!id) return
-    const paused = job.paused || job.enabled === false
+    const paused = isJobPaused(job)
     try {
       await host.request('cron.manage', { action: paused ? 'resume' : 'pause', name: id })
-      if (paused) {
-        savePausedJobs(pausedJobs.filter(item => (item.id || item.name) !== id))
-      } else {
-        savePausedJobs([
-          ...pausedJobs.filter(item => (item.id || item.name) !== id),
-          { ...job, enabled: false, paused: true, cachedAt: new Date().toISOString() }
-        ])
-      }
       host.notify({
         kind: 'success',
         title: paused ? 'המשימה הופעלה' : 'המשימה הושהתה',
-        message: 'השינוי נשמר גם במסך Cron המלא.'
+        message: paused ? 'השינוי נשמר ב־Hermes המלא.' : 'היא מנוהלת כעת במסך Cron המלא של Hermes.'
       })
       setRefresh(value => value + 1)
     } catch (error) {
@@ -87,46 +75,32 @@ export function Automations({ storage }) {
                       h(
                         'div',
                         { className: 'mt-0.5 text-[0.6875rem] text-(--ui-text-tertiary)' },
-                        humanSchedule(job.schedule || job.cron)
+                        humanSchedule(job.schedule_display || job.schedule || job.cron)
                       )
                     ),
                     h(
                       'div',
                       { className: 'flex items-center gap-2' },
-                      h(
-                        Badge,
-                        { variant: job.enabled === false || job.paused ? 'muted' : 'default' },
-                        job.enabled === false || job.paused ? 'מושהית' : 'פעילה'
-                      ),
-                      h(
-                        Button,
-                        { variant: 'outline', size: 'sm', onClick: () => toggle(job) },
-                        job.enabled === false || job.paused ? 'הפעל' : 'השהה'
-                      )
+                      h(Badge, { variant: isJobPaused(job) ? 'muted' : 'default' }, isJobPaused(job) ? 'מושהית' : 'פעילה'),
+                      h(Button, { variant: 'outline', size: 'sm', onClick: () => toggle(job) }, isJobPaused(job) ? 'הפעל' : 'השהה')
                     )
                   )
                 )
               )
-            : h('div', { className: 'py-8 text-center text-xs text-(--ui-text-tertiary)' }, 'עדיין אין משימות קבועות.'),
+            : h('div', { className: 'py-8 text-center text-xs text-(--ui-text-tertiary)' }, 'עדיין אין משימות מתוזמנות.'),
+        // Honest degrade: shown only when the paused-inclusive backend door is
+        // unavailable and we fell back to the active-only cron.manage RPC.
+        pausedListingSupported
+          ? null
+          : h(
+              'p',
+              { className: 'mt-4 text-[0.6875rem] leading-5 text-(--ui-text-tertiary)' },
+              'התצוגה הפשוטה מציגה משימות פעילות מתוך Hermes. משימות מושהות נשמרות ב־Hermes ומנוהלות במסך ה־Cron המלא.'
+            ),
         h(
           'div',
           { className: 'mt-4 flex flex-wrap justify-end gap-2' },
-          h(
-            Button,
-            {
-              variant: 'text',
-              onClick: () => {
-                savePausedJobs([])
-                setRefresh(value => value + 1)
-                host.notify({
-                  kind: 'success',
-                  title: 'התצוגה סונכרנה',
-                  message: 'מטמון המשימות המושהות נוקה; Hermes המלא נשאר מקור האמת.'
-                })
-              }
-            },
-            'סנכרן'
-          ),
+          h(Button, { variant: 'text', onClick: () => setRefresh(value => value + 1) }, 'רענן'),
           h(Button, { variant: 'textStrong', onClick: () => host.navigate('/cron') }, 'פתח ניהול מלא')
         )
       ),

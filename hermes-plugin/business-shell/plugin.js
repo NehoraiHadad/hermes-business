@@ -5,12 +5,180 @@
 // Hermes Desktop loads this single file and compiles it without JSX, so every
 // element is built with React.createElement and only 'react' and
 // '@hermes/plugin-sdk' may be imported.
-import { StatusDot, Badge, Textarea, Input, host, Loader, useValue, evaluateRuntimeReadiness, Button, ROUTES_AREA, SIDEBAR_NAV_AREA, PALETTE_AREA } from '@hermes/plugin-sdk'
+import { host, StatusDot, Badge, Textarea, Input, Loader, useValue, evaluateRuntimeReadiness, Button, ROUTES_AREA, SIDEBAR_NAV_AREA, PALETTE_AREA } from '@hermes/plugin-sdk'
 import React, { useState, useEffect, useMemo } from 'react'
 
 // Hermes compiles the shipped plugin without JSX, so every element is built with
 // React.createElement. `h` is the shared shorthand used across the shell modules.
 const h = React.createElement;
+
+// Pure helpers and small hooks shared by the business shell screens. No JSX and
+// no side effects at module load — safe for the contract test that evaluates the
+// bundled plugin in a bare VM.
+
+// Legacy key: earlier builds shadowed paused cron jobs in plugin storage. That
+// store is never trusted again — see purgeLegacyPausedCache below.
+const LEGACY_PAUSED_CACHE_KEY = 'pausedCronJobs';
+
+const TOOL_COPY = {
+  google_calendar: 'בודק את היומן…',
+  google_drive: 'מחפש ב־Drive…',
+  gmail: 'עובד עם המייל…',
+  skills_list: 'בודק תהליכים שנלמדו…',
+  skill_manage: 'לומד את התהליך…',
+  cronjob: 'מעדכן משימה מתוזמנת…',
+  browser: 'פותח את הדפדפן…',
+  terminal: 'מבצע פעולה במחשב…'
+};
+
+function friendlyToolName(raw) {
+  const name = String(raw || '').toLowerCase();
+  const key = Object.keys(TOOL_COPY).find(candidate => name.includes(candidate));
+  return key ? TOOL_COPY[key] : 'מבצע פעולה…'
+}
+
+function humanSchedule(raw) {
+  // Accept either the official human string (schedule_display) or the structured
+  // schedule dict. For a dict we pull a known display/expr field — never String()
+  // the object, which would render "[object Object]"; an unknown shape degrades to
+  // the Hermes-schedule fallback below.
+  const schedule =
+    raw && typeof raw === 'object'
+      ? String(raw.schedule_display || raw.display || raw.expr || raw.cron || raw.value || '')
+      : String(raw || '');
+  const known = {
+    '0 8 * * 0-4': 'ימים א׳–ה׳ בשעה 08:00',
+    '0 9 * * *': 'כל יום בשעה 09:00',
+    '0 9 * * 0': 'כל יום ראשון בשעה 09:00'
+  };
+  return known[schedule] || schedule || 'לפי לוח הזמנים של Hermes'
+}
+
+// A job is paused when the OFFICIAL record says so — never a local flag. The
+// authoritative schema carries state==='paused'; enabled===false and the legacy
+// paused flag are honored too so both doors and older normalizers agree.
+function isJobPaused(job) {
+  return Boolean(job && (job.state === 'paused' || job.enabled === false || job.paused === true))
+}
+
+// Single source of truth for the scheduled-task list: normalize a cron.manage
+// result to { jobs, pausedListingSupported }. In Hermes 0.19.x the gateway RPC
+// door (cronjob action:'list' -> list_jobs(include_disabled=False)) is
+// active-only, so pausedListingSupported is true only if the surface itself
+// returned a paused job. That lets a future paused-inclusive Hermes render them
+// inline, while today's active-only door is reported honestly (no cache).
+function summarizeCronJobs(result) {
+  const jobs = Array.isArray(result?.jobs) ? result.jobs : Array.isArray(result) ? result : [];
+  return { jobs, pausedListingSupported: jobs.some(isJobPaused) }
+}
+
+// One-time, non-authoritative cleanup of the legacy paused-task cache, confined
+// to plugin storage. Returns how many stale rows were dropped. The value is
+// never read back as truth — pause/resume state lives only in official Hermes.
+function purgeLegacyPausedCache(storage) {
+  const legacy = storage.get(LEGACY_PAUSED_CACHE_KEY, null);
+  if (legacy == null) return 0
+  if (typeof storage.remove === 'function') storage.remove(LEGACY_PAUSED_CACHE_KEY);
+  else storage.set(LEGACY_PAUSED_CACHE_KEY, null);
+  return Array.isArray(legacy) ? legacy.length : 0
+}
+
+function flattenSkillNames(value) {
+  if (Array.isArray(value)) {
+    return value.flatMap(flattenSkillNames)
+  }
+
+  if (value && typeof value === 'object') {
+    if (typeof value.name === 'string') {
+      return [value.name]
+    }
+
+    return Object.values(value).flatMap(flattenSkillNames)
+  }
+
+  return typeof value === 'string' ? [value] : []
+}
+
+function useAsync(load, deps) {
+  const [state, setState] = useState({ loading: true, value: null, error: null });
+
+  useEffect(() => {
+    let live = true;
+    setState(current => ({ ...current, loading: true, error: null }));
+    Promise.resolve()
+      .then(load)
+      .then(value => live && setState({ loading: false, value, error: null }))
+      .catch(error => live && setState({ loading: false, value: null, error }));
+    return () => {
+      live = false;
+    }
+  }, deps);
+
+  return state
+}
+
+// Single source of truth for the scheduled-task LIST, active + paused.
+//
+// The desktop PluginContext hands each plugin a `rest(path)` door that is
+// namespace-locked BY CONSTRUCTION to that plugin's own backend at
+// /api/plugins/<id> (Hermes apps/desktop/src/contrib/plugin.ts::PluginContext
+// -> hermes.ts::pluginRest: it rejects '..' and cannot address a core route or
+// another plugin's namespace). Our companion backend
+// (hermes-plugin/business-shell/dashboard/plugin_api.py) answers `/cron/jobs`
+// by calling Hermes' authoritative scheduler `list_jobs(include_disabled=True)`
+// — the SAME store the core /api/cron/jobs route reads. So this door is a
+// paused-inclusive view of the one official scheduler: no parallel store, no
+// cache. Mutations stay official scheduler operations on the cron.manage RPC.
+const PLUGIN_BACKEND_NAMESPACE = '/api/plugins/business-shell';
+
+let pluginRest = null;
+
+// The plugin's `register(ctx)` installs the real namespace-scoped door here.
+// Kept module-local (like the imported `host`) so the screens don't need `ctx`
+// threaded through every prop. A non-function (older SDK, missing door) simply
+// disables the paused-inclusive path and we fall back honestly.
+function setPluginRest(rest) {
+  pluginRest = typeof rest === 'function' ? rest : null;
+}
+
+function hasPausedInclusiveDoor() {
+  return typeof pluginRest === 'function'
+}
+
+function normalizeJobs(payload) {
+  if (Array.isArray(payload)) return payload
+  if (payload && Array.isArray(payload.jobs)) return payload.jobs
+  return []
+}
+
+// Load scheduled tasks with capability detection.
+//   Preferred: the companion backend door (paused-inclusive, authoritative).
+//   Fallback:  the active-only cron.manage gateway RPC — used when the backend
+//              is unavailable (older Hermes, the companion plugin not
+//              installed/enabled, an OAuth remote where ctx.rest is a no-op, or
+//              any transport error).
+// Both doors read live official Hermes state; neither is a cache. Returns
+// { jobs, pausedListingSupported, source } so the UI can render paused rows
+// inline when supported and degrade honestly when not.
+async function loadScheduledTasks() {
+  if (pluginRest) {
+    try {
+      const payload = await pluginRest('/cron/jobs');
+      // The backend itself fails closed to a degraded body on a scheduler error
+      // (paused_listing_supported:false / degraded:true). Don't claim paused-
+      // inclusive support in that case — fall through to the active-only door so
+      // the UI degrades honestly instead of hiding its own fallback notice.
+      const degraded = payload && (payload.degraded === true || payload.paused_listing_supported === false);
+      if (!degraded) {
+        return { jobs: normalizeJobs(payload), pausedListingSupported: true, source: 'plugin-backend' }
+      }
+    } catch {
+      // fall through to the active-only gateway door
+    }
+  }
+  const viaRpc = await host.request('cron.manage', { action: 'list' });
+  return { ...summarizeCronJobs(viaRpc), source: 'cron.manage' }
+}
 
 // Reusable presentational primitives shared by every screen. Tailwind-in-string
 // classes mirror the Hermes design tokens so the shell matches the host UI.
@@ -85,91 +253,6 @@ function Field({ label, name, value, onChange, multiline = false, placeholder = 
       onChange: event => onChange(name, event.target.value)
     })
   )
-}
-
-// Pure helpers and small hooks shared by the business shell screens. No JSX and
-// no side effects at module load — safe for the contract test that evaluates the
-// bundled plugin in a bare VM.
-
-const PAUSED_CRON_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
-
-const TOOL_COPY = {
-  google_calendar: 'בודק את היומן…',
-  google_drive: 'מחפש ב־Drive…',
-  gmail: 'עובד עם המייל…',
-  skills_list: 'בודק תהליכים שנלמדו…',
-  skill_manage: 'לומד את התהליך…',
-  cronjob: 'מעדכן משימה מתוזמנת…',
-  browser: 'פותח את הדפדפן…',
-  terminal: 'מבצע פעולה במחשב…'
-};
-
-function friendlyToolName(raw) {
-  const name = String(raw || '').toLowerCase();
-  const key = Object.keys(TOOL_COPY).find(candidate => name.includes(candidate));
-  return key ? TOOL_COPY[key] : 'מבצע פעולה…'
-}
-
-function humanSchedule(raw) {
-  const schedule =
-    raw && typeof raw === 'object'
-      ? String(raw.display || raw.expr || raw.cron || raw.value || '')
-      : String(raw || '');
-  const known = {
-    '0 8 * * 0-4': 'ימים א׳–ה׳ בשעה 08:00',
-    '0 9 * * *': 'כל יום בשעה 09:00',
-    '0 9 * * 0': 'כל יום ראשון בשעה 09:00'
-  };
-  return known[schedule] || schedule || 'לפי לוח הזמנים של Hermes'
-}
-
-function readPausedCronCache(storage) {
-  const now = Date.now();
-  const cached = storage.get('pausedCronJobs', []);
-  const fresh = Array.isArray(cached)
-    ? cached.filter(job => {
-        const cachedAt = Date.parse(String(job?.cachedAt || ''));
-        return Number.isFinite(cachedAt) && now - cachedAt < PAUSED_CRON_CACHE_TTL_MS
-      })
-    : [];
-  if (fresh.length !== (Array.isArray(cached) ? cached.length : 0)) {
-    storage.set('pausedCronJobs', fresh);
-  }
-  return fresh
-}
-
-function flattenSkillNames(value) {
-  if (Array.isArray(value)) {
-    return value.flatMap(flattenSkillNames)
-  }
-
-  if (value && typeof value === 'object') {
-    if (typeof value.name === 'string') {
-      return [value.name]
-    }
-
-    return Object.values(value).flatMap(flattenSkillNames)
-  }
-
-  return typeof value === 'string' ? [value] : []
-}
-
-function useAsync(load, deps) {
-  const [state, setState] = useState({ loading: true, value: null, error: null });
-
-  useEffect(() => {
-    let live = true;
-    setState(current => ({ ...current, loading: true, error: null }));
-    Promise.resolve()
-      .then(load)
-      .then(value => live && setState({ loading: false, value, error: null }))
-      .catch(error => live && setState({ loading: false, value: null, error }));
-    return () => {
-      live = false;
-    }
-  }, deps);
-
-  return state
 }
 
 // Canonical, cross-runtime onboarding data contract. Plain JS so BOTH the React /
@@ -644,10 +727,8 @@ function Overview({ onOnboarding, storage }) {
       : sessionRows;
     return rows.slice(0, 8)
   }, [sessionQuery, sessions.value]);
-  const activeJobs = Array.isArray(cron.value?.jobs) ? cron.value.jobs : Array.isArray(cron.value) ? cron.value : [];
-  const pausedJobs = readPausedCronCache(storage);
-  const activeJobIds = new Set(activeJobs.map(job => job.id || job.name).filter(Boolean));
-  const jobs = [...activeJobs, ...pausedJobs.filter(job => !activeJobIds.has(job.id || job.name))];
+  // Active tasks straight from the official cron.manage door — no local cache.
+  const { jobs } = summarizeCronJobs(cron.value);
 
   return h(
     React.Fragment,
@@ -693,7 +774,7 @@ function Overview({ onOnboarding, storage }) {
         h(Metric, { label: 'פרופיל פעיל', value: profile || 'default', tone: 'good' }),
         h(Metric, {
           label: 'פעילות',
-          value: `${sessionCount} שיחות אחרונות · ${jobs.length} משימות`,
+          value: `${sessionCount} שיחות אחרונות · ${jobs.length} משימות פעילות`,
           tone: 'good'
         })
       )
@@ -1009,46 +1090,33 @@ function NewTaskForm({ onCreated }) {
   )
 }
 
-// Scheduled-task management. Hermes remains the source of truth; a short-lived
-// local cache only bridges paused jobs that the gateway omits from its list.
+// Scheduled-task management. Hermes is the ONLY source of truth: the list comes
+// from this plugin's own namespace-locked backend door, which reads the
+// authoritative scheduler list_jobs(include_disabled=True) — active AND paused,
+// one store, no local cache. If that companion backend isn't available the
+// loader falls back to the active-only cron.manage RPC and we say so honestly
+// instead of shadowing ghost rows. Mutations stay official cron.manage ops.
 function Automations({ storage }) {
   const [refresh, setRefresh] = useState(0);
-  const [pausedJobs, setPausedJobs] = useState(() => readPausedCronCache(storage));
-  const result = useAsync(() => host.request('cron.manage', { action: 'list' }), [refresh]);
-  const activeJobs = Array.isArray(result.value?.jobs)
-    ? result.value.jobs
-    : Array.isArray(result.value)
-      ? result.value
-      : [];
-  const activeIds = new Set(activeJobs.map(job => job.id || job.name).filter(Boolean));
-  const jobs = [
-    ...activeJobs,
-    ...pausedJobs.filter(job => !activeIds.has(job.id || job.name))
-  ];
+  const result = useAsync(() => loadScheduledTasks(), [refresh]);
+  const jobs = result.value?.jobs || [];
+  const pausedListingSupported = Boolean(result.value?.pausedListingSupported);
 
-  function savePausedJobs(next) {
-    setPausedJobs(next);
-    storage.set('pausedCronJobs', next);
-  }
+  // Non-authoritative, one-time cleanup of any legacy paused-task cache.
+  useEffect(() => {
+    purgeLegacyPausedCache(storage);
+  }, []);
 
   async function toggle(job) {
     const id = job.id || job.name;
     if (!id) return
-    const paused = job.paused || job.enabled === false;
+    const paused = isJobPaused(job);
     try {
       await host.request('cron.manage', { action: paused ? 'resume' : 'pause', name: id });
-      if (paused) {
-        savePausedJobs(pausedJobs.filter(item => (item.id || item.name) !== id));
-      } else {
-        savePausedJobs([
-          ...pausedJobs.filter(item => (item.id || item.name) !== id),
-          { ...job, enabled: false, paused: true, cachedAt: new Date().toISOString() }
-        ]);
-      }
       host.notify({
         kind: 'success',
         title: paused ? 'המשימה הופעלה' : 'המשימה הושהתה',
-        message: 'השינוי נשמר גם במסך Cron המלא.'
+        message: paused ? 'השינוי נשמר ב־Hermes המלא.' : 'היא מנוהלת כעת במסך Cron המלא של Hermes.'
       });
       setRefresh(value => value + 1);
     } catch (error) {
@@ -1091,46 +1159,32 @@ function Automations({ storage }) {
                       h(
                         'div',
                         { className: 'mt-0.5 text-[0.6875rem] text-(--ui-text-tertiary)' },
-                        humanSchedule(job.schedule || job.cron)
+                        humanSchedule(job.schedule_display || job.schedule || job.cron)
                       )
                     ),
                     h(
                       'div',
                       { className: 'flex items-center gap-2' },
-                      h(
-                        Badge,
-                        { variant: job.enabled === false || job.paused ? 'muted' : 'default' },
-                        job.enabled === false || job.paused ? 'מושהית' : 'פעילה'
-                      ),
-                      h(
-                        Button,
-                        { variant: 'outline', size: 'sm', onClick: () => toggle(job) },
-                        job.enabled === false || job.paused ? 'הפעל' : 'השהה'
-                      )
+                      h(Badge, { variant: isJobPaused(job) ? 'muted' : 'default' }, isJobPaused(job) ? 'מושהית' : 'פעילה'),
+                      h(Button, { variant: 'outline', size: 'sm', onClick: () => toggle(job) }, isJobPaused(job) ? 'הפעל' : 'השהה')
                     )
                   )
                 )
               )
-            : h('div', { className: 'py-8 text-center text-xs text-(--ui-text-tertiary)' }, 'עדיין אין משימות קבועות.'),
+            : h('div', { className: 'py-8 text-center text-xs text-(--ui-text-tertiary)' }, 'עדיין אין משימות מתוזמנות.'),
+        // Honest degrade: shown only when the paused-inclusive backend door is
+        // unavailable and we fell back to the active-only cron.manage RPC.
+        pausedListingSupported
+          ? null
+          : h(
+              'p',
+              { className: 'mt-4 text-[0.6875rem] leading-5 text-(--ui-text-tertiary)' },
+              'התצוגה הפשוטה מציגה משימות פעילות מתוך Hermes. משימות מושהות נשמרות ב־Hermes ומנוהלות במסך ה־Cron המלא.'
+            ),
         h(
           'div',
           { className: 'mt-4 flex flex-wrap justify-end gap-2' },
-          h(
-            Button,
-            {
-              variant: 'text',
-              onClick: () => {
-                savePausedJobs([]);
-                setRefresh(value => value + 1);
-                host.notify({
-                  kind: 'success',
-                  title: 'התצוגה סונכרנה',
-                  message: 'מטמון המשימות המושהות נוקה; Hermes המלא נשאר מקור האמת.'
-                });
-              }
-            },
-            'סנכרן'
-          ),
+          h(Button, { variant: 'text', onClick: () => setRefresh(value => value + 1) }, 'רענן'),
           h(Button, { variant: 'textStrong', onClick: () => host.navigate('/cron') }, 'פתח ניהול מלא')
         )
       ),
@@ -1151,8 +1205,8 @@ function Support({ storage }) {
   const cron = useAsync(() => host.request('cron.manage', { action: 'list' }), [refresh]);
   const [logs, setLogs] = useState('');
   const [checking, setChecking] = useState(false);
-  const activeJobs = Array.isArray(cron.value?.jobs) ? cron.value.jobs : Array.isArray(cron.value) ? cron.value : [];
-  const pausedJobs = readPausedCronCache(storage);
+  // Active tasks from the official cron.manage door — no local paused cache.
+  const { jobs: activeJobs } = summarizeCronJobs(cron.value);
   const platformEntries = Object.values(status.value?.gateway_platforms || status.value?.platforms || {});
   const connectedPlatforms = platformEntries.filter(platform => {
     const state = String(platform?.state || platform?.status || '').toLowerCase();
@@ -1221,8 +1275,8 @@ function Support({ storage }) {
           tone: connectedPlatforms ? 'good' : 'warn'
         }),
         h(Metric, {
-          label: 'משימות',
-          value: `${activeJobs.length} פעילות · ${pausedJobs.length} מושהות`,
+          label: 'משימות פעילות',
+          value: `${activeJobs.length} פעילות`,
           tone: activeJobs.length ? 'good' : 'warn'
         })
       ),
@@ -1384,6 +1438,11 @@ export default {
   name: 'Hermes לעסק',
   defaultEnabled: true,
   register(ctx) {
+    // Install this plugin's own namespace-locked backend door (/api/plugins/
+    // business-shell). It powers the paused-inclusive scheduled-task list and
+    // degrades to the active-only cron.manage RPC when the companion backend
+    // isn't present. Safe no-op when the runtime SDK doesn't expose ctx.rest.
+    setPluginRest(ctx.rest);
     ctx.registerMany([
       {
         id: 'page',

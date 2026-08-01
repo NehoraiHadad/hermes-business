@@ -72,6 +72,16 @@ function bootstrapSkillSource() {
   return path.join(__dirname, '..', 'hermes-plugin', 'business-shell', 'skills', 'business-bootstrap', 'SKILL.md')
 }
 
+// The READ-ONLY companion backend plugin (dashboard/manifest.json + plugin_api.py)
+// that Hermes mounts at /api/plugins/business-shell/ — the paused-inclusive
+// source of truth the desktop plugin reaches through its namespace-locked
+// ctx.rest. Only these two files make up the runtime payload.
+const DESKTOP_BACKEND_FILES = Object.freeze(['manifest.json', 'plugin_api.py'])
+
+function desktopBackendSourceDir() {
+  return path.join(__dirname, '..', 'hermes-plugin', 'business-shell', 'dashboard')
+}
+
 function companionBootstrapSource() {
   return path.join(__dirname, '..', 'installer', 'bootstrap-companion.ps1')
 }
@@ -111,6 +121,8 @@ module.exports = {
   getHermesVersion,
   desktopPluginSource,
   bootstrapSkillSource,
+  desktopBackendSourceDir,
+  DESKTOP_BACKEND_FILES,
   companionBootstrapSource,
   whatsappPolicyPluginSource,
   WHATSAPP_POLICY_PLUGIN_ID,

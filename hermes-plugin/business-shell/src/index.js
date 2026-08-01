@@ -1,5 +1,6 @@
 import { PALETTE_AREA, ROUTES_AREA, SIDEBAR_NAV_AREA, host } from '@hermes/plugin-sdk'
 import { h } from './dom.js'
+import { setPluginRest } from './cron-source.js'
 import { BusinessShell } from './shell.js'
 
 // Entry module: the official Hermes Desktop plugin contract. It contributes a
@@ -12,6 +13,11 @@ export default {
   name: 'Hermes לעסק',
   defaultEnabled: true,
   register(ctx) {
+    // Install this plugin's own namespace-locked backend door (/api/plugins/
+    // business-shell). It powers the paused-inclusive scheduled-task list and
+    // degrades to the active-only cron.manage RPC when the companion backend
+    // isn't present. Safe no-op when the runtime SDK doesn't expose ctx.rest.
+    setPluginRest(ctx.rest)
     ctx.registerMany([
       {
         id: 'page',

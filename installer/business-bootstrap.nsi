@@ -51,10 +51,21 @@ Section "Install"
   File "lib\ReleaseAcquisition.ps1"
   File "lib\Payload.ps1"
   File "lib\VerifyMode.ps1"
+  File "lib\BackendEnable.ps1"
+  File "lib\enable_plugin.py"
   File "lib\BusinessInstall.ps1"
   File "lib\CompanionEntrypoint.ps1"
   File "lib\CompanionInstall.ps1"
   File "lib\CompanionManifest.ps1"
+  SetOutPath "$INSTDIR"
+
+  ; READ-ONLY companion backend payload (paused-inclusive source of truth). The
+  ; bootstrap installs dashboard\manifest.json + plugin_api.py into
+  ; <HERMES_HOME>\plugins\business-shell\dashboard and enables business-shell in
+  ; config.yaml — all inside the business-shell payload transaction.
+  SetOutPath "$INSTDIR\dashboard"
+  File "..\hermes-plugin\business-shell\dashboard\manifest.json"
+  File "..\hermes-plugin\business-shell\dashboard\plugin_api.py"
   SetOutPath "$INSTDIR"
 
   SetOutPath "$INSTDIR\whatsapp-policy"
