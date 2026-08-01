@@ -73,16 +73,31 @@ describe('verifyEvidence', () => {
 
   it('rejects a bogus/unreachable git_head for BOTH committed and working-tree', () => {
     // The all-zeros hash resolves to no object, so it is neither HEAD nor an
-    // ancestor. Fail closed regardless of state — working-tree is no longer an
-    // unlimited bypass for arbitrary heads.
+    // ancestor: it classifies as `divergent`, which no git_state accepts, so
+    // verification fails closed. Inject the classifier via verifyEvidence's seam
+    // rather than letting the default spawn merge-base + diff on a bogus object
+    // (a real subprocess that is slow and timing-flaky) — and assert each run
+    // gets its OWN fresh memo cache, classifying once and never leaking a result
+    // across runs.
     const dir = scratchDir()
+    const bogus = '0'.repeat(40)
+    let underlying = 0
+    const diverge = (head /* , current, opts */) => {
+      underlying++
+      expect(head).toBe(bogus) // the bogus git_head is what reaches the classifier
+      return { relation: 'divergent', changed: [] }
+    }
     for (const git_state of ['committed', 'working-tree']) {
+      const before = underlying
+      const classify = memoizeProvenance(diverge) // fresh per-run cache, as the default is
       const env = buildEnvelope('shared-state', { ok: true }, { tool: 't' })
       env.git_state = git_state
-      env.git_head = '0'.repeat(40)
+      env.git_head = bogus
       write(dir, 'shared-state.json', env)
-      expect(verifyEvidence({ dir }).ok).toBe(false)
+      expect(verifyEvidence({ dir, classify }).ok).toBe(false) // divergent → fail closed for both
+      expect(underlying - before).toBe(1) // this run's fresh cache classified exactly once
     }
+    expect(underlying).toBe(2) // two independent runs, no cross-run cache leakage
   })
 
   it('accepts a working-tree envelope based on the current HEAD', () => {
