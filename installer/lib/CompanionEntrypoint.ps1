@@ -18,32 +18,16 @@ function Get-CompanionInstallRoot {
   return Join-Path $env:LOCALAPPDATA 'Programs\hermes-business'
 }
 
-function Get-CompanionExecutable {
-  # NSIS ONLY. The production companion is installed by the trusted, (eventually)
-  # code-signed NSIS installer into a known per-user root; locating its single
-  # app exe by scan is safe because the payload is not attacker-controlled. The
-  # untrusted ZIP path does NOT use this — it resolves a manifest-declared,
-  # strictly-validated entrypoint via Resolve-CompanionEntrypoint instead.
-  param([string]$InstallRoot)
-  $directory = Get-CompanionInstallRoot -InstallRoot $InstallRoot
-  if (-not (Test-Path -LiteralPath $directory -PathType Container)) {
-    return $null
-  }
-  $candidate = Get-ChildItem -LiteralPath $directory -Recurse -Filter '*.exe' |
-    Where-Object { $_.Name -notmatch '^Uninstall' } |
-    Sort-Object Length -Descending |
-    Select-Object -First 1
-  return $candidate.FullName
-}
-
 function Assert-CompanionEntrypoint {
-  # Validate a manifest-declared ZIP entrypoint as a path SHAPE (no filesystem
-  # access yet). Must be a relative, single, unambiguous *.exe under the install
-  # root — rejecting absolute/drive/UNC/traversal/colon(ADS)/backslash tricks and
-  # directory markers. Returns the forward-slash-normalized relative path.
+  # Validate a manifest-declared entrypoint (NSIS *and* ZIP) as a path SHAPE (no
+  # filesystem access yet). Must be a relative, single, unambiguous *.exe under
+  # the install root — rejecting absolute/drive/UNC/traversal/colon(ADS)/backslash
+  # tricks and directory markers. Returns the forward-slash-normalized relative
+  # path. This replaces the former "largest recursive exe wins" scan: the
+  # installed executable is NAMED by the manifest, never guessed off the disk.
   param([string]$Entrypoint)
   if ([string]::IsNullOrWhiteSpace($Entrypoint)) {
-    throw "A 'zip' companion release must declare an 'entrypoint' (relative path to the app .exe)."
+    throw "A companion release must declare an 'entrypoint' (relative path to the app .exe)."
   }
   $value = $Entrypoint.Trim()
   if ($value.IndexOf('\') -ge 0) { throw "The companion entrypoint must use '/' separators, not '\': '$Entrypoint'." }

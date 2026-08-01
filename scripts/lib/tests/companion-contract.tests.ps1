@@ -7,9 +7,16 @@ function Invoke-CompanionContractTests {
   param([Parameter(Mandatory)][string]$WorkRoot, [Parameter(Mandatory)][string]$ValidSha)
   Write-Host 'Companion release contract:'
 
-  Test-Case 'valid manifest defaults to nsis format' {
-    $r = Assert-CompanionRelease -Release ([pscustomobject]@{ version = '0.3.3'; url = 'https://x/y.exe'; sha256 = $ValidSha })
+  Test-Case 'valid manifest defaults to nsis format and requires an entrypoint' {
+    $r = Assert-CompanionRelease -Release ([pscustomobject]@{ version = '0.3.3'; url = 'https://x/y.exe'; sha256 = $ValidSha; entrypoint = 'hermes-business.exe' })
     Assert-True ($r.format -eq 'nsis') "expected default nsis, got $($r.format)"
+    Assert-True ($r.entrypoint -eq 'hermes-business.exe') "nsis entrypoint not carried: $($r.entrypoint)"
+  }
+  Test-Case 'nsis manifest without an entrypoint is rejected (no filesystem guessing)' {
+    $threw = $false
+    try { Assert-CompanionRelease -Release ([pscustomobject]@{ version = '0.3.3'; url = 'https://x/y.exe'; sha256 = $ValidSha }) | Out-Null }
+    catch { $threw = $true; Assert-True ($_.Exception.Message -match 'entrypoint') "unexpected: $($_.Exception.Message)" }
+    Assert-True $threw 'an nsis manifest without an entrypoint was accepted'
   }
   Test-Case 'valid manifest accepts explicit zip format' {
     $r = Assert-CompanionRelease -Release ([pscustomobject]@{ version = '0.3.3'; url = 'https://x/y.zip'; sha256 = $ValidSha; format = 'ZIP'; entrypoint = 'hermes-business.exe' })
@@ -34,7 +41,7 @@ function Invoke-CompanionContractTests {
     Assert-True $threw 'a plain-HTTP URL was accepted without override'
   }
   Test-Case 'loopback HTTP allowed only with the insecure override' {
-    $r = Assert-CompanionRelease -Release ([pscustomobject]@{ version = '0.3.3'; url = 'http://127.0.0.1:1/y'; sha256 = $ValidSha }) -AllowInsecureUrl
+    $r = Assert-CompanionRelease -Release ([pscustomobject]@{ version = '0.3.3'; url = 'http://127.0.0.1:1/y'; sha256 = $ValidSha; entrypoint = 'hermes-business.exe' }) -AllowInsecureUrl
     Assert-True ($r.uri.IsLoopback) 'loopback override did not resolve'
   }
   Test-Case 'out-of-range companion version is rejected' {
@@ -47,7 +54,19 @@ function Invoke-CompanionContractTests {
     $isolated = Join-Path $WorkRoot 'iso-install'
     New-Item -ItemType Directory -Force -Path $isolated | Out-Null
     [System.IO.File]::WriteAllBytes((Join-Path $isolated 'hermes-business.exe'), ([byte[]](1..200)))
-    $found = Get-CompanionExecutable -InstallRoot $isolated
+    # Resolution is now deterministic + manifest-named, never a filesystem scan.
+    $found = Resolve-CompanionEntrypoint -InstallRoot $isolated -Entrypoint 'hermes-business.exe'
     Assert-True ($found -and $found.StartsWith([System.IO.Path]::GetFullPath($isolated))) "exe not resolved from the isolated root: $found"
+  }
+  Test-Case 'missing-entrypoint error is format-neutral (applies to nsis and zip alike)' {
+    $message = $null
+    try { Assert-CompanionEntrypoint -Entrypoint '' | Out-Null }
+    catch { $message = $_.Exception.Message }
+    Assert-True ($null -ne $message) 'a missing entrypoint was accepted'
+    Assert-True ($message -match 'companion release must declare') "unexpected missing-entrypoint message: $message"
+    Assert-True ($message -notmatch "'zip'") "the missing-entrypoint error is still zip-specific: $message"
+  }
+  Test-Case 'the largest-exe heuristic is gone — Get-CompanionExecutable no longer exists' {
+    Assert-True (-not (Get-Command 'Get-CompanionExecutable' -ErrorAction SilentlyContinue)) 'the largest-exe scan is still defined'
   }
 }

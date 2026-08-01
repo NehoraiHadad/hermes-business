@@ -202,6 +202,20 @@ leaves no partial `.part` file), safe-extraction of a benign archive with atomic
 promote, zip-slip refusal, the `zip`-requires-`entrypoint` contract, entrypoint
 shape validation, and fail-closed when the entrypoint is absent after extraction.
 
+**NSIS companion contract** (`scripts/e2e-companion-nsis-contract.ps1`, plus the
+offline `Companion install transaction` suite): the trusted NSIS path now resolves
+the installed executable **deterministically from the manifest `entrypoint`** —
+the same policy as `zip` — instead of the removed "largest recursive exe wins"
+scan. A real external fixture installer proves, in an isolated Hebrew/spaces root:
+the manifest-named exe is selected while a larger decoy is ignored; a failing
+installer **and** a broken post-install contract each roll back and leave the
+prior companion byte-intact; and a pre-seeded Hermes-home sentinel is never
+mutated. The `GitHub-acquisition` half is covered offline by the
+`Release acquisition (GitHub)` suite: release selection resolves by source
+`__version__` (never the CalVer tag), and the immutable installer blob is verified
+against GitHub's git blob SHA-1 (tampered / lying-endpoint / undersized / wrong
+content all fail closed) before it can be written or run.
+
 **Not run for safety (mutation risk, not isolatable):** `e2e-installed-partner-ui`
 (activates a personality that needs a real Hermes install). Its safety-critical
 assertions are covered green by unit tests (`partner-mode`, `sandbox-config`,
@@ -407,8 +421,16 @@ tokens (`sk-xxxx…`, `ghp_xxxx…`) and is out of scope like everything ignored
 
 ## 8. Maintainability
 
-Guideline ≤150 lines/file. A small number of pre-existing cohesive modules and
-test suites exceed it modestly; none are introduced by acceptance edits. The
+Guideline ≤150 lines/file. The official-release installer logic is a stable
+facade (`installer/lib/Release.ps1`) that fail-closed dot-sources two cohesive
+parts — `ReleaseSelection.ps1` (which tagged release to install, by source
+`__version__`) and `ReleaseAcquisition.ps1` (immutable installer-blob download +
+verification and the install run) — each ≤150 lines. `business-bootstrap.nsi`
+File-bundles both parts and the drift guard `release-packaging.tests.ps1` proves
+every facade-loaded part is bundled and parse-gated in load order, so a packaged
+thin install can never omit a split dependency. A small number of pre-existing
+cohesive modules and test suites exceed the guideline modestly; none are
+introduced by acceptance edits. The
 generated `hermes-plugin/business-shell/plugin.js` bundle is a documented
 generated exception. Repository hygiene is deterministic: generated promo-video
 outputs (`out/`, `public/soundtrack.wav`, caches) are git-ignored via

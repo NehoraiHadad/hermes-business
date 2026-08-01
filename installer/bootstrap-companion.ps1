@@ -25,6 +25,7 @@ foreach ($dependency in @(
     @{ File = 'ZipPolicy.ps1';           Probe = 'Resolve-SafeZipTarget' },
     @{ File = 'SafeZip.ps1';             Probe = 'Expand-ArchiveSafely' },
     @{ File = 'CompanionEntrypoint.ps1'; Probe = 'Resolve-CompanionEntrypoint' },
+    @{ File = 'CompanionInstall.ps1';    Probe = 'Invoke-CompanionInstall' },
     @{ File = 'CompanionManifest.ps1';   Probe = 'Assert-CompanionRelease' }
   )) {
   if (Get-Command $dependency.Probe -ErrorAction SilentlyContinue) { continue }
@@ -63,21 +64,32 @@ function Install-BusinessCompanion {
     Write-Step "Companion SHA-256 checksum verified: $($release.sha256)"
 
     $directory = Get-CompanionInstallRoot -InstallRoot $InstallRoot
+    # Both formats install through ONE transaction (Invoke-CompanionInstall): the
+    # prior companion is moved aside, the format-specific action mutates only the
+    # isolated install root, and the app exe is resolved DETERMINISTICALLY from the
+    # manifest-declared entrypoint. Any failure rolls back to the prior companion.
     if ($isZip) {
-      # Host-agnostic portable payload: extract with fail-closed per-entry
-      # validation into a staging dir, then atomically promote over the isolated
-      # install root. Never touches the shared Hermes user state. The app exe is
-      # the manifest-declared entrypoint — not a scan of the archive's contents.
-      Expand-ArchiveSafely -ArchivePath $artifact -Destination $directory | Out-Null
-      $executable = Resolve-CompanionEntrypoint -InstallRoot $InstallRoot -Entrypoint $release.entrypoint
+      # Host-agnostic portable payload: fail-closed per-entry validation + atomic
+      # promotion into the install root. Never touches the shared Hermes state.
+      $installAction = {
+        param($root)
+        Expand-ArchiveSafely -ArchivePath $artifact -Destination $root | Out-Null
+      }.GetNewClosure()
     }
     else {
-      $process = Start-Process -FilePath $artifact -ArgumentList '/S' -Wait -PassThru -WindowStyle Hidden
-      if ($process.ExitCode -ne 0) {
-        throw "The companion installer exited with code $($process.ExitCode)."
-      }
-      $executable = Get-CompanionExecutable -InstallRoot $InstallRoot
+      # Trusted NSIS installer, directed INTO the isolated root. NSIS consumes the
+      # whole tail after '/D=' verbatim (unquoted, last arg), so a single argument
+      # string is the only form that survives spaces/Hebrew in $root.
+      $installAction = {
+        param($root)
+        $process = Start-Process -FilePath $artifact -Wait -PassThru -WindowStyle Hidden `
+          -ArgumentList ('/S /D={0}' -f $root)
+        if ($process.ExitCode -ne 0) {
+          throw "The companion installer exited with code $($process.ExitCode)."
+        }
+      }.GetNewClosure()
     }
+    $executable = Invoke-CompanionInstall -Entrypoint $release.entrypoint -InstallAction $installAction -InstallRoot $InstallRoot
     if (-not $executable -or -not (Test-Path -LiteralPath $executable -PathType Leaf)) {
       throw 'The companion install returned success without producing the application executable.'
     }

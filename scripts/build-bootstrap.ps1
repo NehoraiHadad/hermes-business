@@ -8,6 +8,15 @@ $manifestPath = Join-Path $installerDirectory 'companion-release.json'
 $cacheRoot = Join-Path $env:LOCALAPPDATA 'electron-builder\Cache\nsis'
 $companionUrl = [string]$env:HERMES_BUSINESS_COMPANION_URL
 $companionSha256 = ([string]$env:HERMES_BUSINESS_COMPANION_SHA256).Trim().ToUpperInvariant()
+# The NSIS companion is resolved DETERMINISTICALLY from a manifest 'entrypoint'
+# (never a filesystem scan). Default to electron-builder's installed app exe
+# (single-sourced from package.json's productName) so the manifest can never name
+# a different binary than the one the trusted installer actually lays down.
+$companionEntrypoint = [string]$env:HERMES_BUSINESS_COMPANION_ENTRYPOINT
+if ([string]::IsNullOrWhiteSpace($companionEntrypoint)) {
+  $pkg = Get-Content -Raw -LiteralPath (Join-Path $root 'package.json') | ConvertFrom-Json
+  $companionEntrypoint = "$([string]$pkg.productName).exe"
+}
 
 if ([string]::IsNullOrWhiteSpace($companionUrl) -or $companionUrl -notmatch '^https://') {
   throw 'Set HERMES_BUSINESS_COMPANION_URL to the published HTTPS installer URL.'
@@ -20,6 +29,7 @@ if ($companionSha256 -notmatch '^[0-9A-F]{64}$') {
   version = '0.3.3'
   url = $companionUrl
   sha256 = $companionSha256
+  entrypoint = $companionEntrypoint
 } | ConvertTo-Json | Set-Content -LiteralPath $manifestPath -Encoding UTF8
 
 New-Item -ItemType Directory -Force -Path $releaseDirectory | Out-Null

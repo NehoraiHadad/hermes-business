@@ -79,13 +79,12 @@ function Assert-CompanionRelease {
   if ($sha -notmatch '^[0-9A-F]{64}$') {
     throw 'The companion release manifest must contain a full SHA-256 checksum.'
   }
-  # A 'zip' payload is attacker-shaped content: it MUST declare the exact app
-  # entrypoint so we never guess (no "largest exe wins"). Validate its shape now;
-  # existence under the install root is re-checked after extraction. NSIS has no
-  # entrypoint — its trusted installer owns placement — and ignores the field.
-  $entrypoint = $null
-  if ($format -eq 'zip') {
-    $entrypoint = Assert-CompanionEntrypoint -Entrypoint ([string]$Release.entrypoint)
-  }
+  # BOTH formats MUST declare the exact app entrypoint so the installed executable
+  # is NAMED, never guessed (no "largest exe wins" scan). A 'zip' is attacker-shaped
+  # content; an 'nsis' payload is trusted but its result is still resolved
+  # deterministically against this declared path. Shape is validated now; existence
+  # strictly under the install root is re-checked after install (see
+  # Resolve-CompanionEntrypoint via Invoke-CompanionInstall).
+  $entrypoint = Assert-CompanionEntrypoint -Entrypoint ([string]$Release.entrypoint)
   return [pscustomobject]@{ version = $version; uri = $uri; sha256 = $sha; format = $format; entrypoint = $entrypoint }
 }

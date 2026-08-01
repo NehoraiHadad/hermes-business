@@ -34,6 +34,7 @@
     "test:e2e:bootstrap-clean": "npm run build:plugin && powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/e2e-bootstrap-clean.ps1",
     "test:e2e:bootstrap-companion": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/e2e-companion-bootstrap.ps1",
     "test:e2e:thin-installer": "npm run build:plugin && powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/e2e-thin-network-installer.ps1",
+    "test:e2e:nsis-contract": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/e2e-companion-nsis-contract.ps1",
     "package:thin-installer:qa": "npm run build:plugin && powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/e2e-thin-network-installer.ps1 -EmitQaArtifact",
     "test:e2e:missing-hermes-ui": "node scripts/e2e-missing-hermes-ui.mjs",
     "preview": "vite preview --host 127.0.0.1",

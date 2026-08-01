@@ -68,7 +68,9 @@ function Stop-MockServer {
 # --- Focused suites (each defines an Invoke-*Tests function). -----------------
 foreach ($suite in @(
     'http-integrity.tests.ps1', 'payload-transaction.tests.ps1', 'version-gate.tests.ps1',
-    'companion-contract.tests.ps1', 'safezip-entrypoint.tests.ps1')) {
+    'companion-contract.tests.ps1', 'safezip-entrypoint.tests.ps1',
+    'companion-install.tests.ps1', 'release-acquisition.tests.ps1',
+    'release-packaging.tests.ps1')) {
   . (Join-Path $PSScriptRoot "lib\tests\$suite")
 }
 
@@ -78,14 +80,20 @@ $parseTargets = @(
   'installer\lib\Logging.ps1', 'installer\lib\Hashing.ps1', 'installer\lib\HttpRetry.ps1',
   'installer\lib\HttpDownload.ps1', 'installer\lib\FileOps.ps1', 'installer\lib\ZipPolicy.ps1',
   'installer\lib\SafeZip.ps1', 'installer\lib\CompanionEntrypoint.ps1',
+  'installer\lib\CompanionInstall.ps1',
   'installer\lib\CompanionManifest.ps1', 'installer\lib\HermesEnv.ps1',
-  'installer\lib\Release.ps1', 'installer\lib\Payload.ps1', 'installer\bootstrap.ps1',
+  'installer\lib\Release.ps1', 'installer\lib\ReleaseSelection.ps1',
+  'installer\lib\ReleaseAcquisition.ps1', 'installer\lib\Payload.ps1', 'installer\bootstrap.ps1',
   'installer\bootstrap-companion.ps1', 'scripts\mock-http-server.ps1',
   'scripts\lib\static-file-server.ps1', 'scripts\lib\e2e-thin-installer-lib.ps1',
   'scripts\lib\e2e-thin-installer-cases.ps1', 'scripts\e2e-thin-network-installer.ps1',
   'scripts\lib\tests\http-integrity.tests.ps1', 'scripts\lib\tests\payload-transaction.tests.ps1',
   'scripts\lib\tests\version-gate.tests.ps1', 'scripts\lib\tests\companion-contract.tests.ps1',
-  'scripts\lib\tests\safezip-entrypoint.tests.ps1', 'scripts\test-bootstrap-lib.ps1'
+  'scripts\lib\tests\safezip-entrypoint.tests.ps1',
+  'scripts\lib\tests\companion-install.tests.ps1', 'scripts\lib\tests\release-acquisition.tests.ps1',
+  'scripts\lib\tests\release-packaging.tests.ps1',
+  'scripts\e2e-companion-nsis-contract.ps1', 'scripts\lib\fixture-companion-installer.ps1',
+  'scripts\test-bootstrap-lib.ps1'
 )
 foreach ($target in $parseTargets) {
   Test-Case "parses: $target" {
@@ -106,6 +114,9 @@ try {
   Invoke-VersionGateTests -Root $root
   Invoke-CompanionContractTests -WorkRoot $workRoot -ValidSha $validSha
   Invoke-SafeZipEntrypointTests -WorkRoot $workRoot -ValidSha $validSha
+  Invoke-CompanionInstallTests -WorkRoot $workRoot -RepoRoot $root
+  Invoke-ReleaseAcquisitionTests -WorkRoot $workRoot
+  Invoke-ReleasePackagingTests -Root $root
 }
 finally {
   if (Test-Path -LiteralPath $workRoot) {

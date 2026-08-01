@@ -56,7 +56,7 @@ const LITERAL_MIRRORS: Mirror[] = [
     ]
   },
   {
-    path: 'installer/lib/Release.ps1',
+    path: 'installer/lib/ReleaseSelection.ps1',
     dimensions: ['pinned'],
     required: c => c.pinnedReleases.map(p => `tag = '${p.tag}'; version = '${p.version}'`)
   }
