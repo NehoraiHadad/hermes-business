@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { buildOnboardingPrompt } from '../lib/onboarding-prompt'
 import { buildVerifiedSnapshot } from '../lib/onboarding-snapshot'
+import type { ProviderStatus } from '../lib/provider-readiness'
 import type { Connection, OnboardingData, ScheduledTask, Skill } from '../types'
 import { Onboarding } from './onboarding/Onboarding'
 
@@ -9,6 +10,7 @@ export function OnboardingSurface({
   connections,
   skills,
   tasks,
+  providerStatus,
   installing,
   installError,
   onInstall,
@@ -22,6 +24,7 @@ export function OnboardingSurface({
   connections: Connection[]
   skills: Skill[]
   tasks: ScheduledTask[]
+  providerStatus: ProviderStatus
   installing: boolean
   installError: string
   onInstall: () => Promise<unknown>
@@ -32,7 +35,7 @@ export function OnboardingSurface({
   children: ReactNode
 }) {
   const complete = async (data: OnboardingData) => {
-    const snapshot = buildVerifiedSnapshot({ runtime, skills, tasks, connections })
+    const snapshot = buildVerifiedSnapshot({ runtime, skills, tasks, connections, providerStatus })
     await beginConversation({
       userMessage: 'סיימתי את ההיכרות הראשונית. שמור אותה ב־Hermes והמשך איתי לשאלה הבאה.',
       submitText: buildOnboardingPrompt(data, snapshot)

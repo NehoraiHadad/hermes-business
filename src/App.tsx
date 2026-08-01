@@ -88,6 +88,7 @@ export default function App() {
         connections={data.connections}
         skills={data.skills}
         tasks={data.tasks}
+        providerStatus={data.providerStatus}
         installing={data.installing}
         installError={data.installError}
         onInstall={data.ensureInstalled}

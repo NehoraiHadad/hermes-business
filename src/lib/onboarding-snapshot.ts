@@ -1,24 +1,15 @@
 import type { Connection, ScheduledTask, Skill } from '../types'
+import type { ProviderStatus } from './provider-readiness'
+import { buildVerifiedSnapshot as buildSnapshot } from '../../shared/onboarding-bootstrap.js'
 
-// Builds the bounded, wrapper-verified snapshot handed to the onboarding prompt.
-// Kept pure and separate from App so the exact contract (what Hermes is told it
-// already knows) is easy to read and unit-test.
+// The bounded, wrapper-verified snapshot handed to onboarding. `provider_ready` is
+// the honest, provider-usable signal (see providerStatus) — never runtime uptime.
 export function buildVerifiedSnapshot(input: {
   runtime: HermesRuntime | null
   skills: Skill[]
   tasks: ScheduledTask[]
   connections: Connection[]
+  providerStatus?: ProviderStatus
 }): Record<string, unknown> {
-  const { runtime, skills, tasks, connections } = input
-  return {
-    provider_ready: Boolean(runtime?.running),
-    hermes_version: runtime?.version || null,
-    skills: skills.map(skill => skill.name).slice(0, 100),
-    scheduled_tasks: tasks.length,
-    connections: connections.map(connection => ({
-      id: connection.id,
-      state: connection.state,
-      official: connection.official !== false
-    }))
-  }
+  return buildSnapshot(input)
 }

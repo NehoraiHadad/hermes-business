@@ -2,7 +2,8 @@ import { startTransition, useCallback, useEffect, useRef, useState } from 'react
 import { CONNECTIONS } from '../constants'
 import { hydrateConnectionStates } from '../lib/connections'
 import { hermesClient } from '../lib/hermes-client'
-import { resolveProviderReadiness } from '../lib/provider-readiness'
+import { resolveProviderStatus } from '../lib/provider-readiness'
+import type { ProviderStatus } from '../lib/provider-readiness'
 import type { ScheduledTask, Session, Skill } from '../types'
 
 // Owns discovery/install/boot plus the state shared with the full Hermes profile.
@@ -14,7 +15,10 @@ export function useHermesData() {
   const [tasks, setTasks] = useState<ScheduledTask[]>([])
   const [skills, setSkills] = useState<Skill[]>([])
   const [connections, setConnections] = useState(CONNECTIONS)
-  const [provider, setProvider] = useState({ connected: false, label: 'לא מחובר' })
+  const [providerStatus, setProviderStatus] = useState<ProviderStatus>(() =>
+    resolveProviderStatus({ runtime: null })
+  )
+  const provider = { connected: providerStatus.provider_configured, label: providerStatus.provider_label }
   const [versions, setVersions] = useState<Record<string, string>>({})
   const [installing, setInstalling] = useState(false)
   const [installError, setInstallError] = useState('')
@@ -23,7 +27,11 @@ export function useHermesData() {
     const nextRuntime = await hermesClient.boot()
     if (!mounted.current) return nextRuntime
     setRuntime(nextRuntime)
-    if (!nextRuntime.running && !hermesClient.demo) return nextRuntime
+    if (!nextRuntime.running && !hermesClient.demo) {
+      // Runtime down → we cannot inspect providers; fail closed (unknown, not ready).
+      setProviderStatus(resolveProviderStatus({ runtime: nextRuntime, error: nextRuntime.error }))
+      return nextRuntime
+    }
 
     const [nextSessions, nextTasks, nextSkills, messaging, googleStatus, oauthProviders, env] = await Promise.all([
       hermesClient.listSessions().catch(() => []),
@@ -33,10 +41,12 @@ export function useHermesData() {
       window.hermesDesktop
         ? window.hermesDesktop.getGoogleStatus().catch(() => ({ available: false, authenticated: false }))
         : Promise.resolve({ available: false, authenticated: false }),
-      hermesClient.listOAuthProviders().catch(() => []),
+      // Official provider sources: a FAILED inspection must stay null (→ unknown),
+      // never []/{} — an empty success would be read as proof of "no provider".
+      hermesClient.listOAuthProviders().catch(() => null),
       hermesClient
         .api<Record<string, { is_set?: boolean }>>('/api/env?profile=default')
-        .catch(() => ({}))
+        .catch(() => null)
     ])
     if (!mounted.current) return nextRuntime
     startTransition(() => {
@@ -44,7 +54,7 @@ export function useHermesData() {
       setTasks(nextTasks)
       setSkills(nextSkills)
       setConnections(hydrateConnectionStates(CONNECTIONS, messaging, googleStatus.authenticated))
-      setProvider(resolveProviderReadiness(oauthProviders, env))
+      setProviderStatus(resolveProviderStatus({ runtime: nextRuntime, oauthProviders, env }))
     })
     const nextVersions = window.hermesDesktop
       ? await window.hermesDesktop.getVersions().catch(() => ({}))
@@ -92,6 +102,7 @@ export function useHermesData() {
     setSkills,
     connections,
     provider,
+    providerStatus,
     setConnections,
     versions,
     installing,

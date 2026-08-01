@@ -88,21 +88,6 @@ export type GatewayEvent = {
   payload?: Record<string, unknown>
 }
 
-export type OnboardingData = {
-  userName: string
-  role: string
-  language: string
-  responseStyle: string
-  workHours: string
-  approvals: string[]
-  timeSavers: string
-  businessName: string
-  industry: string
-  offerings: string
-  customers: string
-  businessHours: string
-  communicationStyle: string
-  restrictions: string
-  recurringProcesses: string
-  systems: string
-}
+// Canonical shape lives in the shared cross-runtime contract; re-exported so every
+// existing `import type { OnboardingData } from './types'` site keeps resolving.
+export type { OnboardingData } from '../shared/onboarding-contract'

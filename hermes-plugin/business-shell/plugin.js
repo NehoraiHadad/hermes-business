@@ -172,29 +172,286 @@ function useAsync(load, deps) {
   return state
 }
 
-// The guided first-run flow. Instead of a giant static prompt, the trusted
-// wrapper performs a bounded inspection through official host APIs, then opens
-// one real Hermes session pointed at the /business-bootstrap Skill.
+// Canonical, cross-runtime onboarding data contract. Plain JS so BOTH the React /
+// Electron wrapper (typed via onboarding-contract.d.ts) and the Rollup-bundled
+// Hermes Desktop plugin consume ONE source — no hand-maintained per-language copy.
+
+const EMPTY_ONBOARDING = {
+  userName: '',
+  role: 'בעל/ת העסק',
+  language: 'עברית',
+  responseStyle: 'קצר, ברור ומעשי',
+  workHours: '09:00–18:00',
+  approvals: ['שליחת הודעות ומיילים', 'מחיקה או שינוי קבצים', 'התחייבות כספית'],
+  timeSavers: '',
+  businessName: '',
+  industry: '',
+  offerings: '',
+  customers: '',
+  businessHours: '',
+  communicationStyle: 'מקצועי, חם ולא מתנשא',
+  restrictions: '',
+  recurringProcesses: '',
+  systems: ''
+};
+
+const ONBOARDING_KEYS = Object.keys(EMPTY_ONBOARDING);
+
+// Legacy plugin fallback-form keys → canonical keys, so persisted user data keeps
+// working after unification (migration/normalization, never a silent data loss).
+const LEGACY_ALIASES = {
+  name: 'userName',
+  answerStyle: 'responseStyle',
+  repetitiveTasks: 'timeSavers',
+  openingHours: 'businessHours',
+  voice: 'communicationStyle',
+  forbiddenPromises: 'restrictions',
+  processes: 'recurringProcesses'
+};
+
+// One canonical, nontechnical Hebrew questionnaire. Both shells derive their form
+// from this so field keys can never drift again.
+const ONBOARDING_STEPS = [
+  {
+    title: 'נעים להכיר',
+    copy: 'כמה פרטים שיעזרו לעוזר לעבוד כמו שמתאים לך.',
+    fields: [
+      { key: 'userName', label: 'שם' },
+      { key: 'role', label: 'תפקיד' },
+      { key: 'language', label: 'שפה מועדפת' },
+      { key: 'responseStyle', label: 'סגנון תשובות' },
+      { key: 'workHours', label: 'שעות עבודה' }
+    ]
+  },
+  {
+    title: 'העסק',
+    copy: 'המידע יישמר ב־Memory וב־Skill של Hermes, לא ב־prompt ענקי.',
+    fields: [
+      { key: 'businessName', label: 'שם העסק' },
+      { key: 'industry', label: 'תחום פעילות' },
+      { key: 'offerings', label: 'שירותים ומוצרים', multiline: true },
+      { key: 'customers', label: 'סוגי לקוחות' },
+      { key: 'businessHours', label: 'שעות פעילות' }
+    ]
+  },
+  {
+    title: 'איך נכון לעבוד',
+    copy: 'גבולות ברורים ותהליכים שהעוזר יכול לחסוך.',
+    fields: [
+      { key: 'approvals', label: 'פעולות שדורשות אישור', multiline: true },
+      { key: 'communicationStyle', label: 'סגנון התקשורת של העסק', multiline: true },
+      { key: 'restrictions', label: 'מגבלות והתחייבויות שאסור לתת', multiline: true },
+      { key: 'recurringProcesses', label: 'תהליכים חוזרים', multiline: true },
+      { key: 'systems', label: 'מערכות וקבצים בשימוש', multiline: true },
+      { key: 'timeSavers', label: 'משימות שתרצה לחסוך', multiline: true }
+    ]
+  }
+];
+
+// Shared persistence keys so the simple shell and full Hermes agree on state.
+const STORAGE_KEYS = {
+  complete: 'hermes-business-onboarding-v1',
+  form: 'onboarding',
+  guided: 'guidedSetup',
+  pluginComplete: 'onboardingComplete'
+};
+
+function toList(value) {
+  if (Array.isArray(value)) return value.map(item => String(item).trim()).filter(Boolean)
+  if (typeof value === 'string') return value.split(/[\n,]/).map(item => item.trim()).filter(Boolean)
+  return []
+}
+
+// Normalize any persisted/partial shape (React form, legacy plugin form) into the
+// one canonical contract, preserving every value the user already gave us.
+function normalizeOnboarding(raw) {
+  const source = raw && typeof raw === 'object' ? raw : {};
+  const out = { ...EMPTY_ONBOARDING, approvals: [...EMPTY_ONBOARDING.approvals] };
+  for (const key of ONBOARDING_KEYS) {
+    if (key === 'approvals') continue
+    if (source[key] != null && source[key] !== '') out[key] = source[key];
+  }
+  for (const [legacy, canonical] of Object.entries(LEGACY_ALIASES)) {
+    const missing = out[canonical] == null || out[canonical] === '' || out[canonical] === EMPTY_ONBOARDING[canonical];
+    if (missing && source[legacy] != null && source[legacy] !== '') out[canonical] = source[legacy];
+  }
+  const approvals = source.approvals != null ? source.approvals : out.approvals;
+  out.approvals = toList(approvals);
+  if (out.approvals.length === 0) out.approvals = [...EMPTY_ONBOARDING.approvals];
+  return out
+}
+
+// Canonical provider readiness. `provider_ready` NEVER means "runtime is running";
+// it means a supported provider is actually configured AND usable. We distinguish
+// runtime-running, provider-configured, provider-usable and unknown/degraded, and
+// fail closed (not ready) whenever we could not verify the truth.
+
+const DISCONNECTED_LABEL = 'לא מחובר';
+
+const API_KEY_PROVIDERS = [
+  ['OPENROUTER_API_KEY', 'OpenRouter'],
+  ['ANTHROPIC_API_KEY', 'Anthropic'],
+  ['GEMINI_API_KEY', 'Gemini'],
+  ['OPENAI_API_KEY', 'OpenAI']
+];
+
+// Per official source we return a tri-state, never a boolean: 'positive' (this
+// source alone proves a provider), 'negative' (inspected, none), or 'unknown' (we
+// did not / could not inspect — the value is null). A failed inspection MUST arrive
+// here as null, not as [] / {}, or a false 'unavailable' would look like proof.
+function inspectOAuth(oauthProviders) {
+  if (oauthProviders == null) return { state: 'unknown', label: null }
+  const oauth = oauthProviders.find(provider => provider && provider.status && provider.status.logged_in);
+  return oauth ? { state: 'positive', label: oauth.name } : { state: 'negative', label: null }
+}
+
+function inspectEnv(env) {
+  if (env == null) return { state: 'unknown', label: null }
+  const apiKey = API_KEY_PROVIDERS.find(([key]) => env[key] && env[key].is_set);
+  return apiKey ? { state: 'positive', label: apiKey[1] } : { state: 'negative', label: null }
+}
+
+// Provider credentials are proven only via Hermes' own surfaces: a live OAuth
+// session, or redacted env metadata that reports a key `is_set` (never its value).
+// Positive proof from EITHER source is enough — one source failing never masks the
+// other's proof.
+function resolveProviderReadiness(oauthProviders, env) {
+  const oauth = inspectOAuth(oauthProviders);
+  if (oauth.state === 'positive') return { connected: true, label: oauth.label }
+  const envSource = inspectEnv(env);
+  if (envSource.state === 'positive') return { connected: true, label: envSource.label }
+  return { connected: false, label: DISCONNECTED_LABEL }
+}
+
+// Full honest status with per-source provenance. Positive proof from either source
+// ⇒ configured. With no positive proof: if ANY source failed/uninspected (unknown)
+// we stay 'unknown' (we cannot prove absence); only when every supported source was
+// successfully inspected AND negative do we claim 'unavailable'. An error or an
+// incompatible runtime → degraded → unknown. `provider_sources` surfaces the
+// inspection state (never errors/secrets) so the agent knows WHY a state was chosen.
+function resolveProviderStatus(input = {}) {
+  const { runtime, oauthProviders = null, env = null, error = null } = input;
+  const running = Boolean(runtime && runtime.running);
+  const degraded = Boolean(error) || Boolean(runtime && runtime.compatible === false);
+  const oauth = inspectOAuth(oauthProviders);
+  const envSource = inspectEnv(env);
+  const proof = oauth.state === 'positive' ? oauth : envSource.state === 'positive' ? envSource : null;
+  const configured = Boolean(proof);
+  const anyUnknown = oauth.state === 'unknown' || envSource.state === 'unknown';
+  const usable = configured && running && !degraded;
+  const provider_state = degraded
+    ? 'unknown'
+    : configured
+      ? usable
+        ? 'usable'
+        : 'configured'
+      : anyUnknown
+        ? 'unknown'
+        : running
+          ? 'runtime_only'
+          : 'unavailable';
+  return {
+    provider_ready: usable,
+    provider_state,
+    provider_label: configured ? proof.label : DISCONNECTED_LABEL,
+    runtime_running: running,
+    provider_configured: configured,
+    provider_usable: usable,
+    provider_sources: { oauth: oauth.state, env: envSource.state }
+  }
+}
+
+// Plugin runtime only exposes a resolved model id (via host.state.model). A present
+// model id proves the provider is CONFIGURED, never that the credential is usable —
+// only a real round-trip proves that. The wrapper must not claim 'usable' it never
+// observed, so provider_ready stays false and the state is 'configured'. This is not
+// a false-negative deadlock: the agent-led flow runs inside a live session, and its
+// own successful response IS the usability proof (see the bootstrap state semantics).
+function resolveModelReadiness(model) {
+  const configured = typeof model === 'string' && model.length > 0;
+  return {
+    provider_ready: false,
+    provider_state: configured ? 'configured' : 'unavailable',
+    provider_label: configured ? model : DISCONNECTED_LABEL,
+    provider_configured: configured
+  }
+}
+
+// The ONE canonical agent-handoff payload. Both the React/Electron wrapper and the
+// Hermes Desktop plugin build their /business-bootstrap prompt and verified snapshot
+// from here, so the product intent (one concise question at a time, connect official
+// integrations, confirm before sensitive actions, no false completion, persist into
+// Profile/Memory/Skills — never a giant system prompt) lives in a single place.
+
+
+const BOOTSTRAP_COMMAND = '/business-bootstrap';
+
+const LINES = [
+  'המשך את הקמת העוזר לעסק. This is guided first-run setup for a non-technical business owner.',
+  'המעטפת ביצעה בדיקה תחומה דרך ה־APIs הרשמיים של Hermes. Use this verified snapshot and do not repeat its checks before asking the first missing question.',
+  'Never run hermes doctor, broad scans, connectivity suites, update checks, or CLI --help discovery during onboarding.',
+  'שאל שאלה אחת קצרה בכל פעם (לכל היותר שתי שאלות קרובות) והסבר בקצרה למה — אל תציג את כל השאלון בבת אחת.',
+  'אל תבקש שוב מידע שכבר נמסר. שמור עובדות יציבות דרך Hermes Memory/Profile ותחזק Skill בשם business-context; אל תיצור System Prompt גדול.',
+  'המלץ בכל פעם על אינטגרציה/חיבור רשמי אחד בעל הערך המיידי הגבוה ביותר, הסבר את הערך, ואשר עם המשתמש לפני כל פעולה רגישה.',
+  'אין לבצע פעולה חיצונית ואין לבקש secret בצ׳אט.',
+  'אל תסמן סיום אם אין ספק/מודל זמין או שחיבור שהוצהר לא עבר בדיקת קריאה בטוחה; אפשר להשהות ולחזור להשלים.',
+  'provider_state semantics: usable=proven live; configured=a model/provider is selected but the wrapper did not observe a round-trip — YOUR own successful reply in this session IS that usability proof, so treat configured+a real answer as usable and proceed (never a false-negative deadlock); runtime_only/unavailable=no provider found (all official sources inspected); unknown=an official source (see provider_sources) failed/was not inspected — pause and re-verify, never falsely complete NOR falsely fail.'
+];
+
+function buildBootstrapPrompt(input = {}) {
+  const { snapshot = {}, data } = input;
+  const lines = [BOOTSTRAP_COMMAND, ...LINES, '', `WRAPPER_VERIFIED_SNAPSHOT=${JSON.stringify(snapshot)}`];
+  if (data) lines.push('', JSON.stringify(normalizeOnboarding(data), null, 2));
+  return lines.join('\n')
+}
+
+// React/Electron snapshot. Honest provider_ready: prefers an already-resolved
+// ProviderStatus, else resolves from raw oauth/env; runtime uptime alone is NOT it.
+function buildVerifiedSnapshot(input = {}) {
+  const { runtime, skills = [], tasks = [], connections = [], providerStatus, oauthProviders, env, error } = input;
+  const status = providerStatus || resolveProviderStatus({ runtime, oauthProviders, env, error });
+  return {
+    provider_ready: status.provider_ready,
+    provider_state: status.provider_state,
+    provider_label: status.provider_label,
+    provider_sources: status.provider_sources,
+    runtime_running: Boolean(runtime && runtime.running),
+    hermes_version: runtime && runtime.version ? runtime.version : null,
+    skills: skills.map(skill => skill && skill.name).filter(Boolean).slice(0, 100),
+    scheduled_tasks: tasks.length,
+    connections: connections.map(connection => ({
+      id: connection.id,
+      state: connection.state,
+      official: connection.official !== false
+    }))
+  }
+}
+
+// Plugin snapshot: same honest contract, driven by the model id the plugin can see.
+function buildModelSnapshot(input = {}) {
+  const { model, gateway, profile, skills = [], scheduledTasks = 0 } = input;
+  const status = resolveModelReadiness(model);
+  return {
+    provider_ready: status.provider_ready,
+    provider_state: status.provider_state,
+    provider_label: status.provider_label,
+    model: model || null,
+    gateway,
+    profile: profile || 'default',
+    skills: skills.slice(0, 100),
+    scheduled_tasks: scheduledTasks
+  }
+}
+
+// The guided first-run flow. Instead of a giant static prompt, the trusted wrapper
+// performs a bounded inspection through official host APIs, then opens one real
+// Hermes session pointed at the /business-bootstrap Skill. The handoff payload comes
+// from the single canonical builder so it can never drift from the React wrapper.
 
 const GUIDED_SETUP_VERSION = 2;
 
 function guidedSetupPrompt(snapshot = {}) {
-  return [
-    '/business-bootstrap',
-    'הקמת העוזר לעסק.',
-    'This is the first-run setup for a non-technical business owner.',
-    'The trusted Hermes Desktop wrapper already performed the bounded inspection below through official APIs.',
-    'Use this verified snapshot and do not repeat its checks before asking the first missing question.',
-    'Never run hermes doctor, broad scans, connectivity suites, update checks, or CLI --help discovery during onboarding.',
-    'Resume existing durable business context instead of asking for facts Hermes already knows.',
-    'Ask only the next one or two closely related questions. Prefer Hermes native structured question UI when it is available.',
-    'Do not dump the full questionnaire, do not request secrets in chat, and do not perform external actions without explicit approval.',
-    'Persist stable facts through Hermes Memory/Profile and maintain a business-context Skill.',
-    'After understanding the business, recommend exactly one existing Hermes Skill or messaging connection with the clearest immediate value, explain why, and wait for approval before setup.',
-    'Verify every completed connection with a safe read-only check.',
-    `WRAPPER_VERIFIED_SNAPSHOT=${JSON.stringify(snapshot)}`,
-    'Begin now with a short explanation and the first missing question.'
-  ].join('\n')
+  return buildBootstrapPrompt({ snapshot })
 }
 
 async function startGuidedSetup(storage, { force = false } = {}) {
@@ -225,13 +482,13 @@ async function startGuidedSetup(storage, { force = false } = {}) {
       : Array.isArray(cronResult)
         ? cronResult
         : [];
-    const snapshot = {
+    const snapshot = buildModelSnapshot({
       gateway: host.state.gateway.get(),
       model: host.state.model.get() || null,
       profile: host.state.profile.get() || 'default',
-      skills: [...new Set(flattenSkillNames(skillsResult?.skills || skillsResult))].slice(0, 100),
-      scheduled_tasks: cronJobs.length
-    };
+      skills: [...new Set(flattenSkillNames(skillsResult?.skills || skillsResult))],
+      scheduledTasks: cronJobs.length
+    });
     const created = await host.request('session.create', {
       title: 'הקמת העוזר לעסק',
       source: 'desktop'
@@ -497,92 +754,29 @@ function Overview({ onOnboarding, storage }) {
 }
 
 // A quick fallback questionnaire used only when the guided setup session cannot
-// start. On save it opens one real Hermes session that persists the facts through
-// Memory/Profile and a business-context Skill — never a giant system prompt.
-
-const EMPTY_ONBOARDING = {
-  name: '',
-  role: '',
-  language: 'עברית',
-  answerStyle: 'קצר ומעשי',
-  workHours: '',
-  approvals: 'שליחת הודעות, התחייבויות כספיות ומחיקת מידע',
-  repetitiveTasks: '',
-  businessName: '',
-  industry: '',
-  offerings: '',
-  customers: '',
-  openingHours: '',
-  voice: '',
-  forbiddenPromises: '',
-  processes: '',
-  systems: ''
-};
-
-const PAGES = [
-  {
-    title: 'נעים להכיר',
-    copy: 'כמה פרטים שיעזרו ל־Hermes לעבוד כמו שמתאים לך.',
-    fields: [
-      ['שם', 'name'],
-      ['תפקיד', 'role'],
-      ['שפה מועדפת', 'language'],
-      ['סגנון תשובות', 'answerStyle'],
-      ['שעות עבודה', 'workHours']
-    ]
-  },
-  {
-    title: 'העסק',
-    copy: 'המידע יישמר ב־Memory וב־Skill של Hermes, לא ב־prompt ענקי.',
-    fields: [
-      ['שם העסק', 'businessName'],
-      ['תחום פעילות', 'industry'],
-      ['שירותים ומוצרים', 'offerings', true],
-      ['סוגי לקוחות', 'customers'],
-      ['שעות פעילות', 'openingHours']
-    ]
-  },
-  {
-    title: 'איך נכון לעבוד',
-    copy: 'גבולות ברורים ותהליכים שהעוזר יכול לחסוך.',
-    fields: [
-      ['פעולות שדורשות אישור', 'approvals', true],
-      ['סגנון התקשורת של העסק', 'voice', true],
-      ['מגבלות והתחייבויות שאסור לתת', 'forbiddenPromises', true],
-      ['תהליכים חוזרים', 'processes', true],
-      ['מערכות וקבצים בשימוש', 'systems', true],
-      ['משימות שתרצה לחסוך', 'repetitiveTasks', true]
-    ]
-  }
-];
+// start. Field keys and defaults come from the shared canonical contract, so any
+// previously persisted (legacy-key) answers are migrated on load, and on save it
+// opens one real Hermes session that persists facts through Memory/Profile and a
+// business-context Skill — never a giant system prompt.
 
 function Onboarding({ storage, onDone, onCancel }) {
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState(() => storage.get('onboarding', EMPTY_ONBOARDING));
+  const [form, setForm] = useState(() => normalizeOnboarding(storage.get(STORAGE_KEYS.form, EMPTY_ONBOARDING)));
   const update = (name, value) => setForm(current => ({ ...current, [name]: value }));
-  const page = PAGES[step];
+  const page = ONBOARDING_STEPS[step];
 
   async function save() {
     setSaving(true);
     try {
-      storage.set('onboarding', form);
-      const prompt = [
-        'זו משימת onboarding מפורשת שאושרה על ידי המשתמש.',
-        'שמור את עובדות המשתמש הקצרות והיציבות באמצעות מנגנון ה-memory/profile הרשמי של Hermes.',
-        'צור או עדכן Skill בשם business-context עבור ההקשר העסקי המפורט והתהליכים החוזרים.',
-        'אל תשמור secrets. אל תיצור system prompt. אל תבצע פעולות חיצוניות.',
-        '',
-        JSON.stringify(form, null, 2),
-        '',
-        'בסיום, סכם בקצרה מה נשמר ואיפה.'
-      ].join('\n');
+      storage.set(STORAGE_KEYS.form, form);
+      const prompt = buildBootstrapPrompt({ data: form });
       const created = await host.request('session.create', {
         title: `היכרות עם ${form.businessName || 'העסק'}`,
         source: 'desktop'
       });
       await host.request('prompt.submit', { session_id: created.session_id, text: prompt });
-      storage.set('onboardingComplete', true);
+      storage.set(STORAGE_KEYS.pluginComplete, true);
       host.notify({
         kind: 'success',
         title: 'Hermes התחיל ללמוד את העסק',
@@ -606,7 +800,11 @@ function Onboarding({ storage, onDone, onCancel }) {
       h(
         'div',
         null,
-        h('div', { className: 'text-[0.6875rem] font-semibold text-primary' }, `שלב ${step + 1} מתוך ${PAGES.length}`),
+        h(
+          'div',
+          { className: 'text-[0.6875rem] font-semibold text-primary' },
+          `שלב ${step + 1} מתוך ${ONBOARDING_STEPS.length}`
+        ),
         h('h1', { className: 'mt-1 text-xl font-semibold text-(--ui-text-primary)' }, page.title),
         h('p', { className: 'mt-1 text-xs text-(--ui-text-tertiary)' }, page.copy)
       ),
@@ -618,13 +816,13 @@ function Onboarding({ storage, onDone, onCancel }) {
       h(
         'div',
         { className: 'grid gap-4 sm:grid-cols-2' },
-        ...page.fields.map(([label, name, multiline]) =>
+        ...page.fields.map(({ key, label, multiline }) =>
           h(Field, {
-            key: name,
+            key,
             label,
-            name,
+            name: key,
             multiline,
-            value: form[name] || '',
+            value: Array.isArray(form[key]) ? form[key].join(', ') : form[key] || '',
             onChange: update
           })
         )
@@ -637,7 +835,7 @@ function Onboarding({ storage, onDone, onCancel }) {
           { variant: 'outline', disabled: step === 0 || saving, onClick: () => setStep(current => current - 1) },
           'הקודם'
         ),
-        step < PAGES.length - 1
+        step < ONBOARDING_STEPS.length - 1
           ? h(Button, { onClick: () => setStep(current => current + 1) }, 'המשך')
           : h(Button, { disabled: saving, onClick: save }, saving ? 'Hermes לומד…' : 'שמור והמשך לשיחה')
       )

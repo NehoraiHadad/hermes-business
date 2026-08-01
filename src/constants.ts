@@ -1,5 +1,9 @@
 import { CalendarClock, CircleHelp, MessageCircle, PlugZap, WandSparkles } from 'lucide-react'
-import type { ChatMessage, Connection, OnboardingData, Screen } from './types'
+import type { ChatMessage, Connection, Screen } from './types'
+
+// Canonical onboarding defaults live in the shared contract so React, Electron and
+// the Hermes plugin cannot drift. Re-exported here to keep existing import sites.
+export { EMPTY_ONBOARDING } from '../shared/onboarding-contract.js'
 
 export const NAV_ITEMS: Array<{ id: Screen; label: string; icon: typeof MessageCircle }> = [
   { id: 'chat', label: 'שיחות', icon: MessageCircle },
@@ -8,7 +12,6 @@ export const NAV_ITEMS: Array<{ id: Screen; label: string; icon: typeof MessageC
   { id: 'connections', label: 'חיבורים', icon: PlugZap },
   { id: 'support', label: 'תמיכה ותקינות', icon: CircleHelp }
 ]
-
 export const INITIAL_MESSAGES: ChatMessage[] = []
 
 export const CONNECTIONS: Connection[] = [
@@ -45,22 +48,3 @@ export const CONNECTIONS: Connection[] = [
     icon: 'whatsapp'
   }
 ]
-
-export const EMPTY_ONBOARDING: OnboardingData = {
-  userName: '',
-  role: 'בעל/ת העסק',
-  language: 'עברית',
-  responseStyle: 'קצר, ברור ומעשי',
-  workHours: '09:00–18:00',
-  approvals: ['שליחת הודעות ומיילים', 'מחיקה או שינוי קבצים', 'התחייבות כספית'],
-  timeSavers: '',
-  businessName: '',
-  industry: '',
-  offerings: '',
-  customers: '',
-  businessHours: '',
-  communicationStyle: 'מקצועי, חם ולא מתנשא',
-  restrictions: '',
-  recurringProcesses: '',
-  systems: ''
-}
