@@ -1,17 +1,10 @@
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
 import os from 'node:os'
-import path from 'node:path'
 import { afterAll, describe, expect, it } from 'vitest'
-import { buildEnvelope, redactDeep, redactPaths, appVersion, hermesRange, gitInfo } from './evidence.mjs'
+import { buildEnvelope, redactDeep, redactPaths, appVersion, hermesRange } from './evidence.mjs'
 import { verifyEvidence } from '../verify-evidence.mjs'
+import { scratchDir, cleanupScratch, writeEnvelope as write } from './evidence-fixtures.mjs'
 
-const tmpDirs = []
-function scratchDir() {
-  const dir = mkdtempSync(path.join(os.tmpdir(), 'evidence-test-'))
-  tmpDirs.push(dir)
-  return dir
-}
-afterAll(() => tmpDirs.forEach(d => rmSync(d, { recursive: true, force: true })))
+afterAll(cleanupScratch)
 
 describe('redaction', () => {
   it('strips emails, secret shapes and absolute user paths from nested data', () => {
@@ -50,10 +43,6 @@ describe('buildEnvelope', () => {
 })
 
 describe('verifyEvidence', () => {
-  function write(dir, name, env) {
-    writeFileSync(path.join(dir, name), JSON.stringify(env, null, 2))
-  }
-
   it('accepts a well-formed, redacted, corresponding envelope', () => {
     const dir = scratchDir()
     write(dir, 'shared-state.json', buildEnvelope('shared-state', { ok: true, count: 2 }, { tool: 't' }))
@@ -94,94 +83,6 @@ describe('verifyEvidence', () => {
     workingTree.git_head = '0'.repeat(40)
     write(dir, 'shared-state.json', workingTree)
     expect(verifyEvidence({ dir }).ok).toBe(true)
-  })
-})
-
-describe('anti-false-pass proof gate', () => {
-  function write(dir, name, env) {
-    writeFileSync(path.join(dir, name), JSON.stringify(env, null, 2))
-  }
-  const passingPackaged = () => ({
-    ran: true,
-    artifact_attested: true,
-    artifact_kind: 'win-unpacked-current',
-    qa_namespace_applied: true,
-    isolated_runtime: true,
-    ws_on_isolated_port: true,
-    isolated_session_count: 0,
-    isolated_home_populated: true,
-    live_home_untouched: true,
-    live_config_unchanged: true,
-    no_residual: true
-  })
-  const passingApproval = () => ({
-    wiring: { official_method: 'approval.respond', competing_engine: false, delegates_to_official: true },
-    unit_coverage: true,
-    live_ui_denial_probe: {
-      status: 'passed',
-      artifact_attested: true,
-      qa_namespace_applied: true,
-      isolated_runtime: true,
-      via_real_event_path: true,
-      requested: true,
-      denied: true,
-      no_side_effect: true,
-      renderer_modal_faked: false
-    }
-  })
-
-  it('accepts a packaged-e2e pass that carries every proof boolean', () => {
-    const dir = scratchDir()
-    write(dir, 'packaged-e2e.json', buildEnvelope('packaged-e2e', passingPackaged(), { tool: 't' }))
-    expect(verifyEvidence({ dir }).ok).toBe(true)
-  })
-
-  it('rejects a packaged-e2e pass with live_home_untouched=false', () => {
-    const dir = scratchDir()
-    write(dir, 'packaged-e2e.json', buildEnvelope('packaged-e2e', { ...passingPackaged(), live_home_untouched: false }, { tool: 't' }))
-    expect(verifyEvidence({ dir }).errors.join()).toMatch(/live_home_untouched/)
-  })
-
-  it('rejects a packaged-e2e pass whose isolated_session_count is not 0', () => {
-    const dir = scratchDir()
-    write(dir, 'packaged-e2e.json', buildEnvelope('packaged-e2e', { ...passingPackaged(), isolated_session_count: 3 }, { tool: 't' }))
-    expect(verifyEvidence({ dir }).errors.join()).toMatch(/isolated_session_count/)
-  })
-
-  it('accepts an approval pass that traversed the real event path', () => {
-    const dir = scratchDir()
-    write(dir, 'approval.json', buildEnvelope('approval', passingApproval(), { tool: 't' }))
-    expect(verifyEvidence({ dir }).ok).toBe(true)
-  })
-
-  it('rejects a packaged-e2e pass with live_config_unchanged=false', () => {
-    const dir = scratchDir()
-    write(dir, 'packaged-e2e.json', buildEnvelope('packaged-e2e', { ...passingPackaged(), live_config_unchanged: false }, { tool: 't' }))
-    expect(verifyEvidence({ dir }).errors.join()).toMatch(/live_config_unchanged/)
-  })
-
-  it('rejects an approval pass that was not isolated (runtime not qa-isolated)', () => {
-    const dir = scratchDir()
-    const bad = passingApproval()
-    bad.live_ui_denial_probe.isolated_runtime = false
-    write(dir, 'approval.json', buildEnvelope('approval', bad, { tool: 't' }))
-    expect(verifyEvidence({ dir }).errors.join()).toMatch(/isolated_runtime/)
-  })
-
-  it('rejects an approval pass with a side effect', () => {
-    const dir = scratchDir()
-    const bad = passingApproval()
-    bad.live_ui_denial_probe.no_side_effect = false
-    write(dir, 'approval.json', buildEnvelope('approval', bad, { tool: 't' }))
-    expect(verifyEvidence({ dir }).errors.join()).toMatch(/no_side_effect/)
-  })
-
-  it('rejects an approval pass that faked a renderer modal', () => {
-    const dir = scratchDir()
-    const bad = passingApproval()
-    bad.live_ui_denial_probe.renderer_modal_faked = true
-    write(dir, 'approval.json', buildEnvelope('approval', bad, { tool: 't' }))
-    expect(verifyEvidence({ dir }).errors.join()).toMatch(/renderer_modal_faked/)
   })
 })
 

@@ -81,6 +81,50 @@ export function reduceIsolatedApproval(r) {
   }
 }
 
+// Reduce a live Telegram round-trip probe (diagnose + authorized connectivity
+// reply) to scalar booleans/counts/enums. Never carries chat IDs, usernames,
+// bot tokens or message text — only the proof shape the verifier gates on.
+export function reduceTelegram(r) {
+  const d = r.diagnosis || {}
+  const f = r.fix || {}
+  const t = r.roundtrip || {}
+  return {
+    diagnosis: {
+      connection_mode: d.connection_mode ?? null,
+      webhook_present: bool(d.webhook_present),
+      sole_poller_owner: bool(d.sole_poller_owner),
+      external_owner_conflict: bool(d.external_owner_conflict),
+      bot_token_valid: bool(d.bot_token_valid),
+      is_bot: bool(d.is_bot),
+      inbound_reached_hermes: bool(d.inbound_reached_hermes),
+      prior_no_reply_cause: d.prior_no_reply_cause ?? null,
+      allowlist_now_authorizes_sender: bool(d.allowlist_now_authorizes_sender),
+      pending_update_count: d.pending_update_count ?? null
+    },
+    fix: {
+      method: f.method ?? null,
+      config_mutated: bool(f.config_mutated),
+      env_mutated: bool(f.env_mutated),
+      whatsapp_untouched: bool(f.whatsapp_untouched),
+      google_untouched: bool(f.google_untouched),
+      gateway_restarted: bool(f.gateway_restarted),
+      gateway_alive: bool(f.gateway_alive)
+    },
+    roundtrip: {
+      outbound_delivered: bool(t.outbound_delivered),
+      target_home_channel: bool(t.target_home_channel),
+      other_chats_touched: t.other_chats_touched ?? null,
+      official_mechanism: t.official_mechanism ?? null,
+      agent_originated_inbound: bool(t.agent_originated_inbound),
+      inbound_historically_processed: bool(t.inbound_historically_processed),
+      inbound_path_ready: bool(t.inbound_path_ready),
+      identifies_as_connectivity_test: bool(t.identifies_as_connectivity_test)
+    },
+    runtime_state: r.runtime_state ?? null,
+    gateway_running: bool(r.gateway_running)
+  }
+}
+
 export function reduceThinInstaller(r) {
   const cases = r.cases && typeof r.cases === 'object' ? r.cases : {}
   // qaArtifact is emitted alongside the case results but is not itself a test case.

@@ -19,7 +19,7 @@
   "properties": {
     "schema_version": { "const": 1 },
     "category": {
-      "enum": ["packaged-e2e", "thin-installer", "shared-state", "approval"],
+      "enum": ["packaged-e2e", "thin-installer", "shared-state", "approval", "telegram"],
       "description": "Which acceptance surface this evidence covers."
     },
     "status": {

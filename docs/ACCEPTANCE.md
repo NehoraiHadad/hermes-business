@@ -275,7 +275,7 @@ path even when a key is present.
 **Commands & results (this acceptance run):**
 
 ```
-npm test                              # 55 files, 311 pass / 1 skip (incl. redact + evidence-verifier + build-attestation + isolated-runtime + qa-runtime/namespace + hermes-shared-home guard + plugin-loader tests)
+npm test                              # 56 files, 319 pass / 1 skip (incl. redact + evidence-verifier/gates + build-attestation + isolated-runtime + qa-runtime/namespace + hermes-shared-home guard + plugin-loader tests)
 HERMES_E2E_NO_LLM=1 node scripts/e2e-hermes-shared-state.mjs   # ok:true — session+cron+skill shared-state, paths, AND the business-shell plugin: install→discover→enabled→same-state→provider-free route render→uninstall zero residue
 node scripts/e2e-hermes-shared-state.mjs   # + live streaming/interrupt when a provider is already available
 node scripts/e2e-hermes.mjs           # ok:true — isolated home; streaming+resume+cron cycle green
@@ -366,9 +366,16 @@ tokens (`sk-xxxx…`, `ghp_xxxx…`) and is out of scope like everything ignored
 
 - **Live:** Google `--check` + `--check-live` (real profile, real API call);
   Hermes release-channel probe (real GitHub release selection + blob integrity);
-  packaged-app E2Es driving the **real** context-isolated Electron binaries.
+  packaged-app E2Es driving the **real** context-isolated Electron binaries;
+  Telegram live diagnosis (redacted `docs/evidence/telegram.json`, gated by
+  `npm run verify:evidence`): official polling healthy, bot token valid, sole
+  poller with no webhook conflict, a historical inbound update that reached
+  Hermes (blocked because the sender was not authorized at that time; the current
+  allowlist authorizes the sender), and exactly one benign connectivity-test
+  reply confirmed via the official Hermes send. A fresh post-authorization
+  user→agent→reply round trip remains the honest manual step.
 - **Deterministic/mocked (by design):** QA demo transport (in-memory fixtures);
-  bootstrap HTTP/integrity/rollback unit gates; WhatsApp/Telegram contracts
+  bootstrap HTTP/integrity/rollback unit gates; the WhatsApp contract
   (policy asserted, **no** live messages); partner-sandbox degraded guard
   (unit-level, Docker stopped).
 

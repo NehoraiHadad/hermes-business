@@ -25,8 +25,13 @@ MVP/Alpha מקומי ל־Windows (מוכן לפיילוט, אך עדיין לא 
 - אישורים דרך `approval.request` / `approval.respond`, כולל דחייה שנבדקה בפועל.
 - Google Workspace דרך ה־Skill הרשמי של Hermes.
 - Telegram דרך Messaging API הרשמי של Hermes. הבדיקה האוטומטית מאמתת את כרטיס
-  ה־Telegram מול `/api/messaging/platforms` ואת דיאלוג החיבור; round-trip חי של
-  הודעה נצפה ידנית פעם אחת על מחשב הבדיקה ואינו משוחזר בבדיקה אוטומטית עצמאית.
+  ה־Telegram מול `/api/messaging/platforms` ואת דיאלוג החיבור, וראיה מכונתית
+  מצומצמת ומעורפלת (`docs/evidence/telegram.json`, נאכפת ב־`npm run verify:evidence`)
+  מתעדת ש־polling של Telegram תקין, ה־bot token תקף, ו־Hermes הוא המאזין היחיד
+  ללא webhook מתחרה. הודעה נכנסת היסטורית אכן הגיעה ל־Hermes ונחסמה משום שהשולח
+  לא היה מורשה באותה עת; ה־allowlist הנוכחי מאשר אותו. הודעת בדיקת־חיבור אחת בלבד
+  יצאה ואומתה דרך שליחת Hermes הרשמית. סבב טרי של הודעה מהמשתמש → סוכן → תשובה
+  לאחר ההרשאה נותר צעד ידני אחרון ואינו משוחזר בבדיקה אוטומטית עצמאית.
 - WhatsApp בשני המסלולים בשקיפות: Meta Cloud הרשמי כברירת המחדל העסקית,
   ו־WhatsApp Web/QR של Hermes כחלופה לא־רשמית.
 - מדיניות מענה fail-closed ל־WhatsApp (קריאה־בלבד או צ׳אטים נבחרים), נאכפת ב־plugin
@@ -148,7 +153,7 @@ electron/          runtime, IPC, חלונות, אבחון, Google ו־plugin ins
 נבדקו מול Hermes Agent `0.19.0`; resolver המתקין מצא גם release רשמי תואם
 `0.19.1` (`v2026.7.30`).
 
-- בדיקות Vitest (‏51 קבצים, ‏257 עברו, ‏1 דילוג) ובדיקות מדיניות ה־WhatsApp
+- בדיקות Vitest (‏56 קבצים, ‏319 עברו, ‏1 דילוג) ובדיקות מדיניות ה־WhatsApp
   ב־Python (‏40) עברו.
 - TypeScript/Vite build, Plugin contract, bootstrap resolver ואימות Git blob של
   המתקין הרשמי עברו.
@@ -157,8 +162,10 @@ electron/          runtime, IPC, חלונות, אבחון, Google ו־plugin ins
 - מסך WhatsApp המותקן עבר E2E: ברירת מחדל read-only, מעבר לצ׳אטים נבחרים,
   סנכרון להגדרות Hermes, חזרה ל־read-only ויצירת QR אמיתי.
 - כרטיס ה־Telegram אומת אוטומטית מול `/api/messaging/platforms` ודיאלוג החיבור
-  נפתח ונסגר; round-trip חי של הודעה דרך ה־Gateway נצפה ידנית ואינו חלק מבדיקה
-  אוטומטית עצמאית.
+  נפתח ונסגר. ראיה מכונתית (`docs/evidence/telegram.json`) מתעדת polling תקין,
+  bot token תקף ומאזין יחיד ללא webhook; הודעה נכנסת היסטורית הגיעה ל־Hermes
+  ונחסמה בהיעדר הרשאה, וה־allowlist הנוכחי מאשר את השולח; הודעת בדיקת־חיבור אחת
+  בלבד נשלחה ואומתה דרך שליחת Hermes הרשמית. סבב טרי מלא לאחר ההרשאה נותר צעד ידני.
 - שאלה מובנית של הסוכן הוצגה ונענתה דרך RPC הרשמי.
 - `session.resume` החזיר את אותו transcript; `tool.start/tool.complete` התקבלו עם
   אותו tool id, ו־`session.interrupt` עצר תשובת Streaming פעילה.

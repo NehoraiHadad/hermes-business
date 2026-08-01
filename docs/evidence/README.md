@@ -1,7 +1,7 @@
 # Acceptance evidence (tracked, redacted)
 
 Small, machine-readable evidence envelopes for the acceptance surfaces, reduced
-from real E2E runs. These are **tracked** and deliberately tiny: only scalar
+from real E2E and live-probe runs. These are **tracked** and deliberately tiny: only scalar
 booleans / counts / enums survive the reduction. No raw logs, prompts, chat
 content, usernames, tokens, absolute user paths, emails or binaries are stored —
 `scripts/lib/evidence.mjs` runs every string through `sanitize` (secrets +
@@ -28,6 +28,18 @@ emails) and `redactPaths` (home/temp/drive paths) as a backstop.
   runtime reports `mode=qa-isolated`, the isolated session count is 0, the temp
   home is populated, the live profile's defining state is unchanged, and teardown
   leaves no residual process / dir / port. Produced by `e2e-installed-isolated.mjs`.
+- `telegram.json` — **passed.** Redacted live Telegram diagnosis from a manual
+  live probe (`hermes-send` + `getWebhookInfo`/`getMe`), hand-reduced to scalars:
+  official polling is healthy, the bot token is valid, and Hermes is the **sole
+  poller** with **no** webhook conflict. A historical inbound update **reached
+  Hermes** and was blocked only because the sender was not authorized at that send
+  time; the current allowlist authorizes the sender, with **no** config/env
+  mutation. Exactly **one** benign connectivity-test reply was delivered to the
+  home channel via the official Hermes send (WhatsApp/Google untouched, 0 other
+  chats touched). It deliberately does **not** claim a fresh post-authorization
+  user→agent→reply round trip — that remains a manual step. The `telegram`
+  pass-proof rule in `scripts/lib/evidence-gates.mjs` enforces the
+  sole-owner / no-webhook / no-mutation / single-send invariants.
 
 ## Regenerate
 
@@ -46,6 +58,9 @@ $env:HERMES_BUSINESS_E2E_APPROVAL = '1'
 node scripts/e2e-installed-isolated.mjs > raw-iso.json
 node scripts/capture-evidence.mjs packaged-e2e raw-iso.json
 node scripts/capture-evidence.mjs approval --isolated raw-iso.json
+
+# telegram.json has no scripted capture: it is hand-reduced and redacted from a
+# manual live probe (never touching live config/env), then held to the same gate.
 
 # verify schema + redaction + version/commit correspondence + pass-proof gate
 npm run verify:evidence
