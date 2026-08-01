@@ -34,6 +34,26 @@ describe('anti-false-pass proof gate', () => {
     expect(verifyEvidence({ dir }).errors.join()).toMatch(/live_config_unchanged/)
   })
 
+  it('rejects a packaged-e2e pass with live_marker_stable_equal=false (recursive fingerprint moved)', () => {
+    const dir = scratchDir()
+    write(dir, 'packaged-e2e.json', buildEnvelope('packaged-e2e', { ...passingPackaged(), live_marker_stable_equal: false }, { tool: 't' }))
+    expect(verifyEvidence({ dir }).errors.join()).toMatch(/live_marker_stable_equal/)
+  })
+
+  it('rejects a packaged-e2e pass that omits live_marker_stable_equal entirely', () => {
+    const dir = scratchDir()
+    const bad = passingPackaged()
+    delete bad.live_marker_stable_equal
+    write(dir, 'packaged-e2e.json', buildEnvelope('packaged-e2e', bad, { tool: 't' }))
+    expect(verifyEvidence({ dir }).errors.join()).toMatch(/live_marker_stable_equal/)
+  })
+
+  it('rejects a packaged-e2e pass whose live_unsafe_entries is not 0 (unsafe entry present)', () => {
+    const dir = scratchDir()
+    write(dir, 'packaged-e2e.json', buildEnvelope('packaged-e2e', { ...passingPackaged(), live_unsafe_entries: 1 }, { tool: 't' }))
+    expect(verifyEvidence({ dir }).errors.join()).toMatch(/live_unsafe_entries/)
+  })
+
   it('accepts an approval pass that traversed the real event path', () => {
     const dir = scratchDir()
     write(dir, 'approval.json', buildEnvelope('approval', passingApproval(), { tool: 't' }))

@@ -44,11 +44,15 @@ export function preserveForensicsIfMutated({ forensicDir, delta, liveUntouched, 
       config_changed: delta.config_changed,
       config_hash_before: liveMarkerBefore._configHash,
       config_hash_after: liveMarkerAfter._configHash,
-      marker_digest_before: liveMarkerBefore.digest,
-      marker_digest_after: liveMarkerAfter.digest,
-      marker_digest_equal: delta.digest_equal,
+      stable_marker_before: liveMarkerBefore.digest,
+      stable_marker_after: liveMarkerAfter.digest,
+      stable_marker_equal: delta.digest_equal,
       profile_defining_unchanged: delta.profile_defining_unchanged,
       structural_added_removed: delta.added_removed,
+      stable_structural_changed: delta.stable_structural_changed,
+      stable_content_changed: delta.stable_content_changed,
+      stable_unsafe_entries: delta.stable_unsafe_entries,
+      volatile_runtime_changes: delta.volatile_runtime_changes,
       inventory_before: liveMarkerBefore.inventory,
       inventory_after: liveMarkerAfter.inventory
     }
@@ -92,6 +96,11 @@ export async function finalizeTeardown({
   const portFree = await isPortFree(isolatedPort)
   const liveMarkerAfter = hermesHomeMarker(liveHome)
   const delta = markerDelta(liveMarkerBefore, liveMarkerAfter)
+  // `live_home_untouched` and `live_marker_exact_equal` are the STABLE invariant
+  // (config + protected name-sets + stable-content sizes) — equal by construction.
+  // Volatile live-gateway churn (session/cron runtime bookkeeping) is disclosed
+  // separately and never blocks a pass; a stable/config/session-structural/skills
+  // mutation fails both, and unknown drift fails closed via the stable digest.
   const liveUntouched = delta.profile_defining_unchanged
   report.teardown = {
     temp_home_removed: removed.removed,
@@ -100,10 +109,20 @@ export async function finalizeTeardown({
     live_marker_exact_equal: delta.digest_equal,
     live_config_unchanged: !delta.config_changed,
     live_added_removed: delta.added_removed,
+    live_stable_structural_changed: delta.stable_structural_changed,
+    live_stable_content_changed: delta.stable_content_changed,
+    live_stable_unsafe_entries: delta.stable_unsafe_entries,
+    live_volatile_runtime_changes: delta.volatile_runtime_changes,
     probe_file_absent: !existsSync(probePath)
   }
   report.ok = Boolean(
-    report.ok && liveUntouched && removed.removed && portFree && report.teardown.probe_file_absent
+    report.ok &&
+      liveUntouched &&
+      delta.digest_equal &&
+      delta.stable_unsafe_entries === 0 &&
+      removed.removed &&
+      portFree &&
+      report.teardown.probe_file_absent
   )
   Object.assign(
     report.teardown,

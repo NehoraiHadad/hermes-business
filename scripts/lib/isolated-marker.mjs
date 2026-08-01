@@ -1,93 +1,118 @@
 // Live/temp HERMES_HOME profile marker + forensic diff for the isolated packaged
-// E2E. Nothing here launches or owns a runtime — it only OBSERVES a home dir.
-//
-// The "marker" captures just the profile-defining state the packaged E2E is known
-// to mutate (approvals.mode via config.yaml, and the session/cron/skill/plugin
-// inventories), so an idle live gateway's background logging/caching never
-// produces a false "mutated" verdict. Deliberately excludes logs/cache/audio_cache
-// and file mtimes so idle background activity does not perturb it.
-
+// E2E. It only OBSERVES a home dir. STABLE layer: config.yaml bytes, cron name-set,
+// and a deterministic RECURSIVE content fingerprint (rel-path+type+BYTES) of every
+// durable/app-managed tree — a nested edit or same-size rewrite flips it → fail
+// closed; only bytecode caches (every tree) and skills-scoped Curator metadata are
+// excluded, by explicit policy (see isolated-marker-snapshot-policy.mjs). VOLATILE
+// layer: `sessions` name/size + `cron` file SIZE churn, disclosed as counts, never a
+// mutation. DBs, memories/, logs, caches, platform dirs: not recursed (see docs).
 import { createHash } from 'node:crypto'
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
+import { countTopLevel, countUnsafe, diffSnapshots, fingerprintTree, snapshotTree } from './isolated-marker-snapshot.mjs'
+import { snapshotPolicyFor } from './isolated-marker-snapshot-policy.mjs'
+import { nameAddRemove, scanVolatile, sizeChangedCount } from './isolated-marker-volatile.mjs'
+const VOLATILE_DIRS = ['sessions', 'cron']
+// Durable authored + app-managed trees, fully recursive (bytes only, no content
+// exposed). desktop-plugins/business are companion-managed but PROTECTED — the
+// exact state isolation must not disturb. agents/workflows absent in 0.19.1.
+const STABLE_TREE_DIRS = ['skills', 'plugins', 'desktop-plugins', 'business', 'agents', 'workflows', 'hooks']
+const NAME_PROTECTED_DIRS = ['cron']
 
-const MARKER_DIRS = ['sessions', 'cron', 'skills', 'plugins', 'agents', 'workflows']
-
-/**
- * Profile-defining fingerprint of a Hermes home: a sha256 over the config.yaml
- * bytes plus a stable inventory (immediate child name+size) of the dirs the
- * packaged E2E is known to mutate.
- */
+// Profile marker. `digest` covers ONLY protected state (excludes session/cron
+// churn). Raw snapshots/name/size maps are retained so markerDelta can attribute
+// every change precisely without leaking content/paths.
 export function hermesHomeMarker(home) {
-  const hash = createHash('sha256')
-  const inventory = {}
-  const dirNames = {}
   const configPath = path.join(home, 'config.yaml')
   const configPresent = existsSync(configPath)
   const configBytes = configPresent ? readFileSync(configPath) : Buffer.from('<absent>')
   const configHash = createHash('sha256').update(configBytes).digest('hex')
-  hash.update('config.yaml\0')
-  hash.update(configBytes)
-  for (const dir of MARKER_DIRS) {
-    const full = path.join(home, dir)
-    let entries = []
-    let names = []
-    try {
-      names = readdirSync(full).sort()
-      entries = names.map(name => {
-        let size = 0
-        try {
-          size = statSync(path.join(full, name)).size
-        } catch {
-          size = -1
-        }
-        return `${name}:${size}`
-      })
-    } catch {
-      names = []
-    }
-    inventory[dir] = names.length
+  const dirNames = {}
+  const dirSizes = {}
+  for (const dir of VOLATILE_DIRS) {
+    const { names, sizes } = scanVolatile(path.join(home, dir))
     dirNames[dir] = names
-    hash.update(`\0${dir}\0`)
-    hash.update(entries.join('|'))
+    dirSizes[dir] = sizes
   }
+  const treeSnapshots = {}
+  const treeUnsafe = {}
+  const inventory = {}
+  const stable = createHash('sha256')
+  stable.update('config.yaml\0')
+  stable.update(configBytes)
+  for (const dir of NAME_PROTECTED_DIRS) {
+    stable.update(`\0names:${dir}\0`)
+    stable.update(dirNames[dir].join('|'))
+  }
+  for (const dir of STABLE_TREE_DIRS) {
+    // Explicit per-tree policy: Curator/learning metadata is churn ONLY in skills.
+    const snap = snapshotTree(path.join(home, dir), snapshotPolicyFor(dir))
+    treeSnapshots[dir] = snap
+    treeUnsafe[dir] = countUnsafe(snap)
+    inventory[dir] = countTopLevel(snap)
+    stable.update(`\0tree:${dir}\0`)
+    stable.update(fingerprintTree(snap))
+  }
+  for (const dir of VOLATILE_DIRS) inventory[dir] = dirNames[dir].length
   return {
-    digest: hash.digest('hex'),
+    digest: stable.digest('hex'),
     configPresent,
     _configHash: configHash,
     _dirNames: dirNames,
+    _dirSizes: dirSizes,
+    _treeSnapshots: treeSnapshots,
+    treeUnsafe,
     inventory
   }
 }
-
 /**
- * Diff two markers into a per-component verdict. `config_changed` and the
- * inventory deltas let a caller distinguish OUR mutations (approvals.mode via
- * config.yaml, a new skill/cron/plugin) from a concurrently-running live
- * gateway's own session bookkeeping.
+ * Diff two markers — COUNTS only, never names/paths. `profile_defining_unchanged`
+ * is STRICTER than `digest_equal`: it also requires zero unsafe entries, so an
+ * unchanged symlink/reparse/unreadable/bounds record (identical fingerprint, thus
+ * digest_equal) still fails closed. Otherwise: config byte-identical, no cron name
+ * add/remove, no tree drift. Structural (path add/remove/type-change) vs content
+ * (same-path byte rewrite — the size-evading hole this closes) reported SEPARATELY.
  */
 export function markerDelta(before, after) {
   const addedRemoved = {}
-  for (const dir of MARKER_DIRS) {
-    const b = new Set(before._dirNames?.[dir] ?? [])
-    const a = new Set(after._dirNames?.[dir] ?? [])
-    const added = [...a].filter(n => !b.has(n))
-    const removed = [...b].filter(n => !a.has(n))
-    if (added.length || removed.length) addedRemoved[dir] = { added: added.length, removed: removed.length }
+  for (const dir of VOLATILE_DIRS) {
+    const ar = nameAddRemove(before, after, dir)
+    if (ar) addedRemoved[dir] = ar
   }
-  // A real mutation from the old live-connected suite ADDS a named entry (the
-  // durable skill, a new cron job, a new session) or toggles config.yaml. A
-  // running live gateway only ever bumps timestamps/sizes INSIDE existing named
-  // files — the name set is stable. So we attribute isolation by NAME-SET
-  // stability + config-byte identity, ignoring `sessions` churn (the user's own
-  // gateway) since our isolated session count is independently proven to be 0.
-  const structuralDirs = Object.keys(addedRemoved).filter(dir => dir !== 'sessions')
+  const configChanged =
+    before.configPresent !== after.configPresent || before._configHash !== after._configHash
+  const stableStructural = {}
+  const stableContent = {}
+  let stableUnsafe = 0
+  for (const dir of STABLE_TREE_DIRS) {
+    const d = diffSnapshots(before._treeSnapshots?.[dir] ?? [], after._treeSnapshots?.[dir] ?? [])
+    if (d.structural) stableStructural[dir] = d.structural
+    if (d.content) stableContent[dir] = d.content
+    // Fail closed on ANY unsafe record in EITHER snapshot: a pre-existing
+    // symlink/reparse/unreadable/bounds entry stays byte-identical yet must never pass.
+    stableUnsafe += (before.treeUnsafe?.[dir] ?? 0) + (after.treeUnsafe?.[dir] ?? 0)
+  }
+  const profileDefiningUnchanged =
+    !configChanged &&
+    !addedRemoved.cron &&
+    stableUnsafe === 0 &&
+    Object.keys(stableStructural).length === 0 &&
+    Object.keys(stableContent).length === 0
+  const sessionsVolatile =
+    (addedRemoved.sessions ? addedRemoved.sessions.added + addedRemoved.sessions.removed : 0) +
+    sizeChangedCount(before, after, 'sessions')
+  const cronVolatile = sizeChangedCount(before, after, 'cron')
+  const volatileRuntimeChanges = {}
+  if (sessionsVolatile) volatileRuntimeChanges.sessions = sessionsVolatile
+  if (cronVolatile) volatileRuntimeChanges.cron = cronVolatile
   return {
     digest_equal: before.digest === after.digest,
-    config_changed:
-      before.configPresent !== after.configPresent || before._configHash !== after._configHash,
+    config_changed: configChanged,
     added_removed: addedRemoved,
-    profile_defining_unchanged:
-      before._configHash === after._configHash && structuralDirs.length === 0
+    stable_structural_changed: stableStructural,
+    stable_content_changed: stableContent,
+    stable_unsafe_entries: stableUnsafe,
+    profile_defining_unchanged: profileDefiningUnchanged,
+    volatile_runtime_changes: volatileRuntimeChanges
   }
 }

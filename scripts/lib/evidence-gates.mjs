@@ -29,7 +29,7 @@ export const PASS_PROOF = {
   'packaged-e2e': [
     'artifact_attested', 'qa_namespace_applied', 'isolated_runtime',
     'ws_on_isolated_port', 'isolated_home_populated', 'live_home_untouched',
-    'live_config_unchanged', 'no_residual'
+    'live_config_unchanged', 'live_marker_stable_equal', 'no_residual'
   ],
   approval: [
     'live_ui_denial_probe.artifact_attested', 'live_ui_denial_probe.qa_namespace_applied',
@@ -104,6 +104,12 @@ export function requirePassProof(env, fail) {
     }
     if (s.artifact_kind !== 'win-unpacked-current') {
       fail(`status=passed but artifact_kind is ${JSON.stringify(s.artifact_kind)} (must be win-unpacked-current)`)
+    }
+    // Fail closed on any unsafe stable-tree entry (symlink/reparse/unreadable/
+    // bounds) present before OR after — an unchanged one stays digest-equal but
+    // must never pass. Counts only; never a path.
+    if (s.live_unsafe_entries !== 0) {
+      fail(`status=passed but live_unsafe_entries is ${JSON.stringify(s.live_unsafe_entries)} (must be 0)`)
     }
   }
   // A denial probe that "passed" must never be a faked renderer modal.

@@ -254,12 +254,20 @@ Proven in one real run (`docs/evidence/packaged-e2e.json`, `approval.json`, both
   **never created**. This traverses the real Hermes approval RPC/event path; it is
   **not** a faked renderer modal.
 - **clean teardown** — the temp home is deleted, the isolated port is free, the
-  probe file is absent, and the live profile's defining state (config.yaml bytes +
-  the skill/cron/plugin/agent/workflow **name sets**) is unchanged. A same-name
-  size/timestamp bump by the user's concurrently-running live gateway (bound to
-  9119, which this run never touches) is attributed and excluded — only a **new
-  named** skill/cron/session (the old suite's additive signature) would count as a
-  live mutation.
+  probe file is absent, and the live profile's defining state is unchanged:
+  config.yaml bytes, the cron **name-set**, and a deterministic **recursive content
+  fingerprint** (rel-path + type + file **bytes**) of every durable/app-managed tree
+  — `skills`, `plugins`, `desktop-plugins`, `business`, `hooks` (+ defensively
+  `agents`/`workflows`). A nested edit or a same-size byte rewrite flips it, and any
+  **unsafe** entry (symlink/reparse/unreadable/over-cap) in either the before- or
+  after-snapshot fails closed — counts only, never paths (see
+  `docs/evidence/home-classification.md`). Bytecode caches are excluded in every
+  tree; exact Curator runtime metadata is excluded **only inside `skills/`** (an
+  authored `.usage.json`/`.curator_state` elsewhere is hashed), and an unsafe tree
+  **root** (symlink/non-dir/unreadable) fails closed while an absent root is safe.
+  A same-name size/timestamp bump by the user's
+  concurrently-running live gateway (bound to 9119, which this run never touches) is
+  attributed as volatile churn and disclosed, never a mutation.
 
 ### 4a. Installed-Hermes shared-state E2E (isolated home, official surfaces)
 

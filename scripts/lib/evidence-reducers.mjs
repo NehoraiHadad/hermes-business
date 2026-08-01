@@ -1,16 +1,15 @@
-// Pure reducers that shrink an E2E's raw JSON output to a small, redacted
-// evidence summary: scalar booleans/counts/enums only — never paths, logs or
-// content. Kept separate from the capture-evidence.mjs CLI so the reduction is
-// unit-testable and reusable.
-
+// Pure reducers that shrink an E2E's raw JSON output to a small, redacted evidence
+// summary: scalar booleans/counts/enums only — never paths, logs or content. Kept
+// separate from the capture-evidence.mjs CLI so the reduction is unit-testable.
 const bool = v => (v == null ? null : Boolean(v))
+const sumCounts = obj => Object.values(obj || {}).reduce((a, b) => a + (Number(b) || 0), 0)
+const cronNameAdds = ar => Number(ar?.cron?.added) || 0 // cron adds are a protected mutation
 const present = (obj, omit = []) =>
   Object.fromEntries(
     Object.entries(obj || {})
       .filter(([k]) => !omit.includes(k))
       .map(([k, v]) => [k, Boolean(v)])
   )
-
 export function reduceSharedState(r) {
   const p = r.plugin_shared_state || {}
   return {
@@ -53,7 +52,16 @@ export function reduceIsolatedPackaged(r) {
     isolated_home_populated: bool(iso.isolated_home_populated),
     live_home_untouched: bool(td.live_home_untouched),
     live_config_unchanged: bool(td.live_config_unchanged),
-    live_structural_additions: Object.keys(td.live_added_removed || {}).filter(d => d !== 'sessions').length,
+    // Stable marker equality: config + cron name-set + RECURSIVE content
+    // fingerprints of the durable trees; a nested edit or same-size byte rewrite
+    // flips it. Equal to live_home_untouched by construction.
+    live_marker_stable_equal: bool(td.live_marker_exact_equal),
+    // Structural (path add/remove/type-change) vs content (same-path byte rewrite)
+    // drift, kept separate; both 0 on a real pass. Counts only — never names/paths.
+    live_structural_additions: sumCounts(td.live_stable_structural_changed) + cronNameAdds(td.live_added_removed),
+    live_content_rewrites: sumCounts(td.live_stable_content_changed),
+    live_unsafe_entries: Number(td.live_stable_unsafe_entries) || 0,
+    live_volatile_runtime_changes: sumCounts(td.live_volatile_runtime_changes),
     temp_home_removed: bool(td.temp_home_removed),
     isolated_port_free: bool(td.isolated_port_free),
     no_residual: bool(td.temp_home_removed) && bool(td.isolated_port_free) && bool(td.probe_file_absent)
