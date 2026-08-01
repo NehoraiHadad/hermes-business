@@ -25,6 +25,8 @@ from .telegram_policy import PLATFORMS as TELEGRAM_PLATFORMS
 from .telegram_policy import can_reply as tg_can_reply
 from .telegram_policy import load_policy as tg_load_policy
 from .telegram_registry import install_telegram_guards
+from .tool_hook import pre_tool_call
+from .tool_transport import install_tool_guards
 from .transport import AdapterContractError
 
 logger = logging.getLogger(__name__)
@@ -138,7 +140,35 @@ def register(ctx) -> None:
     # and interactive-tap sends. Each family disables independently so a drift in
     # one never silently disarms the other.
     ctx.register_hook("pre_gateway_dispatch", pre_gateway_dispatch)
+    # Tool-level fail-closed guard for outbound messaging tools. Defense-in-depth
+    # for any registered send_message-shaped model tool (send_message itself is
+    # NOT a registered model tool in the verified Hermes — see tool_hook).
+    ctx.register_hook("pre_tool_call", pre_tool_call)
     _install_guards(
         "WhatsApp", install_registry_guards, get_hermes_home, ("whatsapp", "whatsapp_cloud")
     )
     _install_guards("Telegram", install_telegram_guards, get_hermes_home, ("telegram",))
+    # Close the confirmed direct-`telegram.Bot` egress bypass at the transport
+    # engine shared by cron / CLI / MCP, via the SAME fail-closed path as the
+    # adapter guards: a raised transport contract error (engine unimportable,
+    # chokepoint drift, partial/failed bind) disables EVERY controlled platform
+    # rather than leave a live-but-unguarded transport. Plugin load continues
+    # (the pre_gateway_dispatch + pre_tool_call hooks above stay registered).
+    _install_guards(
+        "send_message transport",
+        install_tool_guards,
+        get_hermes_home,
+        ("telegram", "whatsapp", "whatsapp_cloud"),
+    )
+    # AFTER the guards are installed, publish a LIVE runtime status heartbeat FROM this
+    # dispatch process. It introspects the just-bound transport + registered hooks and
+    # only reports enforcing when they are actually live here (see guard_status). The
+    # desktop reader liveness-verifies it (fresh + live pid + gateway role) and otherwise
+    # shows BLOCKED — a serve-process route could not prove gateway enforcement, and a
+    # static file receipt is insufficient, so this dispatch-process heartbeat is the proof.
+    try:
+        from . import guard_status
+
+        guard_status.start(get_hermes_home, declared_hooks=("pre_gateway_dispatch", "pre_tool_call"))
+    except Exception:  # pragma: no cover - status must never break enforcement
+        logger.exception("business messaging policy: guard-status heartbeat did not start")

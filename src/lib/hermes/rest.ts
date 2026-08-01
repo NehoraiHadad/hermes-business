@@ -1,5 +1,5 @@
 import { type ApiFn } from './core'
-import { createProviderApi, type HermesProviderApi } from './providers'
+import { createProviderApi, type HermesProviderApi, type ProviderCredentialProbe } from './providers'
 import { createCronApi, type HermesCronApi, type TaskEdit } from './rest-cron'
 import { createMessagingApi, type HermesMessagingApi } from './rest-messaging'
 import { createSkillsApi, type HermesSkillsApi } from './rest-skills'
@@ -31,10 +31,11 @@ export interface HermesRest
 export function createHermesRest(
   api: ApiFn,
   ensureGateway: () => Promise<unknown> = async () => {},
-  applyDesktopUpdate?: () => Promise<StartUpdateResult>
+  applyDesktopUpdate?: () => Promise<StartUpdateResult>,
+  probeCredential?: ProviderCredentialProbe
 ): HermesRest {
   return {
-    ...createProviderApi(api),
+    ...createProviderApi(api, probeCredential),
     ...createWhatsappApi(api, ensureGateway),
     ...createCronApi(api),
     ...createSkillsApi(api),

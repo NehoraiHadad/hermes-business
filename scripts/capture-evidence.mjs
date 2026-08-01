@@ -19,6 +19,7 @@ import {
   reduceIsolatedApproval,
   reduceThinInstaller
 } from './lib/evidence-reducers.mjs'
+import { hasManualBindingOverride } from './lib/release/evidence-capture.mjs'
 
 const bool = v => (v == null ? null : Boolean(v))
 
@@ -30,7 +31,14 @@ for (let i = 0; i < rest.length; i += 1) {
   else positionals.push(rest[i])
 }
 const rawPath = positionals[0]
-const raw = rawPath ? JSON.parse(readFileSync(rawPath, 'utf8')) : null
+// `-` means read the raw JSON from STDIN — the automated exact-artifact orchestrator
+// pipes the assembled (machine-captured) raw here so nothing touches disk in between.
+function readRaw(p) {
+  if (!p) return null
+  const text = p === '-' ? readFileSync(0, 'utf8') : readFileSync(p, 'utf8')
+  return JSON.parse(text)
+}
+const raw = readRaw(rawPath)
 const nowIso = new Date().toISOString()
 
 let envelope
@@ -79,6 +87,17 @@ if (category === 'shared-state') {
     for (const pair of String(flags.extra || '').split(',').filter(Boolean)) {
       const [k, v] = pair.split('=')
       extra[k] = v === 'true' ? true : v === 'false' ? false : Number.isFinite(Number(v)) ? Number(v) : v
+    }
+    // HIGH 3: the build binding may NEVER be hand-entered via --extra. A passed
+    // packaged-e2e envelope's binding must be machine-captured from a real isolated
+    // run (the `raw && raw.isolation && raw.teardown` branch above). Refuse here.
+    if (hasManualBindingOverride(Object.keys(extra))) {
+      console.error('Refusing to hand-enter the packaged-e2e build binding via --extra (build_nonce/release_binding_digest/installer_sha256/capture_method). Run scripts/e2e-installed-isolated.mjs against the exact staged artifact and pipe its raw output instead.')
+      process.exit(1)
+    }
+    if ((flags.status || 'blocked') === 'passed') {
+      console.error('Refusing to mint a PASSED packaged-e2e envelope without a machine-captured binding from a real isolated run.')
+      process.exit(1)
     }
     envelope = buildEnvelope('packaged-e2e', { reason: flags.reason || 'not run', ...extra }, { tool: 'e2e-installed-ui.mjs (gap)', status: flags.status || 'blocked', capturedAt: nowIso })
   }

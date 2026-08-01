@@ -23,7 +23,13 @@ export const BOOTSTRAP_SKILL = 'business-bootstrap'
 const pluginSource = path.join(repoRoot, 'hermes-plugin', 'business-shell', 'plugin.js')
 const skillSource = path.join(repoRoot, 'hermes-plugin', 'business-shell', 'skills', BOOTSTRAP_SKILL, 'SKILL.md')
 const backendSourceDir = path.join(repoRoot, 'hermes-plugin', 'business-shell', 'dashboard')
-const BACKEND_FILES = ['manifest.json', 'plugin_api.py']
+// Runtime payload: manifest + the mounted, self-contained api entrypoint. In lockstep
+// with electron/paths.cjs. The business-context skill uses the official Skills API, so
+// no custom write-engine modules ship.
+const BACKEND_FILES = [
+  'manifest.json',
+  'plugin_api.py'
+]
 
 function sri(bytes) {
   return `sha256-${createHash('sha256').update(bytes).digest('base64')}`

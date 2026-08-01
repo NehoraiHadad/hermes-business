@@ -1,14 +1,18 @@
-// Proof that the OFFICIALLY-installed business-shell Desktop plugin (disk door)
-// discovers, enables, renders, and shares ONE isolated HERMES_HOME with the
-// official Hermes surfaces — then uninstalls to zero residue. Every step runs
-// the real runtime-loader pipeline (plugin-loader.mjs) and the live gateway.
+// Contract-level proof that the OFFICIALLY-installed business-shell Desktop
+// plugin (disk door) discovers, enables, renders, and shares ONE isolated
+// HERMES_HOME with the official Hermes surfaces — then uninstalls to zero
+// residue, against the LIVE gateway. Loading here runs the UNIT CONTRACT HARNESS
+// (contract-harness.mjs), a reproduction of the documented loader — NOT the real
+// Hermes renderer loader. The real-loader proof is the opt-in E2E
+// (scripts/e2e-real-loader.mjs); the contract that the real loader still behaves
+// as reproduced is enforced by verify:plugin against installed runtime-loader.ts.
 
 import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { flattenSkillNames } from '../../hermes-live.mjs'
-import { AREAS, createCaptureContext, loadRuntimePlugin } from './plugin-loader.mjs'
+import { AREAS, createCaptureContext, loadRuntimePlugin } from './contract-harness.mjs'
 import { buildSdk } from './plugin-sdk-shim.mjs'
 import { BOOTSTRAP_SKILL, PLUGIN_ID, repoRoot, scanDesktopPlugins, uninstallBusinessShell } from './plugin-install.mjs'
 import { provePluginPausedDoor } from './plugin-paused-door.mjs'
@@ -29,8 +33,10 @@ export async function provePluginSharedState({ harness, home, storedSessionId, i
   if (!under(entry.file, home)) throw new Error('plugin discovered outside the isolated home')
   stage(`official disk door lists ${discovered.length} plugin(s); business-shell present`)
 
-  // 2) Load through the exact official pipeline (integrity -> rewrite -> import
-  //    -> validate default export), against the LIVE isolated gateway.
+  // 2) Load through the harness pipeline modelling the documented loader
+  //    (integrity -> rewrite -> import -> validate default export), against the
+  //    LIVE isolated gateway. This is the contract reproduction, not the real
+  //    renderer loader — see scripts/e2e-real-loader.mjs for the real-loader run.
   const source = readFileSync(entry.file, 'utf8')
   const bytes = readFileSync(entry.file)
   const sdk = buildSdk({ React, rpc })
@@ -40,7 +46,7 @@ export async function provePluginSharedState({ harness, home, storedSessionId, i
   // The plugin's ctx.rest is namespace-locked to /api/plugins/<id>; inject the
   // live isolated gateway's REST client as the transport so register() installs
   // a door that reaches the companion backend end-to-end (auth via the same
-  // token, exactly as the shipped renderer's window.hermesDesktop.api).
+  // token, modelling the shipped renderer's window.hermesDesktop.api transport).
   const restFetch = rest
     ? ({ path, method = 'GET', body }) => rest(method, path, body)
     : undefined

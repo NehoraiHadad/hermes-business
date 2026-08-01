@@ -5,6 +5,7 @@
 
 import { SCHEMA_VERSION, redactDeep } from './evidence.mjs'
 import { classifyProvenance } from './git-provenance.mjs'
+import { checkSubjectFreshness } from './evidence-subject.mjs'
 
 export const CATEGORIES = new Set(['packaged-e2e', 'thin-installer', 'shared-state', 'approval', 'telegram'])
 export const STATUSES = new Set(['passed', 'blocked', 'skipped'])
@@ -122,6 +123,16 @@ export function requirePassProof(env, fail) {
     if (s.live_unsafe_entries !== 0) {
       fail(`status=passed but live_unsafe_entries is ${JSON.stringify(s.live_unsafe_entries)} (must be 0)`)
     }
+    // Build binding (finding 4): a passed packaged-e2e envelope MUST carry the
+    // tested artifact's build_nonce + release_binding_digest + installer sha256, so
+    // the release contract can prove the evidence was captured against THIS build.
+    // Presence is enforced here; the value-match to the current artifact lives in
+    // the release preflight (evidence-binding.mjs checkPackagedBinding).
+    for (const k of ['build_nonce', 'release_binding_digest', 'installer_sha256']) {
+      if (typeof s[k] !== 'string' || s[k].length === 0) {
+        fail(`status=passed packaged-e2e but summary.${k} is missing (must bind the tested build)`)
+      }
+    }
   }
   // A denial probe that "passed" must never be a faked renderer modal.
   if (env.category === 'approval' && s.live_ui_denial_probe?.renderer_modal_faked !== false) {
@@ -149,5 +160,10 @@ export function verifyEnvelope(env, current, fail, classify = classifyProvenance
   checkSchema(env, fail)
   checkRedaction(env, fail)
   checkCorrespondence(env, current, fail, classify)
+  // Subject freshness recomputes the fingerprint of the files this category
+  // attests over the current working tree (current.cwd is the repo root). It is
+  // git_state-independent: a passed envelope whose subjects drifted — even in an
+  // uncommitted working tree — is rejected with a recapture hint.
+  checkSubjectFreshness(env, current.cwd, fail)
   if (env.status === 'passed') requirePassProof(env, fail)
 }

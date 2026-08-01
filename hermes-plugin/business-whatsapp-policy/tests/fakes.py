@@ -95,6 +95,11 @@ class FakeRegistry:
     def register(self, entry):
         self.entries[entry.name] = entry
 
+    def unregister(self, name):
+        """Mirror gateway.platform_registry.unregister: drop the entry and report
+        whether one was actually removed (the plugin's fail-closed disable path)."""
+        return self.entries.pop(name, None) is not None
+
 
 class FakeCloudAdapter:
     def __init__(self, config):

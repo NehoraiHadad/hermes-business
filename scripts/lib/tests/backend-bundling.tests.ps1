@@ -8,6 +8,15 @@
 # dashboard under extraResources for the packaged Electron staging path.
 # Dot-sourced by scripts/test-bootstrap-lib.ps1; uses its shared harness.
 
+# The complete companion backend runtime payload — the manifest and the mounted,
+# self-contained api entrypoint. The business-context skill is persisted through the
+# official Hermes Skills API, so no custom write-engine modules ship.
+# Kept in lockstep with electron/paths.cjs DESKTOP_BACKEND_FILES / Get-DashboardBackendFiles.
+$script:CompanionBackendPayloadFiles = @(
+  'manifest.json',
+  'plugin_api.py'
+)
+
 function Invoke-BackendBundlingTests {
   param([Parameter(Mandatory)][string]$Root)
   Write-Host 'Companion backend bundling drift:'
@@ -17,15 +26,16 @@ function Invoke-BackendBundlingTests {
   $business = Get-Content -Raw -LiteralPath (Join-Path $Root 'installer\lib\BusinessInstall.ps1')
   $pkg = Get-Content -Raw -LiteralPath (Join-Path $Root 'package.json') | ConvertFrom-Json
 
-  Test-Case 'NSI File-bundles the dashboard payload + BackendEnable + enable_plugin.py' {
-    Assert-True ($nsi -match [regex]::Escape('dashboard\manifest.json')) 'manifest.json not bundled in the NSI'
-    Assert-True ($nsi -match [regex]::Escape('dashboard\plugin_api.py')) 'plugin_api.py not bundled in the NSI'
+  Test-Case 'NSI File-bundles the full dashboard payload + BackendEnable + enable_plugin.py' {
+    foreach ($name in $script:CompanionBackendPayloadFiles) {
+      Assert-True ($nsi -match [regex]::Escape("dashboard\$name")) "$name not bundled in the NSI"
+    }
     Assert-True ($nsi -match [regex]::Escape('File "lib\BackendEnable.ps1"')) 'BackendEnable.ps1 not File-bundled'
     Assert-True ($nsi -match [regex]::Escape('File "lib\enable_plugin.py"')) 'enable_plugin.py not File-bundled'
   }
 
   Test-Case 'the bundled dashboard files exist on disk' {
-    foreach ($name in @('manifest.json', 'plugin_api.py')) {
+    foreach ($name in $script:CompanionBackendPayloadFiles) {
       Assert-True (Test-Path -LiteralPath (Join-Path $Root "hermes-plugin\business-shell\dashboard\$name") -PathType Leaf) "missing source: $name"
     }
   }
@@ -48,6 +58,8 @@ function Invoke-BackendBundlingTests {
     $entry = @($pkg.build.extraResources | Where-Object { $_.to -eq 'business-bootstrap/dashboard' })
     Assert-True ($entry.Count -eq 1) 'no business-bootstrap/dashboard extraResources entry'
     Assert-True ($entry[0].from -eq 'hermes-plugin/business-shell/dashboard') 'dashboard extraResources points at the wrong source'
-    Assert-True (($entry[0].filter -contains 'manifest.json') -and ($entry[0].filter -contains 'plugin_api.py')) 'dashboard extraResources does not ship both payload files'
+    foreach ($name in $script:CompanionBackendPayloadFiles) {
+      Assert-True ($entry[0].filter -contains $name) "dashboard extraResources does not ship $name"
+    }
   }
 }

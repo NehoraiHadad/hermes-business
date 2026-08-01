@@ -1,10 +1,13 @@
-import { describe, expect, it } from 'vitest'
+import { afterAll, describe, expect, it } from 'vitest'
+import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import {
   assertRunningVersionSupported,
   assertUpdateMethodSupported,
   captureInstallCommit,
   classifyInstallMethod,
+  gitFetchOrigin,
   installRepoRoot,
   resetInstallCheckout
 } from './hermes-compat.cjs'
@@ -24,10 +27,39 @@ describe('classifyInstallMethod', () => {
   })
 })
 
+// A fake MANAGED (native/ZIP) layout: <tmp>/hermes-agent/pyproject.toml with the
+// executable three levels below hermes-agent. os.tmpdir() is outside any git work
+// tree, so isGitInstall() is false and it classifies as 'managed'.
+const managedRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'hermes-managed-'))
+const managedAgent = path.join(managedRoot, 'hermes-agent')
+fs.mkdirSync(path.join(managedAgent, 'venv', 'bin'), { recursive: true })
+fs.writeFileSync(path.join(managedAgent, 'pyproject.toml'), '[project]\nname="hermes"\n')
+const MANAGED_CMD = path.join(managedAgent, 'venv', 'bin', 'hermes')
+
+afterAll(() => {
+  fs.rmSync(managedRoot, { recursive: true, force: true })
+})
+
+describe('classifyInstallMethod (managed layout)', () => {
+  it('classifies a native/ZIP hermes-agent+pyproject layout as "managed"', () => {
+    expect(classifyInstallMethod(MANAGED_CMD)).toBe('managed')
+  })
+})
+
 describe('assertUpdateMethodSupported', () => {
+  it('refuses a managed (native/ZIP) install — no proven automatic rollback', () => {
+    expect(() => assertUpdateMethodSupported(MANAGED_CMD)).toThrow(/מנוהלת|שחזור אוטומטי/)
+  })
+
   it('throws (gating the update) for an unrecognized install method', () => {
-    expect(() => assertUpdateMethodSupported(BOGUS)).toThrow(/שיטת התקנה נתמכת/)
+    expect(() => assertUpdateMethodSupported(BOGUS)).toThrow(/התקנת git|שיטת התקנה נתמכת/)
     expect(() => assertUpdateMethodSupported(null)).toThrow()
+  })
+})
+
+describe('gitFetchOrigin', () => {
+  it('reports not-git for a non-git install without shelling out', () => {
+    expect(gitFetchOrigin(BOGUS)).toEqual({ ok: false, reason: 'not-git' })
   })
 })
 

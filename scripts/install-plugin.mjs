@@ -30,7 +30,13 @@ const bootstrapSkillTarget = join(bootstrapSkillDir, 'SKILL.md')
 const configPath = join(hermesHome, 'config.yaml')
 const backendSourceDir = join(root, 'hermes-plugin', 'business-shell', 'dashboard')
 const backendTargetDir = join(hermesHome, 'plugins', 'business-shell', 'dashboard')
-const BACKEND_FILES = ['manifest.json', 'plugin_api.py']
+// Runtime payload: manifest + the mounted, self-contained api entrypoint. In lockstep
+// with electron/paths.cjs. The business-context skill uses the official Skills API, so
+// no custom write-engine modules ship.
+const BACKEND_FILES = [
+  'manifest.json',
+  'plugin_api.py'
+]
 
 // Parse + validate the existing config BEFORE touching the filesystem. A malformed
 // or non-mapping config.yaml is a real user config we must never clobber: ABORT

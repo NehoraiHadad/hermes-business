@@ -37,6 +37,10 @@ export function buildVerifiedSnapshot(input = {}) {
     provider_ready: status.provider_ready,
     provider_state: status.provider_state,
     provider_label: status.provider_label,
+    // Honest configured-vs-usable, so the durable receipt records provider facts from
+    // authoritative state (a configured key is NOT proof of usability).
+    provider_configured: status.provider_configured === true,
+    provider_usable: status.provider_usable === true,
     provider_sources: status.provider_sources,
     runtime_running: Boolean(runtime && runtime.running),
     hermes_version: runtime && runtime.version ? runtime.version : null,

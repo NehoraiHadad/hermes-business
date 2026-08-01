@@ -33,6 +33,12 @@ export class HermesClient {
         () => window.hermesDesktop?.ensureGateway() || Promise.resolve(),
         window.hermesDesktop?.applyUpdate
           ? () => window.hermesDesktop!.applyUpdate()
+          : undefined,
+        // Real out-of-band credential probe (Anthropic etc.) runs in the main process to
+        // avoid browser CORS and keep the key off the renderer network. Absent in demo/
+        // browser → connectProvider fails honestly for un-probeable providers.
+        window.hermesDesktop?.probeProvider
+          ? input => window.hermesDesktop!.probeProvider!(input)
           : undefined
       )
     )

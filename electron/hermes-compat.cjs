@@ -48,14 +48,31 @@ function isGitInstall(command) {
   return probe.status === 0 && String(probe.stdout).trim() === 'true'
 }
 
+// Fetch origin/<branch> and report whether the release source was actually
+// reachable. Split out from gitTargetVersion so a fetch (network) failure is
+// SURFACED to the preflight instead of being swallowed into a mutation attempt.
+// `run` is injectable for tests. Non-git → { ok:false, reason:'not-git' }.
+function gitFetchOrigin(command, branch = 'main', { run = spawnSync } = {}) {
+  if (!isGitInstall(command)) return { ok: false, reason: 'not-git' }
+  const probe = run('git', ['-C', installRepoRoot(command), 'fetch', 'origin', branch], {
+    encoding: 'utf8',
+    windowsHide: true,
+    timeout: 120_000
+  })
+  if (probe.status !== 0) {
+    return { ok: false, reason: 'fetch-failed', detail: String(probe.stderr || probe.stdout || '').trim() }
+  }
+  return { ok: true }
+}
+
 // Read the __version__ that origin/<branch> WOULD install, so a git self-update
-// cannot silently cross the tested 0.20 boundary. Returns a version string or
-// null (unknown → the forward guard is skipped and assertRunningVersionSupported
-// re-gates the ACTUAL landed version after the update as the authoritative
-// backstop).
+// cannot silently cross the tested 0.20 boundary. Reads the ALREADY-fetched
+// origin ref (the preflight runs gitFetchOrigin first and aborts if it failed —
+// we never silently re-fetch here). Returns a version string or null (unknown →
+// the forward guard is skipped and assertRunningVersionSupported re-gates the
+// ACTUAL landed version after the update as the authoritative backstop).
 function gitTargetVersion(command, branch = 'main') {
   const root = installRepoRoot(command)
-  spawnSync('git', ['-C', root, 'fetch', 'origin', branch], { encoding: 'utf8', windowsHide: true, timeout: 120_000 })
   const show = spawnSync('git', ['-C', root, 'show', `origin/${branch}:hermes_cli/__init__.py`], {
     encoding: 'utf8',
     windowsHide: true
@@ -99,15 +116,12 @@ function resetInstallCheckout(command, commit) {
   return { ok: true, commit }
 }
 
-// Which official install layout backs this executable, so the update flow only
-// mutates a method it can preflight AND recover:
+// Which official install layout backs this executable:
 //   'git'     — a git checkout: compat preflight + git-reset rollback available.
 //   'managed' — the official native/ZIP layout (<...>/hermes-agent with a
-//               pyproject.toml): recoverable via the verified pre-update backup
-//               + fail-closed, exactly what Hermes' own updater expects.
-//   'unknown' — anything else (a global pip/system install, an unexpected
-//               path): we cannot locate a repo root we understand, so the
-//               update is GATED before any mutation.
+//               pyproject.toml). Classified for status/UI, but NOT eligible for
+//               unattended auto-update (see assertUpdateMethodSupported).
+//   'unknown' — anything else (a global pip/system install, an unexpected path).
 function classifyInstallMethod(command) {
   if (!command) return 'unknown'
   if (isGitInstall(command)) return 'git'
@@ -118,15 +132,30 @@ function classifyInstallMethod(command) {
   return 'unknown'
 }
 
+// Gate unattended auto-update to install methods with a PROVEN automatic
+// rollback. Only a git checkout qualifies: on failure we `git reset --hard` back
+// to the anchor captured before the update, restoring the exact prior code.
+//
+// A managed/native (ZIP) install has NO safe unattended in-place restore — its
+// pre-update backup ZIP is a MANUAL recovery aid, not an automatic rollback, and
+// driving `hermes import` over a live home mid-failure would itself be
+// destructive. So we REFUSE managed and unknown installs BEFORE any surface is
+// stopped, any backup is taken, or the checkout is touched, and tell the user the
+// supported recovery path. (If a future Hermes ships a verified import/restore
+// API, add it here only after source verification + isolated tests.)
 function assertUpdateMethodSupported(command) {
   const method = classifyInstallMethod(command)
-  if (method === 'unknown') {
+  if (method === 'git') return method
+  if (method === 'managed') {
     throw new Error(
-      'עדכון Hermes בוטל: לא זוהתה שיטת התקנה נתמכת (git או התקנה מנוהלת). ' +
-        'לא בוצע שינוי. עדכן ידנית או פנה לתמיכה.'
+      'עדכון אוטומטי של Hermes אינו נתמך עבור התקנה מנוהלת (native/ZIP) מכיוון שאין לה מנגנון שחזור אוטומטי מוכח. ' +
+        'לא בוצע שינוי. לעדכון בטוח השתמש במתקין הרשמי של Hermes; המידע שלך (שיחות, כישורים, זיכרון) נשמר.'
     )
   }
-  return method
+  throw new Error(
+    'עדכון Hermes בוטל: לא זוהתה שיטת התקנה נתמכת לעדכון אוטומטי (נדרשת התקנת git). ' +
+      'לא בוצע שינוי. עדכן ידנית או פנה לתמיכה.'
+  )
 }
 
 // Authoritative POST-update/recovery re-gate: given the version Hermes ACTUALLY
@@ -175,6 +204,7 @@ module.exports = {
   assertRunningVersionSupported,
   installRepoRoot,
   isGitInstall,
+  gitFetchOrigin,
   gitTargetVersion,
   assertUpdateTargetSupported,
   captureInstallCommit,

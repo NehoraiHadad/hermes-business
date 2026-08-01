@@ -34,6 +34,10 @@ const { isAllowedExternalUrl } = require('./url-policy.cjs')
 const { applyOfficialHermesUpdate } = require('./hermes-update.cjs')
 const { getPartnerState, applyPartnerMode } = require('./business-partner.cjs')
 const { getCuratorInsights } = require('./curator-insights.cjs')
+const { probeProviderCredential } = require('./provider-probe.cjs')
+const { probeCodexGrant } = require('./codex-probe.cjs')
+const { getProviderEvidence, recordProviderEvidence } = require('./provider-evidence.cjs')
+const { guardStatusWithActivation, readGuardActivationJournal } = require('./whatsapp-guard-journal.cjs')
 
 // Single place that maps every renderer IPC channel to a module function. Keeps
 // the wiring auditable and the feature modules free of Electron IPC concerns.
@@ -55,6 +59,20 @@ function registerIpc() {
     return result.canceled ? null : result.filePaths[0]
   })
   ipcMain.handle('hermes:curator:insights', () => getCuratorInsights())
+  // Provider validation: real out-of-band probe (never accepts an invalid key) + durable
+  // non-secret evidence persisted in the Hermes-owned profile.
+  ipcMain.handle('hermes:provider:probe', (_event, input) => probeProviderCredential(input))
+  // Real, non-destructive liveness probe for an EXISTING Codex OAuth grant (the on-disk
+  // logged_in snapshot is NOT proof the grant still works). Gates useExisting evidence.
+  ipcMain.handle('hermes:codex:probe', () => probeCodexGrant())
+  ipcMain.handle('hermes:provider:evidence:get', () => getProviderEvidence())
+  ipcMain.handle('hermes:provider:evidence:set', (_event, evidence) => recordProviderEvidence(evidence))
+  // Live messaging-guard introspection, liveness-verified from the dispatch-process
+  // heartbeat (fails closed to null → BLOCKED in the UI).
+  ipcMain.handle('hermes:whatsapp-policy:guard-status', () => guardStatusWithActivation())
+  // Observable guard-activation transaction phase (restarting/verifying/active/failed) for
+  // a clear UI state while an already-running gateway is being restarted after a plugin update.
+  ipcMain.handle('hermes:whatsapp-policy:activation-state', () => readGuardActivationJournal())
   ipcMain.handle('hermes:partner:get', () => getPartnerState())
   ipcMain.handle('hermes:partner:apply', (_event, patch) => applyPartnerMode(patch))
   ipcMain.handle('hermes:google:start', (_event, clientSecretPath, services) =>

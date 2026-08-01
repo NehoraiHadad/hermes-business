@@ -92,7 +92,11 @@ function installWhatsappPolicyPlugin(options = {}) {
   fs.writeFileSync(temporary, `${JSON.stringify(receipt, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 })
   fs.renameSync(temporary, path.join(targetDir, 'install-receipt.json'))
 
-  return { ok: true, target: targetDir, integrity, ...enableResult }
+  // `changed` = the bundled payload differs from what was last installed (a plugin
+  // UPDATE). The caller uses it to trigger a gateway reload so the dispatch process
+  // re-runs register() — loading the new code AND publishing a fresh guard heartbeat
+  // (new pid/nonce) that the desktop then re-verifies. An unchanged payload needs no reload.
+  return { ok: true, target: targetDir, integrity, changed: !unchanged, ...enableResult }
 }
 
 module.exports = { installWhatsappPolicyPlugin, pluginTargetDir, copyPluginFiles, enablePlugin }

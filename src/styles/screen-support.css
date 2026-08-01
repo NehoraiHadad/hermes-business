@@ -40,6 +40,11 @@
   background: var(--green-soft);
 }
 
+.check-row__icon--error {
+  color: #fff;
+  background: var(--red);
+}
+
 .check-row strong {
   color: #67635c;
   font-size: 10.5px;

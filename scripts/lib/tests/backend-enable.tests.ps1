@@ -7,12 +7,19 @@
 # Python on PATH with PyYAML — no real Hermes. Keep this suite <=150 lines.
 
 function New-BackendPayload {
+  # Stage a complete dashboard payload — the manifest plus EVERY file the installer
+  # copies (Get-DashboardBackendFiles), so Test-DashboardPayloadPresent /
+  # Get-DashboardPayloadFiles / Assert-BackendHealthy see the same set the shipping
+  # transaction does. Auto-follows the canonical list, so a new backend file cannot
+  # silently skip the drift guard.
   param([Parameter(Mandatory)][string]$Directory, [string]$Api = 'plugin_api.py')
   $dash = Join-Path $Directory 'dashboard'
   New-Item -ItemType Directory -Force -Path $dash | Out-Null
   Set-Content -LiteralPath (Join-Path $Directory 'plugin.js') -Value "// plugin $([guid]::NewGuid())" -Encoding UTF8
-  Set-Content -LiteralPath (Join-Path $dash 'manifest.json') -Value ('{{"name":"business-shell","api":"{0}"}}' -f $Api) -Encoding UTF8
-  Set-Content -LiteralPath (Join-Path $dash 'plugin_api.py') -Value "# api $([guid]::NewGuid())" -Encoding UTF8
+  foreach ($name in (Get-DashboardBackendFiles)) {
+    $value = if ($name -eq 'manifest.json') { '{{"name":"business-shell","api":"{0}"}}' -f $Api } else { "# $name $([guid]::NewGuid())" }
+    Set-Content -LiteralPath (Join-Path $dash $name) -Value $value -Encoding UTF8
+  }
   return $Directory
 }
 
@@ -32,13 +39,16 @@ function New-BackendActivate {
 }
 
 function New-HealthHome {
-  # Valid dashboard files + an api-declaring manifest so only -Config is under test.
+  # Valid dashboard files (the complete Get-DashboardBackendFiles set) + an
+  # api-declaring manifest so only -Config is under test.
   param([string]$Root, [string]$Name, [object]$Config)
   $healthHome = Join-Path $Root $Name
   $dash = Join-Path $healthHome 'plugins\business-shell\dashboard'
   New-Item -ItemType Directory -Force -Path $dash | Out-Null
-  Set-Content -LiteralPath (Join-Path $dash 'manifest.json') -Value '{"name":"business-shell","api":"plugin_api.py"}' -Encoding UTF8
-  Set-Content -LiteralPath (Join-Path $dash 'plugin_api.py') -Value '# api' -Encoding UTF8
+  foreach ($name in (Get-DashboardBackendFiles)) {
+    $value = if ($name -eq 'manifest.json') { '{"name":"business-shell","api":"plugin_api.py"}' } else { "# $name" }
+    Set-Content -LiteralPath (Join-Path $dash $name) -Value $value -Encoding UTF8
+  }
   Set-Content -LiteralPath (Join-Path $healthHome 'config.yaml') -Value $Config -Encoding UTF8
   return $healthHome
 }
@@ -118,8 +128,12 @@ function Invoke-BackendEnableTests {
     $hermesHome = Join-Path $WorkRoot 'health home'
     $dash = Join-Path $hermesHome 'plugins\business-shell\dashboard'
     New-Item -ItemType Directory -Force -Path $dash | Out-Null
-    Set-Content -LiteralPath (Join-Path $dash 'manifest.json') -Value '{"name":"business-shell"}' -Encoding UTF8
-    Set-Content -LiteralPath (Join-Path $dash 'plugin_api.py') -Value '# api' -Encoding UTF8
+    # Stage every payload file so the ONLY health defect under test is the api-less
+    # manifest (all files present, config carries the id).
+    foreach ($name in (Get-DashboardBackendFiles)) {
+      $value = if ($name -eq 'manifest.json') { '{"name":"business-shell"}' } else { "# $name" }
+      Set-Content -LiteralPath (Join-Path $dash $name) -Value $value -Encoding UTF8
+    }
     Set-Content -LiteralPath (Join-Path $hermesHome 'config.yaml') -Value 'plugins:' -Encoding UTF8
     $threw = $false
     try { Assert-BackendHealthy -HermesHome $hermesHome -PluginId 'business-shell' } catch { $threw = $true }

@@ -4,9 +4,15 @@ const lifecycle = require('./lifecycle-state.cjs')
 const { rememberLog } = require('./logs.cjs')
 const { loadWindowPreferences, createWindow, createTray, showAssistant } = require('./windows.cjs')
 const { startHermes, stopHermes, hasRunningProcess } = require('./runtime.cjs')
+const { patchRuntimeState } = require('./runtime-state.cjs')
 const { installDesktopPlugin } = require('./plugin-install.cjs')
 const { installWhatsappPolicyPlugin } = require('./whatsapp-plugin-install.cjs')
+const { activateWhatsappGuard } = require('./whatsapp-guard-activation.cjs')
+const { recoverGuardActivation } = require('./whatsapp-guard-recovery.cjs')
+const { officialGatewayState } = require('./gateway-status.cjs')
 const { ensureGatewayBackground } = require('./google-setup.cjs')
+const { recoverIncompleteUpdate } = require('./hermes-update-recovery.cjs')
+const { reconcilePartnerCheckinsOnStartup } = require('./business-partner.cjs')
 const { registerIpc } = require('./ipc.cjs')
 const { getQaRuntimeOverride, SENTINEL_ENV, SENTINEL_VALUE } = require('./qa-runtime.cjs')
 const { qaElectronNamespace } = require('./qa-electron-namespace.cjs')
@@ -80,8 +86,18 @@ app.whenReady().then(async () => {
   loadWindowPreferences()
   registerIpc()
   installDesktopPlugin()
+  // Capture the AUTHORITATIVE official gateway process state (running/stopped/unknown) BEFORE
+  // the plugin is installed and BEFORE the gateway is ensured. This is the only moment a
+  // still-running OLD-code gateway is distinguishable from a newly launched post-install one —
+  // and it uses the official `hermes gateway status`, not the heartbeat (an old pre-heartbeat
+  // gateway publishes none). The snapshot drives whether activation must force a restart.
+  const priorGatewayState = officialGatewayState().state
+  // Install/enable the guard plugin BEFORE the gateway is ensured so a freshly-started
+  // gateway loads it. The result (incl. `changed`) is carried to the post-runtime activation
+  // transaction so we never double-install (a second install would reset `changed` to false).
+  let policyPlugin = null
   try {
-    const policyPlugin = installWhatsappPolicyPlugin()
+    policyPlugin = installWhatsappPolicyPlugin()
     if (!policyPlugin.ok || !policyPlugin.enabled) {
       rememberLog(`WhatsApp policy plugin not fully active: ${policyPlugin.error || policyPlugin.reason || 'unknown'}`)
     }
@@ -90,12 +106,66 @@ app.whenReady().then(async () => {
   }
   createWindow()
   createTray()
+  // ensureGatewayBackground reports whether it actually STARTED a fresh gateway (which would
+  // have loaded the just-installed plugin) vs found one already running.
+  let gatewayStartedFresh = false
   try {
-    await ensureGatewayBackground()
+    const ensure = await ensureGatewayBackground()
+    gatewayStartedFresh = Boolean(ensure && ensure.startedFresh)
   } catch (error) {
     rememberLog(`Gateway background setup failed: ${error.message || error}`)
   }
   await startHermes()
+  // Recover FIRST: finish any restart transaction a previous crash/quit left mid-flight BEFORE
+  // activation runs. Activation can supersede or clear the journal, so recovery must complete
+  // (or honestly fail) an interrupted transaction before that happens.
+  try {
+    const guardRecovery = await recoverGuardActivation()
+    if (guardRecovery.action !== 'none') {
+      rememberLog(`WhatsApp guard restart recovery on launch: ${guardRecovery.action}`)
+    }
+  } catch (error) {
+    rememberLog(`WhatsApp guard recovery failed: ${error.message || error}`)
+  }
+  // Then the OBSERVABLE guard-activation transaction: if the payload CHANGED and a gateway was
+  // ALREADY running the OLD code (per the pre-install snapshot), restart it via the official
+  // control endpoint and reverify a FRESH heartbeat before the guard is treated active. Unknown
+  // official status fails closed. Never blocks launch.
+  if (policyPlugin) {
+    try {
+      const activation = await activateWhatsappGuard({
+        install: () => policyPlugin,
+        priorGatewayState,
+        gatewayStartedFresh
+      })
+      if (!activation.active) {
+        rememberLog(`WhatsApp guard not yet active (${activation.reason || activation.phase}); connections stay fail-closed`)
+      }
+    } catch (error) {
+      rememberLog(`WhatsApp guard activation failed: ${error.message || error}`)
+    }
+  }
+  // Deterministically recover an update interrupted by a crash/power-loss: a
+  // still-present update journal is detected and either verified-healthy-cleared,
+  // rolled back to the captured anchor, or left for retry with an honest error
+  // surfaced to the UI. Never touches user state; never clears unless both the
+  // runtime and gateway deep health pass.
+  try {
+    const recovery = await recoverIncompleteUpdate()
+    if (recovery.action !== 'none') {
+      rememberLog(`Update recovery on launch: ${recovery.action}${recovery.recovered ? '' : ' (unresolved)'}`)
+      if (!recovery.recovered && recovery.message) patchRuntimeState({ error: recovery.message })
+    }
+  } catch (error) {
+    rememberLog(`Update recovery on launch failed: ${error.message || error}`)
+  }
+  // Make the official cron store agree with the persisted partner check-in intent
+  // on every launch (durable + idempotent, no parallel scheduler). Non-fatal.
+  try {
+    await reconcilePartnerCheckinsOnStartup()
+  } catch (error) {
+    rememberLog(`Partner check-in reconcile failed: ${error.message || error}`)
+  }
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })

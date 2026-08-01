@@ -53,6 +53,45 @@ describe('electron-builder packaging config', () => {
   })
 })
 
+describe('two-phase signing order (CRITICAL 2) is pinned in the package script', () => {
+  const win = pkg.build.win as Record<string, unknown>
+  const script = String(pkg.scripts['package:win'])
+
+  it('disables electron-builder self edit/sign so afterPack rcedit is the final PE mutation', () => {
+    // With signAndEditExecutable:false electron-builder does NOT re-edit or sign the
+    // exe after afterPack, so our phase-2 signer is the last thing to touch PE bytes.
+    expect(win.signAndEditExecutable).toBe(false)
+  })
+
+  it('builds `--win dir` → finalize-payload (sign+verify+manifest) → `--prepackaged … --win nsis`', () => {
+    const dir = script.indexOf('electron-builder --win dir')
+    const sign = script.indexOf('finalize-payload.mjs --channel public')
+    const nsis = script.indexOf('--prepackaged release/win-unpacked --win nsis')
+    expect(dir).toBeGreaterThan(-1)
+    expect(sign).toBeGreaterThan(dir)
+    expect(nsis).toBeGreaterThan(sign)
+  })
+
+  it('signs the installer AFTER NsIS and runs the exact-artifact capture BEFORE promotion', () => {
+    const nsis = script.indexOf('--prepackaged release/win-unpacked --win nsis')
+    const signInstaller = script.indexOf('sign-release.mjs --channel public')
+    const report = script.indexOf('gen-release-report.mjs')
+    const capture = script.indexOf('e2e-exact-artifact.mjs --channel public')
+    const finalize = script.indexOf('finalize-release.mjs --channel public')
+    expect(signInstaller).toBeGreaterThan(nsis)
+    expect(report).toBeGreaterThan(signInstaller)
+    expect(capture).toBeGreaterThan(report)
+    // Promotion is the LAST action — no fallible verifier after commit.
+    expect(finalize).toBeGreaterThan(capture)
+    expect(script.indexOf('verify:release-contract', finalize)).toBe(-1)
+  })
+
+  it('afterPack does NOT sign (it runs before the final resource edit / NSIS capture)', () => {
+    const afterPack = readFileSync(new URL('./after-pack.cjs', import.meta.url), 'utf8')
+    expect(/signtool|signPayload|HERMES_WIN_SIGN_CMD/i.test(afterPack)).toBe(false)
+  })
+})
+
 describe('no self-update feed is advertised', () => {
   it('sets publish=null so electron-builder emits no latest.yml', () => {
     expect(pkg.build.publish).toBeNull()

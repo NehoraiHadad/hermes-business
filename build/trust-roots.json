@@ -1,0 +1,6 @@
+{
+  "//": "Committed trust roots that AUTHENTICATE release provenance (HIGH 6). EMPTY by default — with no committed ledger public key and no known-good GitHub asset digest, an on-disk release-ledger.json can never be authenticated, so public fails closed (a self-applied \"source\" label is never trusted). Populate `keys` with PEM public keys keyed by id and reference them from the ledger's `signed_by`, and/or pin known-good GitHub release-asset sha256 per version.",
+  "ledger_pubkeys": [],
+  "keys": {},
+  "github_asset_sha256": {}
+}

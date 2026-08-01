@@ -12,20 +12,29 @@ export function OnboardingPartnerChoice() {
 
   useEffect(() => {
     let active = true
-    void loadPartnerState().then(state => {
-      if (active) setMode(state.mode)
-    })
+    loadPartnerState()
+      .then(state => {
+        if (active) setMode(state.mode)
+      })
+      .catch(() => {
+        /* keep the default 'normal' — a failed read is never treated as partner */
+      })
     return () => {
       active = false
     }
   }, [])
 
+  // Never leaks an unhandled rejection: on failure we reconcile the shown mode back to
+  // the true persisted state rather than leaving an optimistic value or throwing.
   const choose = async (next: PartnerMode) => {
     setMode(next)
     setBusy(true)
     try {
       const state = await applyPartner({ mode: next })
       setMode(state.mode)
+    } catch {
+      const actual = await loadPartnerState().catch(() => null)
+      if (actual) setMode(actual.mode)
     } finally {
       setBusy(false)
     }

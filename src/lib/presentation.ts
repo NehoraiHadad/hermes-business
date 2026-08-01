@@ -1,3 +1,5 @@
+import { humanizeSchedule } from './schedule'
+
 const TOOL_LABELS: Array<[RegExp, string]> = [
   [/google.*calendar|calendar/i, 'בודק את היומן…'],
   [/gmail|email|mail/i, 'עובר על המייל…'],
@@ -39,15 +41,8 @@ export function approvalCopy(payload: Record<string, unknown>) {
 }
 
 export function humanSchedule(schedule: string): string {
-  const known: Record<string, string> = {
-    '0 8 * * 0-4': 'ימים א׳–ה׳ בשעה 08:00',
-    '0 9 * * 0-4': 'ימים א׳–ה׳ בשעה 09:00',
-    '0 16 * * 4': 'יום ה׳ בשעה 16:00',
-    '0 9 * * 1': 'כל יום ב׳ בשעה 09:00'
-  }
-  if (known[schedule]) return known[schedule]
   if (/^every\s+/i.test(schedule)) return schedule.replace(/^every\s+/i, 'כל ')
-  return schedule
+  return humanizeSchedule(schedule)
 }
 
 export function redactDiagnosticText(text: string): string {

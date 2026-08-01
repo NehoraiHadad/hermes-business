@@ -65,7 +65,8 @@ export function FullAppShell({
           connections={data.connections}
           runtime={data.runtime}
           versions={data.versions}
-          provider={data.provider}
+          provider={data.providerStatus}
+          loadErrors={data.loadErrors}
           support={support}
           toast={toast}
           onAddTask={onAddTask}

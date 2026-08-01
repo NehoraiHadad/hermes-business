@@ -3,18 +3,27 @@
 //
 // docs/ACCEPTANCE.md is the single source of truth for gate semantics, the E2E
 // matrix and the external gates. The local release report is that same canonical
-// body plus a machine-specific appendix (build digests + git HEAD) that is
-// volatile per build and therefore must not live in the tracked tree.
+// body plus a machine-specific appendix that is CRYPTOGRAPHICALLY BOUND to the
+// exact packaged artifact — the installer bytes, the manifest embedded in
+// resources/build-attestation.json, the checksum manifest, and the current commit
+// + its subject line. It is NEVER derived from the current HEAD alone: a report
+// that merely stamped HEAD could describe a build it does not match.
+//
+// It FAILS CLOSED. If the packaged artifact, its attestation, the checksums or the
+// required evidence gates do not agree (the release preflight surfaces a blocking
+// failure), no report is written — the prior evidence is left untouched rather
+// than over-written for a build we cannot vouch for.
 //
 //   npm run gen:acceptance
 //
 // Output: release/ACCEPTANCE.md (git-ignored). No tracked file is written.
 
-import { createHash } from 'node:crypto'
-import { execFileSync } from 'node:child_process'
-import { readFileSync, readdirSync, writeFileSync, existsSync } from 'node:fs'
+import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { gatherReleaseState } from './lib/release/gather.mjs'
+import { preflightRelease } from './lib/release/preflight.mjs'
+import { computeReleaseBinding } from './lib/release/binding.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const canonical = path.join(root, 'docs', 'ACCEPTANCE.md')
@@ -30,52 +39,79 @@ if (!existsSync(releaseDir)) {
   process.exit(1)
 }
 
-function gitHead() {
-  try {
-    const rev = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root }).toString().trim()
-    const dirty = execFileSync('git', ['status', '--porcelain'], { cwd: root }).toString().trim()
-    return dirty ? `${rev} (working-tree, uncommitted changes present)` : rev
-  } catch {
-    return 'unknown'
-  }
+// Gather the real artifact state. Signing is a DISTRIBUTION gate resolved later in
+// the pipeline, not an acceptance-content gate, so acceptance is generated under
+// the 'qa' channel (signing failures are non-blocking here) and does not probe
+// Authenticode. Every OTHER failure — stale/missing attestation, artifact/version/
+// fingerprint mismatch, invalid checksums, unfresh/blocked evidence, forbidden
+// packaged tests — blocks generation.
+const state = gatherReleaseState({ root, channel: 'qa', probe: false })
+const verdict = preflightRelease(state)
+// Signing + public-only distribution gates are resolved later in the pipeline, not
+// at acceptance-content time; every OTHER failure (stale/missing attestation,
+// artifact-set/version/fingerprint mismatch, invalid checksums, corrupt/forbidden
+// asar, unfresh/blocked/duplicate evidence, wrong-build evidence, tampered report)
+// blocks generation. Under the qa channel preflight already omits the public-only
+// codes (payload-binding, lock-integrity, ledger-unavailable), so only signing
+// codes remain to filter.
+const SIGNING_CODES = new Set(['unsigned-public', 'untrusted-timestamp-public', 'publisher-not-approved', 'unknown-channel'])
+const blocking = verdict.failures.filter(f => !SIGNING_CODES.has(f.code))
+
+if (blocking.length) {
+  console.error(
+    'Refusing to generate release/ACCEPTANCE.md: the packaged artifact is not contract-clean.\n' +
+      'Evidence/report left UNTOUCHED (fail-closed). Blocking failures:\n - ' +
+      blocking.map(f => `[${f.code}] ${f.detail}`).join('\n - ')
+  )
+  process.exit(1)
 }
 
-const installers = readdirSync(releaseDir)
-  .filter(name => name.toLowerCase().endsWith('.exe'))
-  .sort()
-  .map(name => {
-    const buffer = readFileSync(path.join(releaseDir, name))
-    return {
-      name,
-      bytes: buffer.length,
-      sha256: createHash('sha256').update(buffer).digest('hex')
-    }
-  })
+const binding = computeReleaseBinding({
+  installers: state.installers,
+  attestation: state.attestation,
+  checksums: state.checksums,
+  head: state.currentHead,
+  subject: state.headSubject
+})
 
 const body = readFileSync(canonical, 'utf8').replace(/\r\n/g, '\n').trimEnd()
-const digestRows = installers.length
-  ? installers.map(e => `| \`${e.name}\` | ${e.bytes.toLocaleString('en-US')} | \`${e.sha256}\` |`).join('\n')
+const digestRows = state.installers.length
+  ? state.installers.map(e => `| \`${e.name}\` | ${e.bytes.toLocaleString('en-US')} | \`${e.sha256}\` |`).join('\n')
   : '| _(no installer .exe present — run `npm run package:win`)_ | — | — |'
 
+const at = state.attestation || {}
 const appendix = [
   '',
   '',
   '---',
   '',
-  '## Appendix A — Build artifacts (LOCAL, generated)',
+  '## Appendix A — Build artifacts (LOCAL, generated, artifact-bound)',
   '',
   '> Generated by `scripts/gen-release-acceptance.mjs` from the tracked canonical',
-  '> `docs/ACCEPTANCE.md`. This file lives under `release/` and is git-ignored.',
-  '> Do not edit by hand — edit `docs/ACCEPTANCE.md` and rerun `npm run gen:acceptance`.',
+  '> `docs/ACCEPTANCE.md`, and CRYPTOGRAPHICALLY BOUND to the packaged artifact +',
+  '> its embedded attestation + the checksum manifest + this commit. Not derived',
+  '> from HEAD alone. This file lives under `release/` and is git-ignored.',
   '',
-  `- **Git HEAD:** \`${gitHead()}\``,
-  `- **App version (package.json):** \`${JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8')).version}\``,
+  `- **Release binding digest:** \`${binding.digest}\``,
+  `- **Commit fingerprint (HEAD + subject):** \`${binding.commit_fingerprint}\``,
+  `- **Attested source_head:** \`${at.source_head || 'none'}\``,
+  `- **Attested source_fingerprint:** \`${at.source_fingerprint || 'none'}\``,
+  `- **App version (package.json):** \`${state.packageVersion}\``,
+  `- **Distributable:** \`${verdict.distributable}\` — signing gate resolved separately (see pipeline step 8).`,
+  `- **Evidence freshness:** \`verify-evidence\` PASSED; required gates ` +
+    `(${['packaged-e2e', 'approval', 'shared-state'].join(', ')}) are all \`passed\`.`,
+  verdict.externalBlockers?.length
+    ? `- **External blockers (honest):** \`${verdict.externalBlockers.join(', ')}\` remain blocked (not faked).`
+    : '',
   '',
   '| Installer | Bytes | SHA-256 |',
   '|---|---|---|',
   digestRows,
   ''
-].join('\n')
+].filter(l => l !== undefined).join('\n')
 
 writeFileSync(target, `${body}${appendix}`)
-console.log(`Wrote ${path.relative(root, target)} from docs/ACCEPTANCE.md (${installers.length} installer digest(s)).`)
+console.log(
+  `Wrote ${path.relative(root, target)} bound to ${state.installers.length} installer(s); ` +
+    `binding ${binding.digest.slice(0, 16)}….`
+)

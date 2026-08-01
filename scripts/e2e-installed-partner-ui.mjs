@@ -74,6 +74,7 @@ try {
             sandbox: settings.sandbox,
             network: settings.network,
             checkins: settings.checkins,
+            checkinCadence: settings.checkinCadence,
             roots: settings.roots
           }),
         original

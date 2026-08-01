@@ -11,6 +11,7 @@ import { createHermesHarness } from './lib/hermes-live.mjs'
 import { runStreaming } from './lib/probes/hermes/streaming.mjs'
 import { runClarifyProbe, runInterruptProbe, runToolProbe } from './lib/probes/hermes/optional.mjs'
 import { countSkills, runCronCycle, verifySharedSession } from './lib/probes/hermes/registry.mjs'
+import { cronJobId } from '../electron/cron-identity.cjs'
 
 const port = Number(process.env.HERMES_E2E_PORT || 9129)
 // Run the installed binary but against a throwaway HERMES_HOME so the user's
@@ -93,7 +94,7 @@ try {
     try {
       const cron = await rpc('cron.manage', { action: 'list' }, 15_000)
       const job = cron.jobs?.find(item => item.name === ctx.jobName)
-      if (job) await rpc('cron.manage', { action: 'remove', name: job.id || job.name }, 15_000)
+      if (job) await rpc('cron.manage', { action: 'remove', name: cronJobId(job) }, 15_000)
     } catch {
       // Best-effort cleanup after a failed assertion.
     }

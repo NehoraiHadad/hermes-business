@@ -8,12 +8,12 @@ export async function verifyBoot(ctx) {
   const { page, consoleMessages, pageErrors, screenshotPath } = ctx
 
   await page.waitForLoadState('domcontentloaded')
-  // Deliberate settle: let the first paint land before probing the splash.
-  await page.waitForTimeout(2_000)
-  await page.getByText('בודק אם Hermes מותקן', { exact: false }).waitFor({
-    state: 'hidden',
-    timeout: 90_000
-  })
+  // Wait for the current resolving surface itself, not retired copy. Locators
+  // also work under the packaged renderer's strict CSP (waitForFunction does
+  // not, because Playwright evaluates a string there).
+  const resolving = page.locator('.app-resolving')
+  await resolving.waitFor({ state: 'attached', timeout: 10_000 })
+  await resolving.waitFor({ state: 'hidden', timeout: 90_000 })
 
   const initial = await page.evaluate(() => ({
     bodyText: document.body?.innerText || '',

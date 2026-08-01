@@ -49,9 +49,11 @@ MVP/Alpha מקומי ל־Windows (מוכן לפיילוט, אך עדיין לא 
 ### המוצר המלא
 
 ```text
-release/העוזר לעסק Setup 0.3.3.exe
+release/העוזר לעסק Setup <גרסה>.exe
 ```
 
+- build מקומי של Alpha, **לא חתום ולא artifact הפצה** — שם הקובץ נושא את גרסת
+  ה־build הנוכחית (`0.3.x`) ואינו מקובע כאן כדי שלא יתיישן ולא יוצג כ"סופי".
 - גודל וה־SHA-256 של המתקין משתנים בכל build ואינם משוכפלים כאן כדי שלא יתיישנו.
   מקור האמת הוא הקובץ הנוצר `release/SHA256SUMS.txt` (git-ignored). הרֵץ
   `npm run checksums` כדי לחשב אותו מעץ ה־release הנוכחי.
@@ -63,7 +65,7 @@ release/העוזר לעסק Setup 0.3.3.exe
 ### מתקין רשת זעיר — מנגנון מוכן, artifact לפרסום עדיין לא סופי
 
 ```text
-release/Hermes-Business-Web-Setup-0.3.3.exe
+release/Hermes-Business-Web-Setup-<גרסה>.exe
 ```
 
 - אינו אורז Hermes או Chromium.

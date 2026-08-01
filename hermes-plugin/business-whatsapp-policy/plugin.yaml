@@ -4,3 +4,4 @@ description: "Fail-closed business messaging reply policy (WhatsApp + Telegram: 
 author: העוזר לעסק (Alpha)
 hooks:
   - pre_gateway_dispatch
+  - pre_tool_call

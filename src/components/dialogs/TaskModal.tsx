@@ -1,8 +1,9 @@
 import { CalendarClock, LoaderCircle } from 'lucide-react'
 import { FormEvent, useState } from 'react'
-import { buildCron } from '../../lib/schedule'
+import { compileSchedule, ISRAELI_WORK_WEEK, type FriendlySchedule } from '../../lib/schedule'
 import type { ScheduledTask } from '../../types'
 import { Modal } from '../ui/Modal'
+import { ScheduleFields } from './ScheduleFields'
 
 export function TaskModal({
   onClose,
@@ -11,16 +12,25 @@ export function TaskModal({
   onClose: () => void
   onCreate: (task: Pick<ScheduledTask, 'name' | 'prompt' | 'schedule'>) => Promise<void>
 }) {
-  const [form, setForm] = useState({ name: '', prompt: '', days: 'weekdays', time: '08:00' })
+  const [form, setForm] = useState({ name: '', prompt: '' })
+  const [schedule, setSchedule] = useState<FriendlySchedule>({ mode: 'weekly', days: [...ISRAELI_WORK_WEEK], time: '08:00' })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const submit = async (event: FormEvent) => {
     event.preventDefault()
+    if (schedule.mode === 'weekly' && schedule.days.length === 0) {
+      setError('בחר לפחות יום אחד')
+      return
+    }
+    const compiled = compileSchedule(schedule)
+    if (!compiled) {
+      setError('נדרש תזמון תקין')
+      return
+    }
     setSaving(true)
     setError('')
     try {
-      const schedule = buildCron(form.days, form.time)
-      await onCreate({ name: form.name, prompt: form.prompt, schedule })
+      await onCreate({ name: form.name, prompt: form.prompt, schedule: compiled })
       onClose()
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Hermes לא הצליח ליצור את המשימה')
@@ -50,19 +60,7 @@ export function TaskModal({
             placeholder="סכם את הפגישות, המיילים החשובים והמשימות להיום"
           />
         </label>
-        <div className="form-row">
-          <label>
-            <span>ימים</span>
-            <select value={form.days} onChange={event => setForm({ ...form, days: event.target.value })}>
-              <option value="weekdays">ימים א׳–ה׳</option>
-              <option value="daily">כל יום</option>
-            </select>
-          </label>
-          <label>
-            <span>שעה</span>
-            <input type="time" value={form.time} onChange={event => setForm({ ...form, time: event.target.value })} />
-          </label>
-        </div>
+        <ScheduleFields value={schedule} onChange={setSchedule} />
         {error ? <p className="form-error">{error}</p> : null}
         <div className="modal__actions">
           <button type="button" className="ghost-button" onClick={onClose}>

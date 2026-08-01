@@ -26,7 +26,7 @@ function Install-BusinessPayload {
   $policyPresent = Test-Path -LiteralPath $policySource -PathType Container
   if ($policyPresent) {
     $policyTargetDir = Join-Path $HermesHome 'plugins\business-whatsapp-policy'
-    foreach ($name in @('__init__.py', 'policy.py', 'ingest.py', 'contract.py', 'surface.py', 'guards.py', 'transport.py', 'registry.py', 'guard_core.py', 'surface_core.py', 'dispatch.py', 'telegram_policy.py', 'telegram_contract.py', 'telegram_surface.py', 'telegram_transport.py', 'telegram_registry.py', 'plugin.yaml')) {
+    foreach ($name in @('__init__.py', 'policy.py', 'ingest.py', 'contract.py', 'surface.py', 'guards.py', 'transport.py', 'registry.py', 'guard_core.py', 'surface_core.py', 'dispatch.py', 'telegram_policy.py', 'telegram_contract.py', 'telegram_surface.py', 'telegram_transport.py', 'telegram_registry.py', 'families.py', 'egress.py', 'tool_hook.py', 'tool_transport.py', 'tool_contract.py', 'guard_status.py', 'plugin.yaml')) {
       $files += @{ Source = (Join-Path $policySource $name); Target = (Join-Path $policyTargetDir $name) }
     }
   }

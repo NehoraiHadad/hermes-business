@@ -1,0 +1,6 @@
+{
+  "//": "Approved code-signing identities + justified non-signed executables. EMPTY by default: no cert is assumed, so NOBODY is an approved signer and NOTHING is justifiably excluded — the public signing gate fails closed until a real identity is added here AND every shipped PE is signed by it (or listed under `exclusions` with a written reason).",
+  "subjects": [],
+  "thumbprints": [],
+  "exclusions": []
+}

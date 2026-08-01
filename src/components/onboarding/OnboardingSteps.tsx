@@ -41,6 +41,8 @@ export function OnboardingStep(props: Props) {
                 ? 'בודק אם Hermes מותקן…'
                 : runtime.running
                 ? 'Hermes זוהה ופועל במחשב'
+                : runtime.error
+                  ? 'Hermes לא הצליח לעלות'
                 : runtime.installed
                   ? 'Hermes מותקן וצריך הפעלה'
                   : 'Hermes עדיין אינו מותקן'}

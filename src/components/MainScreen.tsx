@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import type { useSupportActions } from '../hooks/useSupportActions'
-import type { ProviderReadiness } from '../lib/provider-readiness'
+import type { LoadErrors } from '../lib/health'
+import type { ProviderStatus } from '../lib/provider-readiness'
 import type { Connection, ScheduledTask, Screen, Skill, TaskActions } from '../types'
 import { ConnectionsScreen } from './screens/ConnectionsScreen'
 import { SkillsScreen } from './screens/SkillsScreen'
@@ -19,6 +20,7 @@ export function MainScreen({
   runtime,
   versions,
   provider,
+  loadErrors,
   support,
   toast,
   onAddTask,
@@ -33,7 +35,8 @@ export function MainScreen({
   connections: Connection[]
   runtime: HermesRuntime | null
   versions: Record<string, string>
-  provider: ProviderReadiness
+  provider: ProviderStatus
+  loadErrors?: LoadErrors
   support: ReturnType<typeof useSupportActions>
   toast: string
   onAddTask: () => void
@@ -52,8 +55,9 @@ export function MainScreen({
         runtime={runtime}
         versions={versions}
         tasks={tasks}
-          connections={connections}
-          provider={provider}
+        connections={connections}
+        provider={provider}
+        loadErrors={loadErrors}
         checking={support.checking}
         toast={toast}
         onHealth={support.onHealth}

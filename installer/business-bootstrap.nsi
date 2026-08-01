@@ -59,10 +59,11 @@ Section "Install"
   File "lib\CompanionManifest.ps1"
   SetOutPath "$INSTDIR"
 
-  ; READ-ONLY companion backend payload (paused-inclusive source of truth). The
-  ; bootstrap installs dashboard\manifest.json + plugin_api.py into
+  ; Companion backend payload (strictly read-only paused-inclusive cron door). The
+  ; bootstrap installs the manifest and the mounted, self-contained plugin_api.py into
   ; <HERMES_HOME>\plugins\business-shell\dashboard and enables business-shell in
-  ; config.yaml — all inside the business-shell payload transaction.
+  ; config.yaml — all inside the business-shell payload transaction. The business-context
+  ; skill is persisted through the official Hermes Skills API, so no write engine ships.
   SetOutPath "$INSTDIR\dashboard"
   File "..\hermes-plugin\business-shell\dashboard\manifest.json"
   File "..\hermes-plugin\business-shell\dashboard\plugin_api.py"
@@ -85,6 +86,12 @@ Section "Install"
   File "..\hermes-plugin\business-whatsapp-policy\telegram_surface.py"
   File "..\hermes-plugin\business-whatsapp-policy\telegram_transport.py"
   File "..\hermes-plugin\business-whatsapp-policy\telegram_registry.py"
+  File "..\hermes-plugin\business-whatsapp-policy\families.py"
+  File "..\hermes-plugin\business-whatsapp-policy\egress.py"
+  File "..\hermes-plugin\business-whatsapp-policy\tool_hook.py"
+  File "..\hermes-plugin\business-whatsapp-policy\tool_transport.py"
+  File "..\hermes-plugin\business-whatsapp-policy\tool_contract.py"
+  File "..\hermes-plugin\business-whatsapp-policy\guard_status.py"
   File "..\hermes-plugin\business-whatsapp-policy\plugin.yaml"
   SetOutPath "$INSTDIR"
 

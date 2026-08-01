@@ -1,18 +1,25 @@
 // Source fingerprinting + repo identity for the build attestation.
 //
-// The packaged main-process sources (electron/**/*.cjs) are copied verbatim into
-// app.asar, so a deterministic hash of the working-tree source is equivalent to
-// hashing what actually runs. This module owns that fingerprint plus the repo
-// identity helpers (root, HEAD, product exe name); the manifest build/verify and
-// artifact resolution live in build-attestation.mjs.
+// A release artifact is only as trustworthy as the COMPLETE set of packaged
+// sources that produced it. `computeSourceFingerprint` therefore hashes the whole
+// packaged-source input set declared once in subject-registry.mjs — the renderer
+// sources vite compiles into `dist/`, the electron main-process runtime, the
+// hermes-plugin tree, the installer bootstrap scripts, the packaged assets and
+// package.json — NOT only electron/**/*.cjs, and never the generated
+// `dist/`/`release/` outputs, `node_modules` or tests. Any packaged-source drift
+// changes the fingerprint and so invalidates a prepared artifact.
+//
+// This module also owns the repo identity helpers (root, HEAD, product exe name);
+// the manifest build/verify and artifact resolution live in build-attestation.mjs.
 //
 // Pure Node (crypto/fs/path only) so the harness, the generator and the unit
 // suite all share one source of truth without dragging in Playwright.
 
-import { createHash } from 'node:crypto'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { hashSubjects } from './subject-hash.mjs'
+import { PACKAGED_INPUTS, SUBJECT_SCHEME } from './subject-registry.mjs'
 
 /** Repo root, resolved from this module's location (scripts/lib/ -> repo). */
 export function repoRoot() {
@@ -50,22 +57,15 @@ export function listMainSources(root = repoRoot()) {
 }
 
 /**
- * Deterministic sha256 over the packaged main-process sources plus the identity
- * fields (package.json `version` + `main`). Stable across machines: it depends on
+ * Deterministic sha256 over the COMPLETE packaged-source input set (see
+ * subject-registry.mjs `PACKAGED_INPUTS`). Stable across machines: it depends on
  * file CONTENT and POSIX-normalised relative paths only — never on mtimes,
- * absolute paths or build outputs.
+ * absolute paths or build outputs. Fails closed if any declared packaged source
+ * is missing (a broken tree can never fingerprint as a valid artifact).
  */
 export function computeSourceFingerprint(root = repoRoot()) {
-  const hash = createHash('sha256')
-  const pkg = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'))
-  hash.update(`version\0${pkg.version}\0main\0${pkg.main}\n`)
-  const files = listMainSources(root)
-  for (const rel of files) {
-    const bytes = readFileSync(path.join(root, rel))
-    const fileHash = createHash('sha256').update(bytes).digest('hex')
-    hash.update(`${rel}\0${fileHash}\n`)
-  }
-  return { fingerprint: hash.digest('hex'), fileCount: files.length }
+  const { fingerprint, fileCount } = hashSubjects(root, PACKAGED_INPUTS, { scheme: SUBJECT_SCHEME })
+  return { fingerprint, fileCount }
 }
 
 /** Best-effort current source HEAD (never throws; returns 'unknown' off-git). */

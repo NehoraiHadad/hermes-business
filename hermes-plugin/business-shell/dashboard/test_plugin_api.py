@@ -133,8 +133,11 @@ class PluginApiSecurityTests(unittest.TestCase):
         self.assertTrue(body.get("degraded"))
         self.assertNotIn("boom", str(body))
 
-    def test_router_exposes_no_mutation_route(self):
-        # The module must not define POST/PUT/DELETE handlers — read-only door.
+    def test_door_stays_read_only(self):
+        # The companion backend is strictly READ-ONLY: no write verb anywhere. The
+        # business-context skill is persisted through the official Hermes Skills API
+        # (immutable versioned create + enable/disable toggle), so there is NO custom
+        # write route — no POST/PUT/DELETE/PATCH of any kind on this router.
         with open(os.path.join(_HERE, "plugin_api.py"), encoding="utf-8") as handle:
             source = handle.read()
         for verb in ("router.post", "router.put", "router.delete", "router.patch"):

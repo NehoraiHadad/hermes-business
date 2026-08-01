@@ -34,6 +34,11 @@ import { assessAndGateIsolation, computeRunVerdict } from './lib/isolated-e2e/is
 import { finalizeTeardown } from './lib/isolated-e2e/teardown.mjs'
 
 const runApproval = process.env.HERMES_BUSINESS_E2E_APPROVAL === '1'
+// AUTOMATED EXACT-ARTIFACT capture: the orchestrator injects the immutable staged
+// artifact's build_nonce here; the harness proves the RUNNING app echoed that exact
+// nonce (== the attested artifact) and surfaces it so the orchestrator can machine-
+// capture the binding. Absent (standalone run) → exact_staged_artifact stays null.
+const injectedStagedNonce = process.env.HERMES_EXACT_STAGED_ARTIFACT || null
 const liveHome = liveHermesHome()
 // Snapshot the live profile-defining marker BEFORE anything runs.
 const liveMarkerBefore = hermesHomeMarker(liveHome)
@@ -51,6 +56,8 @@ const report = {
   artifact_kind: null,
   qa_namespace_applied: false,
   artifact: {},
+  running_nonce: null,
+  exact_staged_artifact: injectedStagedNonce ? false : null,
   isolation: {},
   approval: runApproval ? { enabled: true } : { enabled: false },
   teardown: {}
@@ -100,7 +107,7 @@ try {
   const runtime = await waitForRuntimeRunning(page)
   // Assess isolation and run both fail-fast gates (structural, then the tested
   // four-invariant set) BEFORE any session/prompt/credential-seed/approval.
-  await assessAndGateIsolation({
+  const assess = await assessAndGateIsolation({
     page,
     runtime,
     isolatedPort,
@@ -109,6 +116,16 @@ try {
     liveMarkerBefore,
     report
   })
+  // Surface the nonce the RUNNING app echoed and whether it is the EXACT injected
+  // staged artifact (injected == attested manifest nonce == running-app nonce).
+  report.running_nonce = assess.runningNonce || null
+  if (injectedStagedNonce) {
+    report.exact_staged_artifact = Boolean(
+      injectedStagedNonce === expectedNonce &&
+        assess.runningNonce &&
+        assess.runningNonce === expectedNonce
+    )
+  }
 
   if (runApproval) {
     report.approval = await runApprovalCase({ page, liveHome, tempHome, probePath })

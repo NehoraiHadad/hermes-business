@@ -4,6 +4,7 @@ import { hydrateConnectionStates } from '../lib/connections'
 import { hermesClient } from '../lib/hermes-client'
 import { resolveProviderStatus } from '../lib/provider-readiness'
 import type { ProviderStatus } from '../lib/provider-readiness'
+import { settleRuntimeBoot } from '../lib/runtime-boot'
 import type { ScheduledTask, Session, Skill } from '../types'
 
 // Owns discovery/install/boot plus the state shared with the full Hermes profile.
@@ -22,24 +23,42 @@ export function useHermesData() {
   const [versions, setVersions] = useState<Record<string, string>>({})
   const [installing, setInstalling] = useState(false)
   const [installError, setInstallError] = useState('')
+  // Whether the last authoritative LIST read failed, so the support panel can show
+  // "could not read" instead of a false-healthy empty list. Reset each refresh.
+  const [loadErrors, setLoadErrors] = useState<{ tasks: boolean; connections: boolean }>({ tasks: false, connections: false })
 
   const refresh = useCallback(async () => {
-    const nextRuntime = await hermesClient.boot()
+    const nextRuntime = await settleRuntimeBoot(() => hermesClient.boot())
     if (!mounted.current) return nextRuntime
     setRuntime(nextRuntime)
+    setInstallError(nextRuntime.running ? '' : nextRuntime.error || '')
     if (!nextRuntime.running && !hermesClient.demo) {
-      // Runtime down → we cannot inspect providers; fail closed (unknown, not ready).
+      // Runtime down → we cannot inspect providers OR read any list; fail closed
+      // (unknown provider, and the lists are unread, not empty-healthy).
       setProviderStatus(resolveProviderStatus({ runtime: nextRuntime, error: nextRuntime.error }))
+      setLoadErrors({ tasks: true, connections: true })
       return nextRuntime
     }
 
+    // Track which authoritative list reads FAILED so we never render a failed read as
+    // a healthy empty list. Each entry flips its flag in its own catch.
+    const errs = { tasks: false, connections: false }
     const [nextSessions, nextTasks, nextSkills, messaging, googleStatus, oauthProviders, env] = await Promise.all([
       hermesClient.listSessions().catch(() => []),
-      hermesClient.listTasks().catch(() => []),
+      hermesClient.listTasks().catch(() => {
+        errs.tasks = true
+        return []
+      }),
       hermesClient.listSkills().catch(() => []),
-      hermesClient.listMessagingPlatforms().catch(() => []),
+      hermesClient.listMessagingPlatforms().catch(() => {
+        errs.connections = true
+        return []
+      }),
       window.hermesDesktop
-        ? window.hermesDesktop.getGoogleStatus().catch(() => ({ available: false, authenticated: false }))
+        ? window.hermesDesktop.getGoogleStatus().catch(() => {
+            errs.connections = true
+            return { available: false, authenticated: false }
+          })
         : Promise.resolve({ available: false, authenticated: false }),
       // Official provider sources: a FAILED inspection must stay null (→ unknown),
       // never []/{} — an empty success would be read as proof of "no provider".
@@ -55,6 +74,7 @@ export function useHermesData() {
       setSkills(nextSkills)
       setConnections(hydrateConnectionStates(CONNECTIONS, messaging, googleStatus.authenticated))
       setProviderStatus(resolveProviderStatus({ runtime: nextRuntime, oauthProviders, env }))
+      setLoadErrors(errs)
     })
     const nextVersions = window.hermesDesktop
       ? await window.hermesDesktop.getVersions().catch(() => ({}))
@@ -107,6 +127,7 @@ export function useHermesData() {
     versions,
     installing,
     installError,
+    loadErrors,
     ensureInstalled,
     refresh
   }

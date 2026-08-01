@@ -51,9 +51,11 @@ describe('applyPartnerMode', () => {
     expect(puts.some(p => p.endpoint === '/api/config')).toBe(true)
     // Packaged Skill is present in the shared skills tree (visible in full Hermes).
     expect(fs.existsSync(path.join(home, 'skills', 'business', 'business-partner', 'SKILL.md'))).toBe(true)
-    // No writable roots => no write-root env change => no runtime restart.
-    expect(restarts).toBe(0)
-    expect(result.restarted).toBe(false)
+    // Guard tier with no writable roots now FAILS CLOSED to a deny-all write-safe
+    // root (never unrestricted), so the injected env changes and the runtime
+    // restarts once to pick it up.
+    expect(restarts).toBe(1)
+    expect(result.restarted).toBe(true)
   })
 
   it('restarts the runtime only when the injected write-root actually changes', async () => {
@@ -62,8 +64,10 @@ describe('applyPartnerMode', () => {
     const restart = async () => {
       restarts += 1
     }
+    const out = path.join(home, 'out')
+    fs.mkdirSync(out, { recursive: true })
     await applyPartnerMode(
-      { mode: 'partner', sandbox: 'guard', roots: [{ path: 'C:/out', access: 'rw' }] },
+      { mode: 'partner', sandbox: 'guard', roots: [{ path: out, access: 'rw' }] },
       { api, restart }
     )
     expect(restarts).toBe(1)
@@ -94,12 +98,80 @@ describe('applyPartnerMode', () => {
     expect(restore?.body).toMatchObject({ config: { display: { personality: 'friendly' } } })
   })
 
+  it('fails closed BEFORE any write when a designated writable root is invalid', async () => {
+    const puts: string[] = []
+    const api = async (endpoint: string, init?: { method?: string }) => {
+      if (init?.method === 'PUT' || init?.method === 'POST') puts.push(endpoint)
+      if (endpoint.startsWith('/api/config')) return { display: {} }
+      return {}
+    }
+    await expect(
+      applyPartnerMode(
+        { mode: 'partner', sandbox: 'guard', roots: [{ path: path.join(home, 'ghost'), access: 'rw' }] },
+        { api, restart: async () => {} }
+      )
+    ).rejects.toThrow(/לא תקינות/)
+    expect(puts).toHaveLength(0) // nothing applied
+    expect(readSettings().mode).toBe('normal') // nothing persisted
+  })
+
+  it('rolls back when the FIRST live stage (persona) fails, persisting nothing', async () => {
+    let putCount = 0
+    const rolledBack: unknown[] = []
+    const api = async (endpoint: string, init?: { method?: string; body?: any }) => {
+      if (endpoint.startsWith('/api/config') && init?.method === 'PUT') {
+        putCount += 1
+        if (putCount === 1) throw new Error('persona PUT failed')
+        rolledBack.push(init.body?.config)
+        return { ok: true }
+      }
+      if (endpoint.startsWith('/api/config')) return { display: { personality: 'friendly' } }
+      if (endpoint.startsWith('/api/tools/terminal/backends')) return []
+      return {}
+    }
+    await expect(
+      applyPartnerMode({ mode: 'partner', sandbox: 'guard' }, { api, restart: async () => {} })
+    ).rejects.toThrow('persona PUT failed')
+    expect(readSettings().mode).toBe('normal')
+    // The rollback PUT restored the captured personality.
+    expect(rolledBack.at(-1)).toMatchObject({ display: { personality: 'friendly' } })
+  })
+
   it('restores normal mode without leaving partner persisted', async () => {
     const { api } = fakeApi({ display: { personality: 'business-partner' }, terminal: { backend: 'local' } })
     await applyPartnerMode({ mode: 'partner', sandbox: 'guard' }, { api, restart: async () => {} })
     await applyPartnerMode({ mode: 'normal' }, { api, restart: async () => {} })
     expect(readSettings().mode).toBe('normal')
-    expect(readSettings().personalityBackup).toBeNull()
+    expect(readSettings().configBackup).toBeNull()
+  })
+
+  it('disabling restores the exact captured owned config (approvals + terminal), not just personality', async () => {
+    // Pre-partner config the user actually had.
+    const puts: Array<{ endpoint: string; body: any }> = []
+    const api = async (endpoint: string, init?: { method?: string; body?: any }) => {
+      if (init?.method === 'PUT' || init?.method === 'POST') {
+        puts.push({ endpoint, body: init.body })
+        return { ok: true }
+      }
+      if (endpoint.startsWith('/api/config')) {
+        return { display: { personality: 'friendly' }, approvals: { mode: 'smart', cron_mode: 'approve' }, terminal: { backend: 'local' } }
+      }
+      if (endpoint.startsWith('/api/tools/terminal/backends')) return []
+      return {}
+    }
+    await applyPartnerMode({ mode: 'partner', sandbox: 'guard' }, { api, restart: async () => {} })
+    puts.length = 0
+    await applyPartnerMode({ mode: 'normal' }, { api, restart: async () => {} })
+    const restore = puts.filter(p => p.endpoint === '/api/config').at(-1)
+    // Every owned field is restored to its captured value — personality AND the
+    // user's original approvals (cron_mode 'approve'), which partner mode had
+    // overwritten with 'deny'.
+    expect(restore?.body.config).toMatchObject({
+      display: { personality: 'friendly' },
+      approvals: { mode: 'smart', cron_mode: 'approve' }
+    })
+    // The terminal backend endpoint is also driven back to the captured backend.
+    expect(puts.some(p => p.endpoint === '/api/tools/terminal/backend')).toBe(true)
   })
 })
 
@@ -146,5 +218,30 @@ describe('getPartnerState', () => {
     expect(state.personalityActive).toBe(true)
     expect(state.plan.effective).toBe('guard')
     expect(state.backend).toBe('local')
+  })
+
+  it('persists and reports the canonical real target of a link root — never the raw link', async ctx => {
+    const target = path.join(home, 'real-books')
+    fs.mkdirSync(target, { recursive: true })
+    const link = path.join(home, 'books-link')
+    try {
+      fs.symlinkSync(target, link, process.platform === 'win32' ? 'junction' : 'dir')
+    } catch {
+      ctx.skip() // OS/permissions cannot create a reparse point here.
+      return
+    }
+    const real = fs.realpathSync.native(target)
+    const { api } = fakeApi({ display: {}, terminal: { backend: 'local' } })
+    await applyPartnerMode(
+      { mode: 'partner', sandbox: 'guard', roots: [{ path: link, access: 'rw' }] },
+      { api, restart: async () => {} }
+    )
+    // Persisted settings on disk hold the canonical target, not the link.
+    expect(readSettings().roots).toEqual([{ path: real, access: 'rw' }])
+    // Live UI state agrees, and the write-safe env is the same canonical target.
+    const state = await getPartnerState({ api })
+    expect(state.roots).toEqual([{ path: real, access: 'rw' }])
+    expect(state.writeRoot).toBe(real)
+    expect(JSON.stringify(state)).not.toContain('books-link')
   })
 })

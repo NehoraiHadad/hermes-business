@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import os from 'node:os'
+import { readFileSync, rmSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import {
   ARTIFACT_KIND,
@@ -13,57 +12,14 @@ import {
   verifyArtifactCurrent,
   writeAttestation
 } from './build-attestation.mjs'
+import { fakeRoot, cleanupRoots } from './attest-fixtures.mjs'
 
-// A self-consistent fake repo root: package.json + release/win-unpacked + an
-// electron/ tree, so the fingerprint/version checks operate on a controlled
-// surface without touching the real working tree.
+// The fake repo root (attest-fixtures.mjs) carries the COMPLETE packaged-source
+// input set, so the fingerprint/version checks here operate on a controlled
+// surface without touching the real working tree. The fingerprint-SCOPE tests
+// (what drift does/doesn't invalidate) live in source-fingerprint.test.mjs.
 
-const created = []
-function fakeRoot({ version = '9.9.9', productName = 'Widget', electron = { 'a.cjs': 'module.exports=1\n' } } = {}) {
-  const root = mkdtempSync(path.join(os.tmpdir(), 'attest-root-'))
-  created.push(root)
-  writeFileSync(
-    path.join(root, 'package.json'),
-    JSON.stringify({ version, main: 'electron/main.cjs', build: { productName } }, null, 2)
-  )
-  const elDir = path.join(root, 'electron')
-  mkdirSync(elDir, { recursive: true })
-  for (const [name, body] of Object.entries(electron)) writeFileSync(path.join(elDir, name), body)
-  const unpacked = path.join(root, 'release', 'win-unpacked')
-  mkdirSync(path.join(unpacked, 'resources'), { recursive: true })
-  writeFileSync(path.join(unpacked, `${productName}.exe`), 'MZ-fake')
-  return { root, unpacked }
-}
-
-afterEach(() => {
-  while (created.length) {
-    try {
-      rmSync(created.pop(), { recursive: true, force: true })
-    } catch {
-      /* best effort */
-    }
-  }
-})
-
-describe('computeSourceFingerprint', () => {
-  it('is deterministic and content-sensitive', () => {
-    const { root } = fakeRoot()
-    const a = computeSourceFingerprint(root)
-    const b = computeSourceFingerprint(root)
-    expect(a.fingerprint).toBe(b.fingerprint)
-    expect(a.fingerprint).toMatch(/^[0-9a-f]{64}$/)
-    // Editing a packaged main source changes the fingerprint.
-    writeFileSync(path.join(root, 'electron', 'a.cjs'), 'module.exports=2\n')
-    expect(computeSourceFingerprint(root).fingerprint).not.toBe(a.fingerprint)
-  })
-
-  it('ignores *.test.cjs (test-only edits do not invalidate an artifact)', () => {
-    const { root } = fakeRoot()
-    const before = computeSourceFingerprint(root).fingerprint
-    writeFileSync(path.join(root, 'electron', 'a.test.cjs'), 'test noise\n')
-    expect(computeSourceFingerprint(root).fingerprint).toBe(before)
-  })
-})
+afterEach(cleanupRoots)
 
 describe('buildAttestation', () => {
   it('records the current-source kind, version and a fresh nonce', () => {
@@ -132,9 +88,8 @@ describe('resolvePackagedArtifact — win-unpacked only, no installed fallback',
   })
 
   it('throws (does not fall back) when win-unpacked is absent', () => {
-    const root = mkdtempSync(path.join(os.tmpdir(), 'attest-empty-'))
-    created.push(root)
-    writeFileSync(path.join(root, 'package.json'), JSON.stringify({ version: '1', main: 'm', build: {} }))
+    const { root } = fakeRoot()
+    rmSync(path.join(root, 'release'), { recursive: true, force: true })
     expect(() => resolvePackagedArtifact({ root })).toThrow(/win-unpacked not found/)
   })
 })

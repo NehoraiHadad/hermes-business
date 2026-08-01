@@ -23,11 +23,17 @@ export function writeEnvelope(dir, name, env) {
   writeFileSync(path.join(dir, name), JSON.stringify(env, null, 2))
 }
 
-// A packaged-e2e summary with every proof boolean set true.
+// A packaged-e2e summary with every proof boolean set true. The build-binding
+// triple (finding 4) ties the evidence to the exact tested artifact: the
+// build_nonce the running app echoes, the release report's binding digest, and the
+// installer sha256. The release preflight also VALUE-matches these to the artifact.
 export const passingPackaged = () => ({
   ran: true,
   artifact_attested: true,
   artifact_kind: 'win-unpacked-current',
+  build_nonce: 'n'.repeat(32),
+  release_binding_digest: 'r'.repeat(64),
+  installer_sha256: 's'.repeat(64),
   qa_namespace_applied: true,
   isolated_runtime: true,
   ws_on_isolated_port: true,

@@ -11,6 +11,8 @@
     "gen:acceptance": "node scripts/gen-release-acceptance.mjs",
     "verify:evidence": "node scripts/verify-evidence.mjs",
     "verify:plugin": "node scripts/build-plugin.mjs --check && node --check hermes-plugin/business-shell/plugin.js && node scripts/verify-plugin.mjs",
+    "verify:plugin:release": "node scripts/build-plugin.mjs --check && node --check hermes-plugin/business-shell/plugin.js && node scripts/verify-plugin.mjs --release",
+    "gen:hermes-contract": "node scripts/gen-hermes-contract.mjs",
     "verify:bootstrap": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/verify-bootstrap.ps1",
     "generate:icons": "python scripts/generate-icons.py",
     "install:plugin": "node scripts/build-plugin.mjs && node scripts/install-plugin.mjs",
@@ -38,9 +40,17 @@
     "package:thin-installer:qa": "npm run build:plugin && powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/e2e-thin-network-installer.ps1 -EmitQaArtifact",
     "test:e2e:missing-hermes-ui": "node scripts/e2e-missing-hermes-ui.mjs",
     "preview": "vite preview --host 127.0.0.1",
-    "verify:release": "npm test && npm run test:plugin:policy && npm run verify:plugin && npm run verify:bootstrap",
-    "package:win": "npm run verify:release && npm run build && node scripts/gen-build-attestation.mjs && electron-builder --win nsis && node scripts/verify-no-update-metadata.mjs release",
-    "package:win:qa": "npm run verify:release && npm run build:qa && node scripts/gen-build-attestation.mjs && electron-builder --win nsis && node scripts/verify-no-update-metadata.mjs release",
+    "verify:release": "npm test && npm run test:plugin:policy && npm run verify:plugin:release && npm run verify:bootstrap",
+    "verify:release-contract": "node scripts/verify-release-contract.mjs",
+    "verify:release-contract:qa": "node scripts/verify-release-contract.mjs --channel qa",
+    "test:e2e:real-loader": "node scripts/e2e-real-loader.mjs",
+    "package:win": "npm run verify:release && npm run build && node scripts/gen-build-attestation.mjs && electron-builder --win dir && node scripts/finalize-payload.mjs --channel public && electron-builder --prepackaged release/win-unpacked --win nsis && node scripts/verify-no-update-metadata.mjs release && node scripts/gen-lock-attest.mjs && node scripts/sign-release.mjs --channel public && node scripts/gen-release-report.mjs && node scripts/e2e-exact-artifact.mjs --channel public && node scripts/finalize-release.mjs --channel public",
+    "package:win:qa": "npm run verify:release && npm run build:qa && node scripts/gen-build-attestation.mjs && electron-builder --win dir && node scripts/finalize-payload.mjs --channel qa && electron-builder --prepackaged release/win-unpacked --win nsis && node scripts/verify-no-update-metadata.mjs release && node scripts/gen-lock-attest.mjs && node scripts/sign-release.mjs --channel qa && node scripts/gen-release-report.mjs && node scripts/e2e-exact-artifact.mjs --channel qa && node scripts/finalize-release.mjs --channel qa",
+    "finalize:payload": "node scripts/finalize-payload.mjs",
+    "test:e2e:exact-artifact": "node scripts/e2e-exact-artifact.mjs",
+    "gen:lock-attest": "node scripts/gen-lock-attest.mjs",
+    "gen:release-report": "node scripts/gen-release-report.mjs",
+    "finalize:release": "node scripts/finalize-release.mjs",
     "package:bootstrap": "npm run build:plugin && powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/build-bootstrap.ps1"
   },
   "dependencies": {
@@ -80,7 +90,15 @@
       "electron/**/*",
       "build/icon.png",
       "hermes-plugin/**/*",
-      "package.json"
+      "package.json",
+      "!hermes-plugin/**/tests/**",
+      "!hermes-plugin/**/test_*.py",
+      "!**/__pycache__/**",
+      "!**/*.pyc",
+      "!**/.pytest_cache/**",
+      "!**/.vite/**",
+      "!**/.vitest/**",
+      "!**/*.test.{cjs,mjs,js,jsx,ts,tsx,py}"
     ],
     "extraResources": [
       {
@@ -135,6 +153,12 @@
           "telegram_surface.py",
           "telegram_transport.py",
           "telegram_registry.py",
+          "families.py",
+          "egress.py",
+          "tool_hook.py",
+          "tool_transport.py",
+          "tool_contract.py",
+          "guard_status.py",
           "plugin.yaml"
         ]
       }
@@ -143,8 +167,8 @@
       "output": "release"
     },
     "win": {
-      "signAndEditExecutable": false,
       "icon": "build/icon.ico",
+      "signAndEditExecutable": false,
       "target": [
         {
           "target": "nsis",

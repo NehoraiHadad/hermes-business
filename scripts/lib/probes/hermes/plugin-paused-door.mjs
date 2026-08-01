@@ -9,6 +9,7 @@
 // — no parallel cache. Also asserts the namespace lock rejects a `..` escape.
 
 import { withProfile } from '../../hermes-rest.mjs'
+import { cronJobId } from '../../../../electron/cron-identity.cjs'
 
 export async function provePluginPausedDoor({ rest, sdk, ctx, restFetch, backendInstall, storedSessionId, contributions, stage }) {
   if (!(restFetch && backendInstall)) {
@@ -27,7 +28,7 @@ export async function provePluginPausedDoor({ rest, sdk, ctx, restFetch, backend
   try {
     const before = (await sdk.host.request('cron.manage', { action: 'list' })).jobs?.find(j => j.name === pausedName)
     if (!before) throw new Error('plugin paused-door job not visible before pause')
-    jobId = before.id || before.name
+    jobId = cronJobId(before)
     await sdk.host.request('cron.manage', { action: 'pause', name: jobId })
 
     const activeOnly = await sdk.host.request('cron.manage', { action: 'list' })

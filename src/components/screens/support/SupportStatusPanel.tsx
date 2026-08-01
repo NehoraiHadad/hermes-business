@@ -1,23 +1,19 @@
-import { Activity as ActivityIcon, Check } from 'lucide-react'
-import type { ProviderReadiness } from '../../../lib/provider-readiness'
+import { Activity as ActivityIcon, AlertTriangle, Check } from 'lucide-react'
+import { useWhatsappGuard } from '../../../hooks/useWhatsappGuard'
+import { buildSystemHealth, type HealthComponent, type LoadErrors } from '../../../lib/health-panel'
+import type { ProviderStatus } from '../../../lib/provider-readiness'
 import type { Connection, ScheduledTask } from '../../../types'
 
-function CheckRow({
-  label,
-  value,
-  state = 'ok'
-}: {
-  label: string
-  value: string
-  state?: 'ok' | 'warning'
-}) {
+// Icon + accent per component state. `error` is visually distinct from `warning`
+// so a stopped runtime never reads like an optional, disconnected connector.
+function CheckRow({ component }: { component: HealthComponent }) {
+  const icon =
+    component.state === 'ok' ? <Check size={14} /> : component.state === 'error' ? <AlertTriangle size={14} /> : <ActivityIcon size={14} />
   return (
     <div className="check-row">
-      <span className={`check-row__icon ${state === 'ok' ? 'check-row__icon--ok' : ''}`}>
-        {state === 'ok' ? <Check size={14} /> : <ActivityIcon size={14} />}
-      </span>
-      <span>{label}</span>
-      <strong>{value}</strong>
+      <span className={`check-row__icon check-row__icon--${component.state}`}>{icon}</span>
+      <span>{component.label}</span>
+      <strong>{component.value}</strong>
     </div>
   )
 }
@@ -26,42 +22,29 @@ export function SupportStatusPanel({
   runtime,
   provider,
   connections,
-  tasks
+  tasks,
+  errors
 }: {
   runtime: HermesRuntime | null
-  provider: ProviderReadiness
+  provider: ProviderStatus
   connections: Connection[]
   tasks: ScheduledTask[]
+  errors?: LoadErrors
 }) {
-  const connectionState = (id: string) => connections.find(item => item.id === id)?.state === 'connected'
-  const googleConnected = connectionState('google')
-  const telegramConnected = connectionState('telegram')
+  // Re-probe the live guard whenever the runtime/connection snapshot changes (health
+  // refresh) so a gateway reload or a policy write is reflected, not a stale proof.
+  const whatsappGuard = useWhatsappGuard(runtime?.running ? connections : null)
+  const report = buildSystemHealth({ runtime, provider, connections, tasks, errors, whatsappGuard })
 
   return (
     <section className="panel health-panel">
       <div className="panel__title">
         <h3>מצב המערכת</h3>
-        <span className={`state-label ${runtime?.running ? 'state-label--active' : ''}`}>
-          {runtime?.running ? 'הכול תקין' : 'דורש בדיקה'}
-        </span>
+        <span className={`state-label ${report.healthy ? 'state-label--active' : ''}`}>{report.summary}</span>
       </div>
-      <CheckRow
-        label="Hermes Runtime"
-        value={runtime?.running ? 'פועל' : 'לא פועל'}
-        state={runtime?.running ? 'ok' : 'warning'}
-      />
-      <CheckRow label="ספק AI" value={provider.label} state={provider.connected ? 'ok' : 'warning'} />
-      <CheckRow
-        label="Google Workspace"
-        value={googleConnected ? 'מחובר' : 'לא מחובר'}
-        state={googleConnected ? 'ok' : 'warning'}
-      />
-      <CheckRow
-        label="Telegram"
-        value={telegramConnected ? 'מחובר' : 'לא מחובר'}
-        state={telegramConnected ? 'ok' : 'warning'}
-      />
-      <CheckRow label="משימות מתוזמנות" value={`${tasks.filter(task => task.enabled).length} פעילות`} />
+      {report.components.map(component => (
+        <CheckRow key={component.id} component={component} />
+      ))}
     </section>
   )
 }

@@ -29,6 +29,7 @@ export function assessRuntimeIsolation({ runtime, isolatedPort, tempHome, expect
     runtimeMode,
     diagnosticsHome,
     wsOnIsolatedPort,
+    runningNonce,
     nonceMatch,
     qaNamespaceApplied: Boolean(qa?.namespaceApplied) && nonceMatch,
     qaNamespacePresent: Boolean(qa?.namespaceApplied),

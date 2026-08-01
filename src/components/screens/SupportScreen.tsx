@@ -1,6 +1,7 @@
 import { CheckCircle2, HeartPulse, LoaderCircle, ShieldCheck } from 'lucide-react'
+import type { LoadErrors } from '../../lib/health'
 import type { HermesUpdateStatus } from '../../lib/hermes-client'
-import type { ProviderReadiness } from '../../lib/provider-readiness'
+import type { ProviderStatus } from '../../lib/provider-readiness'
 import type { Connection, ScheduledTask } from '../../types'
 import { SupportActions } from './support/SupportActions'
 import { SupportPartnerPanel } from './support/SupportPartnerPanel'
@@ -12,7 +13,8 @@ type SupportScreenProps = {
   versions: Record<string, string>
   tasks: ScheduledTask[]
   connections: Connection[]
-  provider: ProviderReadiness
+  provider: ProviderStatus
+  loadErrors?: LoadErrors
   onHealth: () => void
   onRestart: () => void
   onLogs: () => void
@@ -49,6 +51,7 @@ export function SupportScreen(props: SupportScreenProps) {
           provider={props.provider}
           connections={props.connections}
           tasks={props.tasks}
+          errors={props.loadErrors}
         />
         <SupportUpdatePanel
           runtime={props.runtime}

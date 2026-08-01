@@ -9,37 +9,80 @@ emails) and `redactPaths` (home/temp/drive paths) as a backstop.
 
 ## Files
 
-- `schema.json` — JSON Schema for every envelope.
-- `shared-state.json` — installed-Hermes shared-state E2E against a **throwaway**
-  `HERMES_HOME` (`e2e-hermes-shared-state.mjs`, provider-free), including the
-  business-shell desktop plugin install → discover → enable → shared-state →
-  provider-free route render → uninstall-clean lifecycle.
+- `schema.json` — JSON Schema for every envelope (including `subject_scheme` +
+  `subject_fingerprint`).
+- `shared-state.json` — installed-Hermes shared-state E2E
+  (`e2e-hermes-shared-state.mjs`, provider-free) against a **throwaway**
+  `HERMES_HOME`. Currently **blocked**: it predates the subject-fingerprint
+  contract and its attested electron + hermes-plugin subjects have drifted, so it
+  cannot be honestly re-attested without a fresh capture.
 - `thin-installer.json` — hermetic thin network installer
-  (`e2e-thin-network-installer.ps1`): download → SHA-256 → safe-extract, with the
-  full fail-closed case matrix, all in an isolated temp root over loopback.
-- `approval.json` — **passed.** Approval wiring proven (the companion wrapper
-  delegates to the official `approval.respond`; no competing engine) **and** the
-  live denial probe now runs safely against the isolated packaged runtime: a real
-  `approval.request` event is denied via `approval.respond {choice:'deny'}` with no
-  side effect. Produced by `e2e-installed-isolated.mjs`.
-- `packaged-e2e.json` — **passed.** The packaged companion boots against an
-  isolated, harness-owned temp `HERMES_HOME` on an isolated high loopback port via
-  the main-process-only QA runtime override (`electron/qa-runtime.cjs`): the
-  runtime reports `mode=qa-isolated`, the isolated session count is 0, the temp
-  home is populated, the live profile's defining state is unchanged, and teardown
-  leaves no residual process / dir / port. Produced by `e2e-installed-isolated.mjs`.
-- `telegram.json` — **passed.** Redacted live Telegram diagnosis from a manual
-  live probe (`hermes-send` + `getWebhookInfo`/`getMe`), hand-reduced to scalars:
-  official polling is healthy, the bot token is valid, and Hermes is the **sole
-  poller** with **no** webhook conflict. A historical inbound update **reached
-  Hermes** and was blocked only because the sender was not authorized at that send
-  time; the current allowlist authorizes the sender, with **no** config/env
-  mutation. Exactly **one** benign connectivity-test reply was delivered to the
-  home channel via the official Hermes send (WhatsApp/Google untouched, 0 other
-  chats touched). It deliberately does **not** claim a fresh post-authorization
-  user→agent→reply round trip — that remains a manual step. The `telegram`
-  pass-proof rule in `scripts/lib/evidence-gates.mjs` enforces the
-  sole-owner / no-webhook / no-mutation / single-send invariants.
+  (`e2e-thin-network-installer.ps1`): download → SHA-256 → safe-extract. Currently
+  **blocked**: predates the subject-fingerprint contract; recapture required.
+- `approval.json` — **blocked**, pending a packaged recapture after the onboarding
+  and cron backend changes. When re-captured it proves the approval wiring (the
+  companion wrapper delegates to the official `approval.respond`; no competing
+  engine) **and** the live denial probe against the isolated packaged runtime.
+  Produced by `e2e-installed-isolated.mjs`.
+- `packaged-e2e.json` — **blocked**, pending a packaged recapture after the
+  onboarding and cron backend changes. When re-captured it proves the packaged
+  companion boots against an isolated, harness-owned temp `HERMES_HOME`, the
+  isolated session count is 0, the live profile is unchanged, and teardown leaves
+  no residual. Produced by `e2e-installed-isolated.mjs`.
+- `telegram.json` — **blocked**, pending a fresh redacted live Telegram recapture.
+  It predates the subject-fingerprint contract and its attested hermes-plugin
+  subjects have drifted. When re-captured, the `telegram` pass-proof rule in
+  `scripts/lib/evidence-gates.mjs` enforces the sole-owner / no-webhook /
+  no-mutation / single-send invariants over the redacted scalar reduction.
+
+## Real-loader proof (opt-in, passing — no committed envelope)
+
+The `shared-state` envelope's plugin-loading step runs a **unit contract harness**
+(`scripts/lib/probes/hermes/contract-harness.mjs`) that *models* the Hermes
+runtime-loader — it is never accepted as proof that the **real** renderer loads
+the plugin. Two real anchors cover that instead:
+
+- `verify:plugin` (`scripts/verify-plugin.mjs`) checks every SDK symbol / `host`
+  door / `PluginContext` method / contribution area / loader-discovery fact our
+  `plugin.js` relies on against the **installed Hermes 0.19.1 Desktop source**,
+  or against the checked-in real-source snapshot
+  (`scripts/hermes-desktop-contract.json`, `npm run gen:hermes-contract`) on a
+  clean machine. `verify:plugin:release` additionally requires the real source
+  and a byte-for-byte (sha256) snapshot match. These changed files now sit in the
+  `approval` + `shared-state` subject sets, so a contract/verifier edit
+  invalidates those passes until recaptured.
+- `scripts/e2e-real-loader.mjs` (`npm run test:e2e:real-loader`,
+  `HERMES_BUSINESS_REAL_LOADER=1`) launches the real installed Hermes Desktop
+  against a fully-isolated throwaway sandbox (allowlisted child env re-homing every
+  home/cache/config var; `hermes://` protocol subtree snapshot/restored byte-exact
+  via a durable, crash-recoverable backup; owned descendants reaped by identity;
+  exact temp root removed). It seeds a PAUSED cron job and PROVES the paused-
+  inclusive companion door surfaces it, then separates two claims: the loader
+  **CONTRACT** (contributions rendered) and the user-path **CLICK-PATH acceptance**
+  (a real user-input path navigates/opens the tab).
+  - Latest hardened run (installed Hermes 0.19.1): the run now **passes end to end**
+    (`ok:true`, exit 0). The loader CONTRACT passes, the seeded paused row renders
+    through the companion backend (no active-only fallback), and user-path
+    acceptance is reached through a genuine **keyboard** path — not force/dispatch/
+    hash. It tries a normal sidebar pointer click first (short budget, so it
+    auto-upgrades to `sidebar-pointer` if the environment ever makes it hittable),
+    then the official **Ctrl+K command palette** → type `לעסק` → the plugin's
+    contributed `business.open` (PALETTE_AREA) row auto-highlights → **Enter** runs
+    `host.navigate('/business')`; the Automations (`משימות`) tab is then opened by
+    keyboard **Enter**. The earlier "pointer intercepted by a `data-sidebar="group"`
+    overlay" was **not** a proven Hermes product bug: the root cause is
+    Playwright/Electron synthetic-pointer coordinate behavior under a non-unity
+    `devicePixelRatio` (~0.9), which offsets the hit-test to a full-size ancestor
+    for two unrelated widgets alike (a tooling/DPR artifact, not per-widget CSS);
+    keyboard input is coordinate-free and drives the real affordances reliably.
+    This is a **test-run PASS, not committed release evidence**: the script prints
+    `ok:true` but deliberately writes **no** envelope — there is no `real-loader.json`
+    and `capture-evidence.mjs` has no real-loader path, so this proof is kept
+    separate from the public-release evidence set. The hash-router / `dispatchEvent`
+    fallbacks stay diagnostic-only; if both official input paths ever fail, the run
+    fails closed as a blocked user-path (never a contract-only pass). Registry
+    restore verified byte-exact, zero owned survivors, no temp residue, no
+    live-profile access.
 
 ## Regenerate
 
@@ -65,6 +108,43 @@ node scripts/capture-evidence.mjs approval --isolated raw-iso.json
 # verify schema + redaction + version/commit correspondence + pass-proof gate
 npm run verify:evidence
 ```
+
+## Subject fingerprint (git_state-independent freshness)
+
+Git provenance alone left a gap: a `working-tree` envelope only needed its
+`git_head` to be a reachable base, so **stale uncommitted evidence could pass as
+current** even after the code it attests changed. The subject fingerprint closes
+this.
+
+`scripts/lib/subject-registry.mjs` is the single declarative registry mapping
+each category to the exact repository files it attests (`EVIDENCE_SUBJECTS`), and
+the complete packaged-source input set of a release artifact (`PACKAGED_INPUTS`).
+The sets are split **by purpose**, not by directory:
+
+- `APP_RUNTIME_INPUTS` — the sources that actually ship inside the artifact.
+- `BUILD_PIPELINE_INPUTS` — the scripts that deterministically transform / sign /
+  attest those bytes (`scripts/after-pack.cjs`, `scripts/build-plugin.mjs`, the
+  build-attestation generator + lib). `PACKAGED_INPUTS = APP_RUNTIME + BUILD_PIPELINE`,
+  so a build-transform change invalidates a prepared artifact too.
+- `THIN_INSTALLER_INPUTS` — every implementation + contract/probe source that makes
+  the thin-installer evidence meaningful: the NSIS script, the bootstrap scripts,
+  the whole `installer/lib/**` library, the build/verify scripts, the hermetic
+  thin-installer + NSIS-contract harnesses with their `scripts/lib/**.ps1` helpers,
+  and `hermes-compat.json` (release compatibility is decided against it).
+
+At capture, `buildEnvelope` stamps `subject_scheme` + a deterministic
+`subject_fingerprint` (repo-relative POSIX paths, per-file content sha256, sorted,
+`scripts/lib/subject-hash.mjs`). At verify, `checkSubjectFreshness`
+(`scripts/lib/evidence-subject.mjs`) recomputes it over the working tree and
+requires equality for any `passed` envelope — **regardless of `git_state`**.
+
+- Relevant drift (a subject file changed) → mismatch → the pass is rejected with
+  the category's recapture hint.
+- `docs/evidence/*` is in **no** subject set, so refreshing the evidence itself
+  never self-invalidates.
+- A missing/unreadable subject, an unknown category, or a `passed` envelope
+  lacking a valid `subject_fingerprint`/current `subject_scheme` (e.g. legacy
+  evidence) **fails closed** — it can never masquerade as current.
 
 ## Provenance rule (git_state × git_head)
 

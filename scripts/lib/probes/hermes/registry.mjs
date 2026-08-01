@@ -4,6 +4,7 @@
 // job left behind by a mid-cycle failure.
 
 import { flattenSkillNames } from '../../hermes-live.mjs'
+import { cronJobId } from '../../../../electron/cron-identity.cjs'
 
 /** Confirm the stored session id is returned by session.list. */
 export async function verifySharedSession(harness, storedSessionId) {
@@ -39,7 +40,7 @@ export async function runCronCycle(harness, ctx) {
   let cron = await rpc('cron.manage', { action: 'list' })
   const createdJob = cron.jobs?.find(item => item.name === jobName)
   if (!createdJob) throw new Error('The scheduled task was not returned by cron.manage list')
-  const jobId = createdJob.id || createdJob.name
+  const jobId = cronJobId(createdJob)
   await rpc('cron.manage', { action: 'pause', name: jobId })
   await rpc('cron.manage', { action: 'resume', name: jobId })
   await rpc('cron.manage', { action: 'remove', name: jobId })

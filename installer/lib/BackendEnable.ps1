@@ -1,5 +1,5 @@
-# BackendEnable.ps1 — install + enable the READ-ONLY companion backend plugin
-# (dashboard/manifest.json + plugin_api.py) as part of the business payload
+# BackendEnable.ps1 — install + enable the companion backend plugin (the mounted,
+# self-contained read-only dashboard/plugin_api.py) as part of the business payload
 # TRANSACTION, and roll the config enablement back atomically on failure.
 #
 # The desktop plugin reaches this backend through its namespace-locked
@@ -11,7 +11,14 @@
 #
 # Depends on: Logging.ps1 (Write-Step), Hashing.ps1 (Get-Sha256Hash).
 
-function Get-DashboardBackendFiles { return @('manifest.json', 'plugin_api.py') }
+# Runtime payload: the manifest and the mounted, self-contained api entrypoint. In
+# lockstep with electron/paths.cjs DESKTOP_BACKEND_FILES. Test .py files are excluded.
+function Get-DashboardBackendFiles {
+  return @(
+    'manifest.json',
+    'plugin_api.py'
+  )
+}
 
 function Test-DashboardPayloadPresent {
   param([Parameter(Mandatory)][string]$PayloadRoot)

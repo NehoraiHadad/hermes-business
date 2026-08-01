@@ -43,6 +43,34 @@ export function PartnerStatusRows({ state }: { state: PartnerState }) {
         />
       ))}
       {state.writeRoot ? <Row label="נתיב כתיבה בטוח" value={state.writeRoot} /> : null}
+      {plan.invalidRoots.map(root => (
+        <Row key={`bad-${root.path}`} label="תיקיה לא תקינה" value={`${root.path || '(ריק)'} — ${root.reason}`} warn />
+      ))}
+      {state.checkins ? (
+        <Row
+          label="צ׳ק־אין מתוזמן"
+          value={state.checkin?.scheduled ? state.checkin.scheduleDisplay || 'פעיל' : state.checkin?.paused ? 'מושהה' : 'ממתין לסנכרון'}
+          warn={!state.checkin?.scheduled}
+        />
+      ) : null}
+      {state.checkins && state.checkin?.edited ? (
+        <Row
+          label="לוח זמנים שונה ב־Hermes"
+          value={`${state.checkin.liveSchedule ?? ''} — יסונכרן חזרה לתדירות שנבחרה`}
+          warn
+        />
+      ) : null}
+      {state.checkinMismatch ? (
+        <Row
+          label="סתירת צ׳ק־אין"
+          value={
+            state.checkin?.scheduled
+              ? 'משימה מתוזמנת עדיין פעילה למרות שהצ׳ק־אין כבוי — נדרש סנכרון מחדש'
+              : 'הכוונה היא צ׳ק־אין פעיל אך אין משימה מתוזמנת — נדרש סנכרון מחדש'
+          }
+          warn
+        />
+      ) : null}
       {plan.degraded && plan.reason ? <Row label="מצב מוגבל" value={plan.reason} warn /> : null}
       {state.liveError ? <Row label="קריאת מצב חי" value={state.liveError} warn /> : null}
       <p className="partner-status__semantics">{plan.approvalSemantics}</p>

@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react'
+import { interpretHealthResponse, withTimeout } from '../lib/health'
 import { hermesClient, type HermesUpdateStatus } from '../lib/hermes-client'
 import { runHermesUpdate } from '../lib/update-flow'
 
@@ -23,10 +24,18 @@ export function useSupportActions({
   const onHealth = useCallback(async () => {
     setChecking(true)
     try {
-      await hermesClient.healthCheck()
-      setToast('בדיקת התקינות הושלמה — הכול פועל כרגיל')
+      // Fail closed: only claim health when the AUTHORITATIVE /api/health (+status)
+      // response positively confirms it. ok:false, malformed data, an unhealthy
+      // component, or a timeout all resolve to a surfaced problem — never "healthy".
+      const raw = await withTimeout(hermesClient.healthCheck(), 15_000)
+      const verdict = interpretHealthResponse(raw)
+      setToast(
+        verdict.healthy
+          ? 'בדיקת התקינות הושלמה — הכול פועל כרגיל'
+          : `נמצאה בעיה: ${verdict.reason}. אפשר לפתוח Logs או ליצור חבילת אבחון.`
+      )
     } catch {
-      setToast('נמצאה בעיה. אפשר לפתוח Logs או ליצור חבילת אבחון.')
+      setToast('בדיקת התקינות לא הושלמה (תקלת תקשורת או פסק זמן) — לא ניתן לאשר תקינות. אפשר לפתוח Logs או ליצור חבילת אבחון.')
     } finally {
       setChecking(false)
     }

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { Badge, Button, host } from '@hermes/plugin-sdk'
 import { h } from '../dom.js'
-import { humanSchedule, isJobPaused, purgeLegacyPausedCache, useAsync } from '../helpers.js'
+import { cronJobId, humanSchedule, isJobPaused, purgeLegacyPausedCache, useAsync } from '../helpers.js'
 import { loadScheduledTasks } from '../cron-source.js'
 import { Card, SectionTitle } from '../ui.js'
 import { NewTaskForm } from './automation-form.js'
@@ -24,7 +24,7 @@ export function Automations({ storage }) {
   }, [])
 
   async function toggle(job) {
-    const id = job.id || job.name
+    const id = cronJobId(job)
     if (!id) return
     const paused = isJobPaused(job)
     try {
@@ -64,7 +64,7 @@ export function Automations({ storage }) {
                   h(
                     'div',
                     {
-                      key: job.id || job.name || index,
+                      key: cronJobId(job) || index,
                       className:
                         'flex flex-wrap items-center justify-between gap-3 rounded-[4px] border border-(--ui-stroke-secondary) px-3 py-2.5'
                     },

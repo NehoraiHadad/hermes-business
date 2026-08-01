@@ -33,6 +33,7 @@ export interface PluginHelpers {
   summarizeCronJobs: (result: unknown) => { jobs: unknown[]; pausedListingSupported: boolean }
   purgeLegacyPausedCache: (storage: Storage) => number
   isJobPaused: (job: unknown) => boolean
+  cronJobId: (job: unknown) => string | null
   setPluginRest: (rest: unknown) => void
   hasPausedInclusiveDoor: () => boolean
   loadScheduledTasks: () => Promise<{ jobs: unknown[]; pausedListingSupported: boolean; source: string }>
@@ -63,7 +64,7 @@ export function loadShippedPlugin(host: Record<string, unknown>): LoadedPlugin {
   `
   const context = vm.createContext({ __host: host, console, Date, JSON, Promise, setTimeout, clearTimeout })
   vm.runInContext(
-    `${prelude}\n${withoutImports}\nglobalThis.__helpers = { friendlyToolName, humanSchedule, guidedSetupPrompt, startGuidedSetup, summarizeCronJobs, purgeLegacyPausedCache, isJobPaused, setPluginRest, hasPausedInclusiveDoor, loadScheduledTasks }`,
+    `${prelude}\n${withoutImports}\nglobalThis.__helpers = { friendlyToolName, humanSchedule, guidedSetupPrompt, startGuidedSetup, summarizeCronJobs, purgeLegacyPausedCache, isJobPaused, cronJobId, setPluginRest, hasPausedInclusiveDoor, loadScheduledTasks }`,
     context,
     { filename: pluginPath }
   )

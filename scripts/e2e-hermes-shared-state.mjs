@@ -35,6 +35,7 @@ const ctx = {
   sessionTitle: `POC E2E shared session ${stamp}`,
   cronCreated: false,
   pausedCreated: false,
+  checkinJobId: null,
   skillCreated: false
 }
 

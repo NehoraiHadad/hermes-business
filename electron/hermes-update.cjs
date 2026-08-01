@@ -8,13 +8,16 @@ const {
   assertUpdateMethodSupported,
   assertRunningVersionSupported
 } = require('./hermes-compat.cjs')
+const { assertGatewayDeepHealthy } = require('./hermes-health.cjs')
+const { assertReleaseReachable } = require('./hermes-update-preflight.cjs')
 const { createPreUpdateBackup } = require('./hermes-backup.cjs')
 const { captureRollbackAnchor, rollbackAfterFailedUpdate } = require('./hermes-rollback.cjs')
+const journal = require('./hermes-update-journal.cjs')
 const { runOfficialUpdate } = require('./hermes-update-flow.cjs')
 
-// Thin wiring layer: bind the real (Electron/process/git) collaborators to the
-// pure orchestration in hermes-update-flow.cjs, and serialize concurrent runs.
-// A single in-flight update flag lives here (renderer-facing), never in the
+// Thin wiring layer: bind the real (Electron/process/git/disk) collaborators to
+// the pure orchestration in hermes-update-flow.cjs, and serialize concurrent
+// runs. A single in-flight update flag lives here (renderer-facing), never in the
 // DI-tested flow module.
 
 let updateInProgress = false
@@ -29,12 +32,15 @@ function defaultDeps() {
     startHermes,
     hermesApi,
     ensureGatewayBackground,
+    assertGatewayDeepHealthy: command => assertGatewayDeepHealthy(command),
     assertUpdateMethodSupported,
+    assertReleaseReachable: command => assertReleaseReachable(command),
     assertUpdateTargetSupported,
     assertRunningVersionSupported,
     createPreUpdateBackup,
     captureRollbackAnchor,
-    rollbackAfterFailedUpdate
+    rollbackAfterFailedUpdate,
+    journal
   }
 }
 

@@ -54,6 +54,14 @@ describe('anti-false-pass proof gate', () => {
     expect(verifyEvidence({ dir }).errors.join()).toMatch(/live_unsafe_entries/)
   })
 
+  it('rejects a packaged-e2e pass missing the build_nonce binding (finding 4)', () => {
+    const dir = scratchDir()
+    const bad = passingPackaged()
+    delete bad.build_nonce
+    write(dir, 'packaged-e2e.json', buildEnvelope('packaged-e2e', bad, { tool: 't' }))
+    expect(verifyEvidence({ dir }).errors.join()).toMatch(/build_nonce/)
+  })
+
   it('accepts an approval pass that traversed the real event path', () => {
     const dir = scratchDir()
     write(dir, 'approval.json', buildEnvelope('approval', passingApproval(), { tool: 't' }))

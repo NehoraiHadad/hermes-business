@@ -1,7 +1,7 @@
 {
   "name": "business-shell",
   "label": "Hermes לעסק (backend)",
-  "description": "Read-only companion backend for the business-shell desktop plugin. Surfaces active+paused scheduled tasks straight from Hermes' authoritative scheduler — one source of truth, no parallel store.",
+  "description": "Companion backend for the business-shell desktop plugin: a read-only active+paused scheduled-task listing straight from Hermes' authoritative scheduler. One source of truth, no parallel store. The business-context skill is persisted via the official Hermes Skills API (no custom write surface here).",
   "version": "0.1.0",
   "tab": { "hidden": true },
   "slots": [],

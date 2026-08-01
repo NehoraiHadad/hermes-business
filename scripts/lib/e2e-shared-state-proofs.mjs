@@ -5,9 +5,11 @@
 
 import { rmSync } from 'node:fs'
 import { uninstallBusinessShellBackend } from './probes/hermes/plugin-install.mjs'
+import { cronJobId } from '../../electron/cron-identity.cjs'
 import {
   proveCronSharedState,
   provePausedCronCrossDoor,
+  provePartnerCheckinReconcile,
   proveSkillSharedState,
   proveSessionSharedState,
   provePathEvidence
@@ -26,8 +28,13 @@ export function makeCleanup({ harness, rpc, hermesHome, ctx }) {
       try {
         const cron = await rpc('cron.manage', { action: 'list' }, 15_000)
         const job = cron.jobs?.find(j => j.name === strayName)
-        if (job) await rpc('cron.manage', { action: 'remove', name: job.id || job.name }, 15_000)
+        if (job) await rpc('cron.manage', { action: 'remove', name: cronJobId(job) }, 15_000)
       } catch { /* best effort */ }
+    }
+    if (ctx.checkinJobId) {
+      try {
+        await rpc('cron.manage', { action: 'remove', name: ctx.checkinJobId }, 15_000)
+      } catch { /* best effort; isolated home is discarded next anyway */ }
     }
     try {
       uninstallBusinessShellBackend(hermesHome)
@@ -48,6 +55,7 @@ export async function collectSharedStateReport(input) {
   const sessionShared = await proveSessionSharedState(harness, rest, storedSessionId)
   const cronShared = await proveCronSharedState(harness, rest, home, ctx)
   const pausedCronCrossDoor = await provePausedCronCrossDoor(harness, rest, home, ctx)
+  const partnerCheckinReconcile = await provePartnerCheckinReconcile(harness, rest, home, ctx)
   const skillShared = await proveSkillSharedState(harness, rest, home, ctx)
   const pathEvidence = provePathEvidence(home)
   const pluginShared = await provePluginSharedState({
@@ -77,6 +85,7 @@ export async function collectSharedStateReport(input) {
     session_shared_state: { stored_session_id: storedSessionId, visible_via_rpc_list: true, ...sessionShared },
     cron_shared_state: cronShared,
     paused_cron_cross_door: pausedCronCrossDoor,
+    partner_checkin_reconcile: partnerCheckinReconcile,
     skill_shared_state: skillShared,
     path_evidence: pathEvidence,
     plugin_shared_state: pluginShared,

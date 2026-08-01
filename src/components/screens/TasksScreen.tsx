@@ -116,10 +116,7 @@ export function TasksScreen({
         <TaskEditDialog
           task={editing}
           onClose={() => setEditing(null)}
-          onSave={updates => {
-            actions.onEdit(editing, updates)
-            setEditing(null)
-          }}
+          onSave={updates => actions.onEdit(editing, updates)}
         />
       ) : null}
     </main>

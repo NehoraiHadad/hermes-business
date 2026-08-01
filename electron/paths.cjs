@@ -72,11 +72,19 @@ function bootstrapSkillSource() {
   return path.join(__dirname, '..', 'hermes-plugin', 'business-shell', 'skills', 'business-bootstrap', 'SKILL.md')
 }
 
-// The READ-ONLY companion backend plugin (dashboard/manifest.json + plugin_api.py)
-// that Hermes mounts at /api/plugins/business-shell/ — the paused-inclusive
-// source of truth the desktop plugin reaches through its namespace-locked
-// ctx.rest. Only these two files make up the runtime payload.
-const DESKTOP_BACKEND_FILES = Object.freeze(['manifest.json', 'plugin_api.py'])
+// The companion backend plugin that Hermes mounts at /api/plugins/business-shell/
+// — a strictly read-only paused-inclusive cron door, reached by the desktop plugin
+// through its namespace-locked ctx.rest. plugin_api.py is the mounted entrypoint
+// (manifest `api`) and is fully self-contained (no sibling runtime modules): the
+// business-context skill is persisted through the official Hermes Skills API, so no
+// custom write engine ships here. The co-located test_*.py are NOT shipped. Keep this
+// list in lockstep with the installer/probe/build enumerations (BackendEnable.ps1,
+// install-plugin.mjs, plugin-install.mjs, business-bootstrap.nsi, package.json
+// extraResources).
+const DESKTOP_BACKEND_FILES = Object.freeze([
+  'manifest.json',
+  'plugin_api.py'
+])
 
 function desktopBackendSourceDir() {
   return path.join(__dirname, '..', 'hermes-plugin', 'business-shell', 'dashboard')
@@ -108,6 +116,12 @@ const WHATSAPP_POLICY_PLUGIN_FILES = Object.freeze([
   'telegram_surface.py',
   'telegram_transport.py',
   'telegram_registry.py',
+  'families.py',
+  'egress.py',
+  'tool_hook.py',
+  'tool_transport.py',
+  'tool_contract.py',
+  'guard_status.py',
   'plugin.yaml'
 ])
 

@@ -42,6 +42,15 @@
       "enum": ["committed", "working-tree"],
       "description": "committed = HEAD had no uncommitted changes and git_head must equal current HEAD; working-tree = captured pre-commit with local changes present."
     },
+    "subject_scheme": {
+      "type": "integer",
+      "description": "Version of the subject fingerprint scheme (scripts/lib/subject-registry.mjs SUBJECT_SCHEME). A passed envelope must carry the current scheme; a mismatch forces recapture."
+    },
+    "subject_fingerprint": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "Deterministic sha256 over the exact repository files this category attests (EVIDENCE_SUBJECTS). The verifier recomputes it over the working tree; a passed envelope whose subjects drifted is rejected regardless of git_state."
+    },
     "captured_at": {
       "type": ["string", "null"],
       "description": "ISO-8601 capture timestamp (machine clock), or null."
@@ -56,7 +65,7 @@
     },
     "summary": {
       "type": "object",
-      "description": "Scalar-only reduction (booleans / counts / enums). Never contains paths, logs, prompts, chat content, usernames, tokens, emails or binaries."
+      "description": "Scalar-only reduction (booleans / counts / enums). Never contains paths, logs, prompts, chat content, usernames, tokens, emails or binaries. A passed packaged-e2e summary additionally MUST carry the tested build's binding triple — build_nonce (echoed by the running app), release_binding_digest (from release/release-report.json) and installer_sha256 — which the release preflight value-matches to the artifact being released (a mismatch makes the envelope stale, never an auto-pass)."
     }
   }
 }

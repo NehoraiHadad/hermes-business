@@ -100,8 +100,30 @@ export function SupportPartnerPanel() {
             checked={state.checkins}
             onChange={event => void apply({ checkins: event.target.checked })}
           />
-          <span>לאפשר צ׳ק־אין יזום (cron) — נדרש אישור מפורש</span>
+          <span>צ׳ק־אין יזום כמשימת cron רשמית — מחקר וטיוטה בלבד, ללא פעולה אוטומטית</span>
         </label>
+        {state.checkins ? (
+          <div className="partner-checkin">
+            <label className="partner-checkin__cadence">
+              <span>תדירות</span>
+              <select
+                value={state.checkinCadence}
+                onChange={event => void apply({ checkinCadence: event.target.value as CheckinCadence })}
+              >
+                <option value="daily">כל יום (08:00)</option>
+                <option value="weekdays">ימי חול (א׳–ה׳, 08:00)</option>
+                <option value="weekly">שבועי (ראשון, 08:00)</option>
+              </select>
+            </label>
+            <p className="partner-panel__hint">
+              {state.checkin?.scheduled
+                ? `משימה מתוזמנת פעילה: ${state.checkin.scheduleDisplay ?? ''}. נראית גם ב־Hermes המלא.`
+                : state.checkin?.paused
+                  ? 'המשימה קיימת ומושהית — תתחדש עם ההפעלה.'
+                  : 'המשימה תיווצר בהרצה הבאה של הסנכרון.'}
+            </p>
+          </div>
+        ) : null}
       </fieldset>
 
       {error ? <p className="partner-panel__error">{error}</p> : null}

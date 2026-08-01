@@ -115,7 +115,64 @@ probe מקדים של הגרסה. ה־WebSocket ב־bind של loopback מאומ�
 
 המקור מודולרי תחת `hermes-plugin/business-shell/src`. Rollup יוצר
 `plugin.js` יחיד, משום שזה חוזה ה־loader. React וה־SDK נשארים external.
-`verify:plugin` בודק שה־artifact אינו stale ושאין imports אסורים או JSX.
+`verify:plugin` בודק שה־artifact אינו stale, שאין imports אסורים או JSX, **וכן
+מאמת את כל סמלי ה־SDK / דלתות `host` / מתודות `PluginContext` / אזורי התרומה /
+עובדות ה־loader וה־discovery שעליהם ה־Plugin נשען מול מקור ה־Desktop של Hermes
+המותקן `0.19.1`** (`scripts/verify-plugin.mjs`). המקור נפתר דרך
+`electron/paths.cjs` (`hermesHome`), הגרסה חייבת להיות בטווח, וכל חוסר/גרסה מחוץ
+לטווח → כשל סגור (fail-closed). על מכונת build נקייה ללא Hermes מותקן, האימות
+מתבצע מול snapshot חתום שנוצר ממקור אמיתי
+(`scripts/hermes-desktop-contract.json`, נוצר ע"י `npm run gen:hermes-contract`
+מהמקור המותקן; המקבילה ל־clean-room היא רכישת מקור ה־release ה־immutable הרשמית
+ב־`installer/bootstrap`) — **לעולם לא נפילה שקטה לסימולציה**. `verify:plugin:release`
+דורש את המקור המותקן האמיתי ומאמת התאמת sha256 מלאה מול ה־snapshot.
+
+חשוב: `scripts/lib/probes/hermes/contract-harness.mjs` הוא **harness חוזה ליחידות
+בלבד** — שחזור כתוב ביד של התנהגות ה־loader המתועדת, לבדיקות מהירות offline. הוא
+**אינו** ה־loader האמיתי ואינו מובא כהוכחה ש־Hermes האמיתי טוען את ה־Plugin.
+ההוכחה האמיתית: (א) `verify:plugin` מול המקור המותקן, ו־(ב) E2E ה־opt-in
+`scripts/e2e-real-loader.mjs` (`npm run test:e2e:real-loader`,
+`HERMES_BUSINESS_REAL_LOADER=1`) שמריץ את Hermes Desktop האמיתי בתוך sandbox מבודד
+ומוכח־בר־שחזור (env ברשימת־היתר עם re-home לכל home/cache/config; snapshot/restore
+מדויק־בייט של תת־עץ הרישום `hermes://` עם גיבוי עמיד ובר־התאוששות מקריסה; קטילת
+צאצאים לפי זהות; הסרת שורש temp מדויק). הוא זורע משימת cron **מושהית** ומוכיח
+שהדלת כוללת־מושהות מציגה אותה, ומפריד בין הוכחת ה־**CONTRACT** של ה־loader (התרומות
+עלו) לבין קבלת מסלול־המשתמש (**CLICK-PATH**: לחיצת עכבר רגילה מנווטת/פותחת טאב).
+בהרצה המוקשחת האחרונה מול Hermes 0.19.1 המותקן הריצה **עוברת מקצה לקצה**
+(`ok:true`, exit 0): ה־CONTRACT עובר, השורה המושהית מוצגת דרך ה־backend הנלווה,
+וקבלת מסלול־המשתמש מושגת דרך מסלול קלט אמיתי — **מקלדת**, לא force/dispatch/hash.
+סדר הניסיון: תחילה לחיצת עכבר רגילה על פריט ה־nav בתקציב קצר (כדי שתשדרג אוטומטית
+ל־`mechanism:'sidebar-pointer'` ביום שסביבת unity-DPR או תיקון upstream יהפכו אותה
+לישירה), ואם היא נכשלת — ה־**command palette** הרשמי: `Ctrl+K`
+(`nav.commandPalette`, ברירת מחדל `mod+k`) → הקלדת `לעסק` → שורת ה־`business.open`
+שה־Plugin תורם (PALETTE_AREA) מודגשת אוטומטית (cmdk מדרג את ההתאמה הטובה ביותר
+ראשונה) → **Enter** מריץ `host.navigate('/business')`; טאב ה־Automations (`משימות`)
+נפתח אף הוא ב־Enter של המקלדת (הפעלת `<button>` נטיבית).
+
+**תיקון לטענה קודמת:** ה"חסימה" הישנה של לחיצת העכבר **אינה** באג מוצר מוכח
+ב־Hermes Desktop. השורש הוא התנהגות קואורדינטות של Playwright/Electron:
+`window.devicePixelRatio ≈ 0.9` (zoom/HiDPI לא־יחידתי) מסיט את קואורדינטות ה־pointer
+הסינתטיות, כך ש־`elementFromPoint` במרכז ה־rect פותר לאב־קדמון בגודל מלא (ה־sidebar
+group או ה־`cmdk-root`) והלחיצה נדחית — אותה תופעה בשני widgets לא־קשורים, כלומר
+artifact של הכלי/DPR ולא CSS פר־widget. קלט מקלדת אינו זקוק ל־hit-test קואורדינטתי,
+ולכן מפעיל את האפרדנסים האמיתיים באמינות.
+
+זהו **PASS של ריצת בדיקה, לא ראיית release ציבורית**: הסקריפט מדפיס `ok:true` אך
+**אינו** כותב מעטפת ראיה — אין `real-loader.json`, ו־`capture-evidence.mjs` אינו
+מטפל ב־real-loader — כך שההוכחה הזאת נשמרת בכוונה נפרדת ממערך ראיות ה־release
+הציבורי. מסלול ה־hash router וה־`dispatchEvent` נותרים **דיאגנוסטיים בלבד** ואינם
+מסמנים קבלה. אם **שני** מסלולי הקלט הרשמיים ייכשלו אי־פעם, הריצה עדיין נכשלת סגור
+כ־user-path חסום (מדווח כבאג hit-test/קלט אפשרי) — לעולם לא PASS על סמך
+CONTRACT־בלבד, ובאג קלט אמיתי לעולם אינו מוסתר.
+
+### ארכיטקטורה כפולה (dual/hybrid) — מכוונת, לא קוד מת
+
+המוצר מריץ במכוון שני ממשקים מעל אותו Hermes Home ו־Profile `default`:
+Electron thin client קטן (הממשק הראשי, ה־widget הממותג תמיד־זמין) ו־Desktop
+Plugin אופציונלי (`business-shell`) לחוויית Hermes המלאה. שניהם חולקים מצב אחד
+(sessions/cron/skills/memory). זו החלטה ארכיטקטונית — ה־thin client נותן חוויה
+קלה ותמיד־זמינה שה־Plugin לבדו אינו יכול לספק מחוץ לחלון Hermes, וה־Plugin נותן
+מסכים עסקיים מלאים בתחזוקה נמוכה. אין כפילות של Runtime/Engine, ואין קוד מת.
 
 ### Companion
 
@@ -628,12 +685,14 @@ tokens, raw logs, שיחות, מיילים, קבצי עסק או פרטי לקו
 
 ## הפצה ותאימות
 
-המתקין המלא `0.3.3` כולל את ה־Companion ואת bootstrap payload. מתקין הרשת
+המתקין המלא (Alpha לא־חתום) כולל את ה־Companion ואת bootstrap payload. מתקין הרשת
 הזעיר כולל bootstrap, Plugin ו־Skill; Hermes עצמו יורד מה־release הרשמי,
 וה־Companion יורד לפי manifest חיצוני עם גרסה, URL ו־SHA-256.
 
-ה־artifact הסופי שנבנה והותקן הוא `release/העוזר לעסק Setup 0.3.3.exe`. הגודל
-וה־SHA-256 המדויקים משתנים בכל build ולכן אינם משוכפלים בפרוזה; מקור האמת הוא
+ה־artifact שנבנה והותקן מקומית הוא `release/העוזר לעסק Setup <גרסה>.exe` — build
+מקומי של Alpha, **לא חתום ולא artifact הפצה**; הגרסה (`0.3.x`) אינה מקובעת בפרוזה
+כדי שלא תוצג כ"סופית" או כניתנת־להפצה. הגודל וה־SHA-256 המדויקים משתנים בכל build
+ולכן אינם משוכפלים בפרוזה; מקור האמת הוא
 הקובץ הנוצר `release/SHA256SUMS.txt` (git-ignored), הנכתב על ידי
 `npm run checksums` מעץ ה־release הנוכחי.
 
@@ -806,14 +865,31 @@ Google נבדק גם במסלול כשל בטוח, וזהו המסלול המכ�
 (idempotent), ונראה במסך ה־Skills המלא. הוא מגדיר: יזום, אתגור, מחקר, הצעות,
 צוותי `delegate_task` נייטיביים, וגבול קשיח — לעולם לא לשלוח/להוציא כסף/לפרסם/
 למחוק/לבצע commit/לשנות הרשאות/להתחייב חיצונית בלי אישור מפורש. צ׳ק־אין יזום
-(cron) רק לאחר הפעלה מפורשת של המשתמש.
+הוא משימת cron רשמית אחת שנוצרת רק לאחר הפעלה מפורשת של המשתמש (ראה למטה).
 
 ### שלוש רמות ארגז חול — והאמת עליהן
 
 - **off** — backend מקומי, ללא הגבלת נתיב כתיבה. אישור ידני הוא ההגנה היחידה.
 - **guard** — backend מקומי + הזרקת `HERMES_WRITE_SAFE_ROOT` בזמן עליית ה־Runtime.
-  משתנה זה מגביל **רק** `write_file/patch/delete/move` — לא קריאות ולא טרמינל.
-  ריבוי נתיבי כתיבה מחוברים ב־path delimiter של הפלטפורמה.
+  מאומת מול `agent/file_safety.py` (`get_safe_write_roots` + `is_write_denied`):
+  המשתנה נקרא במקום **אחד בלבד** ומגביל **רק** את כלי הכתיבה
+  (`write_file`/`patch`/`delete`/`move`) — **לא** קריאות, **לא** טרמינל/שֶׁל, ולא
+  רשת (הטרמינל אינו מתייעץ בו כלל, כך שֶׁל `echo > /path` אינו כלוא). Hermes מריץ
+  `os.path.realpath` על היעד ועל השורשים, ולכן ניסיון בריחה עם `..` או symlink
+  **נחסם** על ידי Hermes עצמו. ריבוי נתיבי כתיבה תקינים מחוברים ב־path delimiter.
+  **כשל־פתוח מובנֶה ב־Hermes ותיקונו אצלנו:** כאשר ה־env ריק/חסר, Hermes **אינו**
+  מגביל כתיבה כלל (fail-open), ואין ב־Hermes בדיקה שהשורש אינו `/` (שורש כזה = היתר
+  לכל). לכן שכבת השותף מאמתת שורשים לפני החלה (`electron/sandbox-roots.cjs`):
+  נתיב חייב להיות מוחלט, ללא `..`, לא שורש כונן/מערכת, וקיים כספרייה (עברית ורווחים
+  תקינים). שורש כתיבה שנבחר והתגלה כלא־תקין **נכשל־סגור**: `planSandbox` זורק **לפני
+  כל כתיבה** ואינו מחיל דבר (שום דבר לא נשמר). **כשל־סגור מלא ב־guard:** כל תצורת
+  guard שמניבה **אפס** נתיבי כתיבה תקינים — בין אם לא נבחרה תיקיה כלל, נבחרו רק
+  תיקיות קריאה, או שכל נתיבי הכתיבה שנבחרו לא־תקינים — מזריקה ב־spawn `HERMES_WRITE_SAFE_ROOT`
+  = **sentinel של דחיית־כל** (`business/.partner-no-write`, נתיב שאיש אינו נמצא תחתיו),
+  ולעולם **לא** `null`. Hermes אז חוסם כל כתיבה של כלי־קבצים עד שהבעלים בוחר תיקיית
+  כתיבה אמיתית — במקום ליפול ל“ללא גבול” (שאותו Hermes מפרש כהיתר־לכל). ה־UI מציג את
+  נתיב הכתיבה הבטוח בפועל, וה־copy מדגיש ש־guard **אינו ארגז חול מלא**: הוא חל רק על
+  כלי הקבצים של Hermes ואינו חוסם קריאות, כתיבה דרך הטרמינל (shell) או רשת.
 - **docker** — backend `docker` עם `docker_volumes` מהתיקיות שנבחרו. נדרש
   `status==='ready'` מ־`/api/tools/terminal/backends`. אם Docker חסר/עצור/לא
   זמין — **fail-closed**: המערכת אינה מפעילה Docker, חוזרת ל־local+guard,
@@ -825,13 +901,102 @@ Google נבדק גם במסלול כשל בטוח, וזהו המסלול המכ�
 (`write_file/patch`) בתוך mount לכתיבה מסתמכת על שמירת נתיבים רגישים חלשה יותר —
 ולכן `:ro` היא ההגנה החזקה ביותר. מסך התמיכה מציג את המשמעות המדויקת לכל מצב.
 
+### סמנטיקת אישורים מאומתת (מקור Hermes)
+
+נבדק ישירות בקוד ולא בתיעוד:
+
+- `approvals.mode` (`tools/approval.py`) הוא שער לפקודות **שֶׁל/exec מסוכנות בלבד**
+  (denylist מבוסס regex) ול־`execute_code`/MCP elicitations — הוא **אינו** גבול
+  קבצים או רשת. `manual` מבקש אישור אינטראקטיבי בסשן החי; `off` עוקף (למעט
+  ה־hardline floor). מצב שותף מקבע `manual`.
+- `approvals.cron_mode` חל **רק** על סשני cron (`HERMES_CRON_SESSION=1`,
+  `cron/scheduler.py`). `deny` (ברירת המחדל, ומצב שותף מקבע אותה) חוסם **רק** פקודות
+  מסוכנות ו־`execute_code` בריצה לא־מלווה; פקודות רגילות/בטוחות ממשיכות לרוץ. אין מצב
+  ביניים של “הַמְתֵּן לאישור אנושי” ל־cron, ולכן `deny` הוא ההגדרה הבטוחה שעדיין
+  מאפשרת לצ׳ק־אין לעבוד. **מסקנה מפורשת:** `cron_mode: deny` **אינו** הופך צ׳ק־אין
+  לבלתי־אפשרי — הוא רק מבטיח שצ׳ק־אין חוקר ומנסח, ולעולם אינו מבצע פעולה הרסנית ללא
+  אדם נוכח. לכן אנו שומרים `deny` ולא מרפים אותו.
+
+הערת גרסה כנה: עץ המקור שנבדק ב־`C:\projects\hermes-agent` מדווח
+`__version__ = "0.17.0"` (snapshot פיתוח, ללא tags), בעוד ההתקנה החיה של המוצר היא
+`0.19.1`. החוזים שעליהם נשענת שכבת השותף — `/api/cron/jobs` (ב־`hermes_cli/
+web_server.py`, `CronJobCreate`/pause/resume/PUT), סמנטיקת `cron_mode`, ואופי
+ה־write-only של `HERMES_WRITE_SAFE_ROOT` — זהים בשני העצים ומאומתים חיים מול
+`0.19.1` דרך ה־probes הקיימים.
+
+הבחנת גרסה קריטית ל־Desktop Plugin SDK: ה־checkout ה**ישן** ב־
+`C:\projects\hermes-agent` (`0.17.0`) **אינו** כולל `@hermes/plugin-sdk` או את
+ה־runtime disk-plugin loader — ולכן ביקורת מוקדמת שהסתמכה עליו הסיקה בטעות
+ש"אין SDK". זו הייתה טעות. ההתקנה/היעד האמיתי — Hermes `0.19.1` תחת
+`%LOCALAPPDATA%\hermes\hermes-agent` (upstream `NousResearch/hermes-agent`) —
+**כן** מספק את `@hermes/plugin-sdk` (`apps/desktop/src/sdk/index.ts` מייצא כל
+סמל שה־Plugin מייבא) ואת ה־runtime loader האמיתי
+(`apps/desktop/src/contrib/runtime-loader.ts`) שדלתו היא
+`<hermes home>/desktop-plugins/<name>/plugin.js` — בדיוק היכן ש־
+`BusinessInstall.ps1` מתקין. לכן ה־Desktop Plugin הוא **אמיתי**, וה־SDK **קיים**.
+`verify:plugin` מאמת זאת מול המקור המותקן, ולעולם אין לטעון "אין SDK".
+
+### צ׳ק־אין מתוזמן — משימת cron רשמית אחת, מסונכרנת אידמפוטנטית
+
+צ׳ק־אין הוא **אופציה בהצטרפות מפורשת** (checkbox + בורר תדירות). כשמפעילים אותו,
+שכבת השותף יוצרת ומסנכרנת **משימת cron רשמית אחת** מול אותו scheduler יחיד של
+Hermes (`/api/cron/jobs`). **אין scheduler מקביל ואין cache** — ההגדרות המקומיות
+שומרות רק את הכוונה (הצטרפות + תדירות); לוח הזמנים הסמכותי הוא המשימה הרשמית, נראית
+גם ב־Hermes המלא וגם ב־UI הפשוט.
+
+- **סמן בעלות יציב.** חוזה ה־REST `CronJobCreate` **אינו** מקבל שדה `origin`/מטא־דאטה
+  שרירותי (`web_server.py:8192`), ולכן מזהה הבעלות נטוע ב־**שם** המשימה כאסימון יציב
+  `[hermes-business-partner-checkin:brief:<תדירות>]`. סנכרון נוגע **אך ורק** במשימות
+  הנושאות את הסמן — משימות שהמשתמש יצר בעצמו לעולם אינן נוצרות־שוב, נערכות, מושהות או
+  נמחקות.
+- **אידמפוטנטי.** הסנכרון רץ ב־startup (`main.cjs`) ובכל שינוי הגדרות
+  (`applyPartnerMode`): הצטרפות → מוודא בדיוק משימה מסומנת אחת (יוצר אם חסרה, מחדש אם
+  מושהית, מעדכן אם ה־cadence/שם/prompt סטו, ומכנס כפילויות משלנו לאחת). הרצה חוזרת
+  מתכנסת ללא churn.
+- **סמנטיקת כיבוי מפורשת ושמרנית.** ביטול ההצטרפות **משהה** את המשימה (נשמרת, עדיין
+  נראית עם pill “מושהה”, מתחדשת בהפעלה חוזרת) — לעולם לא מוחקת, כדי לשמר את בחירת
+  המשתמש. משתמשים לעולם אינם מאבדים משימות משלהם.
+- **התוכן כן.** ה־prompt של הצ׳ק־אין מצהיר שהריצה לא־מלווה: Hermes חוסם פקודות
+  מסוכנות ו־`execute_code` תחת cron, ולכן הצ׳ק־אין רק חוקר, מנתח ומנסח תדריך קצר —
+  לעולם אינו שולח/מוציא כסף/מפרסם/מוחק/מבצע commit.
+- **תדירות ואזור זמן (מאומת מהמקור).** שבוע העבודה הישראלי הוא **ראשון–חמישי**, ולכן
+  `weekdays` = `0 8 * * 0-4` (croniter תקני: `0`=ראשון, כך ש־`0-4` הוא א׳–ה׳, **לא**
+  `1-5` שהוא ב׳–ו׳ המערבי). `weekly` יורה בראשון (`0`), `daily` בכל יום. Hermes מעריך
+  את היום/שעה ב־**אזור הזמן המוגדר**: `hermes_time.now()` פותר `HERMES_TIMEZONE` →
+  מפתח `timezone` ב־`config.yaml` → שעון המכונה (`cron/jobs.compute_next_run` מריץ את
+  croniter על שעון זה). חוזה ה־`CronJobCreate`/`Update` הרשמי **אינו** נושא שדה אזור־זמן
+  לכל משימה, ולכן איננו ממציאים כזה — בעל עסק ישראלי יגדיר `timezone: Asia/Jerusalem`
+  (או `HERMES_TIMEZONE`) פעם אחת והצ׳ק־אין ירוץ על אותו שעון קיר.
+- **כיבוי אמין (ללא הצלחה מדומה).** אם סנכרון הכיבוי (pause) נכשל, ה־API **אינו**
+  מדווח הצלחה: `applyPartnerMode` מחזיר `checkin.error`, השכבה הקדמית זורקת שגיאה
+  גלויה, ו־`getPartnerState.checkinMismatch` ממשיך להציג את הפער (משימה עדיין פעילה
+  למרות כיבוי) עד שסנכרון ה־startup האידמפוטנטי מכנס אותה. הכוונה נשמרת, המשימות של
+  המשתמש לעולם אינן נוגעות, וה־store הרשמי היחיד נשאר מקור־יחיד.
+
+מודולים: `electron/partner-checkins.cjs` (לוגיקת סנכרון טהורה + סמן),
+`electron/partner-cron.cjs` (לקוח REST דק ל־`/api/cron/jobs`). ה־RPC `cron.manage`
+נשאר פעיל־בלבד, ולכן משימה מושהית נעלמת ממנו אך נראית דרך ה־REST הכולל־paused ועל
+הדיסק — בדיוק מה שמוכיח ה־probe החי `provePartnerCheckinReconcile`.
+
 ### הזרקת Runtime והתמדה
 
 הזרקת ה־env היחידה של ארגז החול היא `HERMES_WRITE_SAFE_ROOT`, שנבנית ב־
 `electron/runtime.cjs` בזמן `spawn` מתוך ההגדרות העמידות. שינוי שמזיז את הערך
 הזה מפעיל restart ממוקד של ה־Runtime המנוהל; שינויים שאינם משנים אותו לא.
 ההגדרות נשמרות ב־`<hermesHome>/business/partner-settings.json` (מצב, רמת ארגז חול,
-רשת, צ׳ק־אין, תיקיות, וגיבוי ה־personality).
+רשת, צ׳ק־אין, תיקיות, ו־`configBackup`).
+
+**גיבוי/שחזור עמיד ו־transaction-safe (`electron/partner-config.cjs`).** מצב שותף
+מחזיק **רשימה מפורשת אחת** של שדות ה־config שהוא מחזיק ומשנה (`OWNED_FIELDS`):
+`display.personality`, `approvals.mode`, `approvals.cron_mode`,
+`delegation.subagent_auto_approve`, `terminal.backend` וארבעת שדות
+`terminal.docker_*` (נטועים תחת `terminal` כי שם Hermes קורא אותם —
+`config_defaults`/`TERMINAL_DOCKER_VOLUMES`). דבר מחוץ לרשימה אינו נקרא, נכתב או
+משוחזר. במעבר normal→partner נלכד **פעם אחת** גיבוי גרסאי שרושם **נוכחות וגם ערך**
+של כל שדה; במעבר partner→normal השדות משוחזרים במדויק (present → הערך שנלכד; absent
+→ ברירת המחדל התיעודית של Hermes, כי deep-merge אינו יכול למחוק מפתח). כל שלב שנכשל
+בהחלה מגלגל אחורה את השלבים שכבר הוחלו (שחזור ה־snapshot שנלכד לפני הכתיבה הראשונה),
+ולכן לעולם אין מצב חצי־מוחל בקונפיג או בדיסק. אין מנוע config מתחרה — זהו המקום היחיד.
 
 WhatsApp נשאר כפוף למדיניות read-only/selected הקיימת; מצב שותף אינו מרפה אף
 guard קיים ואינו טוען שמשלוח דרך connector מאובטח אם אינו.
@@ -839,10 +1004,14 @@ guard קיים ואינו טוען שמשלוח דרך connector מאובטח א
 ### קבצים עיקריים
 
 - `electron/hermes-config.cjs` — עטיפות REST מאומתות (deepMerge/get/put/backends/docker).
-- `electron/partner-settings.cjs` — התמדה מקומית + גזירת `HERMES_WRITE_SAFE_ROOT`.
-- `electron/partner-mode.cjs` — הפעלה/כיבוי Personality (idempotent).
-- `electron/sandbox-config.cjs` — חישוב תוכנית ארגז חול + החלה fail-closed.
-- `electron/business-partner.cjs` — Orchestrator שה־IPC מפעיל.
+- `electron/partner-settings.cjs` — התמדה מקומית + גזירת `HERMES_WRITE_SAFE_ROOT` (כשל־סגור).
+- `electron/sandbox-roots.cjs` — אימות שורשים טהור (מוחלט/ללא `..`/לא שורש מערכת/קיים) + sentinel דחיית־כל.
+- `electron/partner-mode.cjs` — `applyPersona`: התקנה+בחירה של ה־Personality בלבד (הגיבוי/שחזור עברו ל־partner-config).
+- `electron/partner-config.cjs` — גיבוי/שחזור עמיד ו־transaction-safe של שדות ה־config שהפיצ׳ר מחזיק (OWNED_FIELDS).
+- `electron/sandbox-config.cjs` — חישוב תוכנית ארגז חול + `planSandbox` (כשל־סגור לפני כתיבה) + `applyResolvedPlan`.
+- `electron/partner-checkins.cjs` — סנכרון צ׳ק־אין אידמפוטנטי + סמן בעלות + קריאת מצב חי.
+- `electron/partner-cron.cjs` — לקוח REST דק ל־`/api/cron/jobs` (list/create/update/pause/resume/remove).
+- `electron/business-partner.cjs` — Orchestrator שה־IPC מפעיל (כולל סנכרון צ׳ק־אין).
 - `electron/partner-skill-install.cjs` — התקנת ה־Skill המותקן.
 - `src/components/screens/support/SupportPartnerPanel.tsx` + `PartnerStatusRows.tsx`,
   `src/components/PartnerModeSelector.tsx`, `src/hooks/usePartnerMode.ts`,
@@ -851,7 +1020,20 @@ guard קיים ואינו טוען שמשלוח דרך connector מאובטח א
 ### בדיקות
 
 - Unit/contract: `electron/hermes-config.test.ts`, `partner-settings.test.ts`,
-  `sandbox-config.test.ts`, `partner-mode.test.ts`, `business-partner.test.ts`.
+  `sandbox-roots.test.ts`, `sandbox-config.test.ts`, `partner-checkins.test.ts`,
+  `partner-mode.test.ts`, `partner-config.test.ts`, `business-partner.test.ts`.
+  מכסים: אימות שורשים כולל נתיבי עברית+רווחים, שורש לא־מוחלט/`..`/שורש־מערכת/חסר,
+  **כשל־סגור מלא ל־sentinel דחיית־כל כשאין נתיב כתיבה תקין (אין תיקיות / רק־קריאה /
+  לא־תקין)**, גיבוי/שחזור מדויק כולל שדות חסרים, **גלגול אחורה בכל שלב שנכשל** (persona
+  ו־backend), **cadence ראשון–חמישי (`0-4`)**, יצירת/עדכון/השהיית/הסרת/התנגשות־בעלות
+  של צ׳ק־אין, אידמפוטנטיות, **כיבוי שנכשל אינו מתחזה להצלחה (`checkin.error` +
+  `checkinMismatch`)**, restart רק כשה־safe-root משתנה, וסמנטיקת אישורים. כל בדיקה רצה
+  תחת `HERMES_HOME` מבודד זמני ואינה נוגעת בפרופיל החי.
+- E2E חי ומבודד: `provePartnerCheckinReconcile` (חלק מ־`test:e2e:hermes-shared-state`)
+  מריץ את **פונקציית הסנכרון האמיתית** מול Hermes חי ב־home מבודד — יוצר צ׳ק־אין
+  מסומן אחד (נראה ב־`cron.manage` ועל הדיסק), מוכיח אידמפוטנטיות, ואז מַשְׁהֶה בביטול
+  ההצטרפות (נראה מושהה ב־REST הכולל־paused, מושמט מה־active-only), ומנקה. ה־home
+  המבודד נמחק — הפרופיל החי לעולם אינו נוגע.
 - Probe מותקן בטוח: `scripts/e2e-installed-partner-ui.mjs`
   (`npm run test:e2e:installed-partner-ui`) — מפעיל שותף, מבקש Docker בזמן שהוא
   עצור, ומוודא fail-closed ל־guard. לעולם אינו מפעיל Docker ואינו משאיר container.

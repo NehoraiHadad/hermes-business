@@ -49,6 +49,15 @@ export function isJobPaused(job) {
   return Boolean(job && (job.state === 'paused' || job.enabled === false || job.paused === true))
 }
 
+// Identity for a scheduled-task row across BOTH doors this shell reads: the
+// companion backend projects `id`, the fallback active-only cron.manage RPC emits
+// `job_id` (== the same id), and both carry a human `name`. cron.manage's
+// resolve_job_ref accepts any of them as a mutation key, so prefer the stable id,
+// then job_id, then name — one place, no inline `id || job_id || name` scattered.
+export function cronJobId(job) {
+  return (job && (job.id || job.job_id || job.name)) || null
+}
+
 // Single source of truth for the scheduled-task list: normalize a cron.manage
 // result to { jobs, pausedListingSupported }. In Hermes 0.19.x the gateway RPC
 // door (cronjob action:'list' -> list_jobs(include_disabled=False)) is

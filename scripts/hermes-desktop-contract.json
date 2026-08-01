@@ -1,0 +1,73 @@
+{
+  "schemeVersion": 1,
+  "compatRange": ">=0.19.0 <0.20.0",
+  "generatedFrom": {
+    "mechanism": "installed-hermes-desktop-source",
+    "repository": "NousResearch/hermes-agent",
+    "hermesVersion": "0.19.1"
+  },
+  "discovery": {
+    "diskDoorSegment": "desktop-plugins",
+    "pluginFile": "plugin.js",
+    "restNamespacePrefix": "/api/plugins/",
+    "integrityAlgo": "sha256",
+    "importMapFactory": "sdkImportMap",
+    "loaderEntry": "loadRuntimePlugin",
+    "contextFactory": "createPluginContext"
+  },
+  "requirements": {
+    "sdkSymbols": [
+      "Badge",
+      "Button",
+      "Input",
+      "Loader",
+      "PALETTE_AREA",
+      "ROUTES_AREA",
+      "SIDEBAR_NAV_AREA",
+      "StatusDot",
+      "Textarea",
+      "evaluateRuntimeReadiness",
+      "host",
+      "useValue"
+    ],
+    "hostMembers": [
+      "logs",
+      "navigate",
+      "notify",
+      "notifyError",
+      "onEvent",
+      "request",
+      "restartGateway",
+      "state",
+      "status"
+    ],
+    "ctxMethods": [
+      "registerMany",
+      "rest",
+      "storage"
+    ],
+    "areas": [
+      "PALETTE_AREA",
+      "ROUTES_AREA",
+      "SIDEBAR_NAV_AREA"
+    ]
+  },
+  "sourceFiles": {
+    "apps/desktop/src/sdk/index.ts": {
+      "key": "sdkIndex",
+      "sha256": "4b2d29fd8fd209262f8da8fb63f57079b9577098022ce929cbbc5337c5e0b8e2"
+    },
+    "apps/desktop/src/sdk/runtime.ts": {
+      "key": "sdkRuntime",
+      "sha256": "6d38dfb12d567cf3f10474afdc9cd6798b2b05b4b23e7f2f4a383f8a265b0c07"
+    },
+    "apps/desktop/src/contrib/runtime-loader.ts": {
+      "key": "runtimeLoader",
+      "sha256": "3fd1024fc11883f10bada0dc5f55806f7b8a8233d91f68e45edfb893435651c4"
+    },
+    "apps/desktop/src/contrib/plugin.ts": {
+      "key": "pluginContract",
+      "sha256": "34c2713ab2bf0d5e77826a42cdd22da80fc5ff051d2d143c2a8ba22c1e26c2db"
+    }
+  }
+}

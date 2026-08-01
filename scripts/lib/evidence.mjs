@@ -13,6 +13,8 @@ import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { sanitize } from './e2e-harness.mjs'
+import { SUBJECT_SCHEME } from './subject-registry.mjs'
+import { subjectFingerprint } from './evidence-subject.mjs'
 
 export const SCHEMA_VERSION = 1
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
@@ -74,6 +76,11 @@ export function buildEnvelope(category, summary, { tool, status = 'passed', capt
     app_version: appVersion(),
     hermes_range: hermesRange(),
     ...gitInfo(),
+    // Versioned fingerprint of the exact repository files this category attests.
+    // Recomputed by the verifier so relevant drift invalidates a `passed`
+    // envelope regardless of git_state (see evidence-subject.mjs).
+    subject_scheme: SUBJECT_SCHEME,
+    subject_fingerprint: subjectFingerprint(ROOT, category).fingerprint,
     captured_at: capturedAt,
     tool: tool || null,
     redacted: true,

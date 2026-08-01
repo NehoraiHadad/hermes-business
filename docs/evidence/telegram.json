@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "category": "telegram",
-  "status": "passed",
+  "status": "blocked",
   "app_version": "0.3.3",
   "hermes_range": ">=0.19.0 <0.20.0",
   "git_head": "b9ee7dc9ca66d7521dc844dc5199306d58533b55",
@@ -10,38 +10,7 @@
   "tool": "manual-live-probe:hermes-send+getWebhookInfo+getMe",
   "redacted": true,
   "summary": {
-    "diagnosis": {
-      "connection_mode": "polling",
-      "webhook_present": false,
-      "sole_poller_owner": true,
-      "external_owner_conflict": false,
-      "bot_token_valid": true,
-      "is_bot": true,
-      "inbound_reached_hermes": true,
-      "prior_no_reply_cause": "sender_not_authorized_at_prior_send_time",
-      "allowlist_now_authorizes_sender": true,
-      "pending_update_count": 0
-    },
-    "fix": {
-      "method": "no_mutation_needed_running_gateway_loaded_current_allowlist",
-      "config_mutated": false,
-      "env_mutated": false,
-      "whatsapp_untouched": true,
-      "google_untouched": true,
-      "gateway_restarted": false,
-      "gateway_alive": true
-    },
-    "roundtrip": {
-      "outbound_delivered": true,
-      "target_home_channel": true,
-      "other_chats_touched": 0,
-      "official_mechanism": "hermes_send_cli",
-      "agent_originated_inbound": false,
-      "inbound_historically_processed": true,
-      "inbound_path_ready": true,
-      "identifies_as_connectivity_test": true
-    },
-    "runtime_state": "connected",
-    "gateway_running": true
+    "reason": "predates the versioned subject-fingerprint contract and cannot be honestly re-attested without recapture; the attested hermes-plugin subjects have drifted since the working-tree capture",
+    "recapture": "re-run the redacted live Telegram probe and hand-reduce a fresh telegram.json (see docs/evidence/README.md), then npm run verify:evidence"
   }
 }

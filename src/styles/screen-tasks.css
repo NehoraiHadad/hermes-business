@@ -13,6 +13,33 @@
   font-size: 10.5px;
 }
 
+.schedule-fields {
+  display: grid;
+  gap: 10px;
+}
+
+.schedule-days {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.day-chip {
+  min-width: 34px;
+  padding: 6px 8px;
+  border: 1px solid var(--border, #e2ddd4);
+  border-radius: 9px;
+  background: transparent;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.day-chip--on {
+  color: #fff;
+  background: var(--accent, #6b5b95);
+  border-color: var(--accent, #6b5b95);
+}
+
 .stat-card {
   display: grid;
   min-height: 93px;

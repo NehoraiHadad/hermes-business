@@ -119,8 +119,13 @@ describe('verifyEvidence', () => {
       return { relation: head === current ? 'equal' : 'code-descendant', changed: [] }
     }
     const classify = memoizeProvenance(counting)
+    // Hashing the shared-state subject walks the full declared source set. Build
+    // that invariant envelope once: this test measures provenance memoization,
+    // not five redundant filesystem walks under the parallel Windows suite.
+    const base = buildEnvelope('shared-state', { ok: true }, { tool: 't' })
     for (let i = 0; i < 5; i++) {
-      const env = buildEnvelope('shared-state', { ok: true, count: i }, { tool: 't' })
+      const env = structuredClone(base)
+      env.summary.count = i
       env.git_state = 'working-tree' // all share the current HEAD → one pair
       write(dir, `shared-state-${i}.json`, env)
     }

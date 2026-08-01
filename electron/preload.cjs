@@ -22,6 +22,14 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
   getWhatsappPolicy: () => ipcRenderer.invoke('hermes:whatsapp-policy:get'),
   setWhatsappPolicy: policy => ipcRenderer.invoke('hermes:whatsapp-policy:set', policy),
   ensureWhatsappPolicy: () => ipcRenderer.invoke('hermes:whatsapp-policy:ensure'),
+  getWhatsappGuard: () => ipcRenderer.invoke('hermes:whatsapp-policy:guard-status'),
+  // Observable guard-activation transaction phase (restarting/verifying/active/failed) so the
+  // UI can surface an in-progress gateway restart instead of a bare BLOCKED state.
+  getWhatsappGuardActivation: () => ipcRenderer.invoke('hermes:whatsapp-policy:activation-state'),
+  probeProvider: input => ipcRenderer.invoke('hermes:provider:probe', input),
+  probeCodexGrant: () => ipcRenderer.invoke('hermes:codex:probe'),
+  getProviderEvidence: () => ipcRenderer.invoke('hermes:provider:evidence:get'),
+  recordProviderEvidence: evidence => ipcRenderer.invoke('hermes:provider:evidence:set', evidence),
   getTelegramPolicy: () => ipcRenderer.invoke('hermes:telegram-policy:get'),
   setTelegramPolicy: policy => ipcRenderer.invoke('hermes:telegram-policy:set', policy),
   ensureTelegramPolicy: () => ipcRenderer.invoke('hermes:telegram-policy:ensure'),

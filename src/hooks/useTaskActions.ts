@@ -45,13 +45,11 @@ export function useTaskActions({
         if (updates.prompt !== task.prompt) changed.prompt = updates.prompt
         if (updates.schedule !== task.schedule) changed.schedule = updates.schedule
         if (Object.keys(changed).length === 0) return
-        try {
-          await hermesClient.editTask(task.id, changed)
-          setTasks(current => current.map(item => (item.id === task.id ? { ...item, ...changed } : item)))
-          notify(`המשימה "${updates.name}" עודכנה`)
-        } catch (error) {
-          notify(error instanceof Error ? error.message : 'עדכון המשימה נכשל')
-        }
+        // Let the save FAIL loudly: on error we throw so the dialog stays open with an
+        // inline message and never closes on an unsaved edit. Success updates state + toasts.
+        await hermesClient.editTask(task.id, changed)
+        setTasks(current => current.map(item => (item.id === task.id ? { ...item, ...changed } : item)))
+        notify(`המשימה "${updates.name}" עודכנה`)
       },
       onDelete: async task => {
         try {

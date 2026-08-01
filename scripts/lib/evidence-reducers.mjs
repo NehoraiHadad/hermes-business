@@ -1,6 +1,7 @@
 // Pure reducers that shrink an E2E's raw JSON output to a small, redacted evidence
 // summary: scalar booleans/counts/enums only — never paths, logs or content. Kept
 // separate from the capture-evidence.mjs CLI so the reduction is unit-testable.
+import { machineCaptureBinding } from './release/evidence-capture.mjs'
 const bool = v => (v == null ? null : Boolean(v))
 const sumCounts = obj => Object.values(obj || {}).reduce((a, b) => a + (Number(b) || 0), 0)
 const cronNameAdds = ar => Number(ar?.cron?.added) || 0 // cron adds are a protected mutation
@@ -41,7 +42,14 @@ export function reduceSharedState(r) {
 export function reduceIsolatedPackaged(r) {
   const iso = r.isolation || {}
   const td = r.teardown || {}
+  // HIGH 3: machine-capture the build binding from the exact staged artifact the
+  // isolated run launched (nonce echoed by the running app + measured hashes). Any
+  // gap leaves the binding fields absent so the release gate fails closed rather
+  // than accepting a hand-entered binding.
+  const cap = machineCaptureBinding(r)
   return {
+    ...(cap.binding || {}),
+    capture_ok: cap.ok,
     ran: true,
     artifact_attested: bool(r.artifact_attested),
     artifact_kind: r.artifact_kind ?? null,

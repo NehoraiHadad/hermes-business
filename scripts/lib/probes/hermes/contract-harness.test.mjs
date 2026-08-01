@@ -7,11 +7,15 @@ import {
   rewriteSpecifiers,
   unsupportedImports,
   verifyIntegrity
-} from './plugin-loader.mjs'
+} from './contract-harness.mjs'
 
 const MAP = { '@hermes/plugin-sdk': 'data:sdk', react: 'data:react' }
 
-describe('runtime-loader guards (faithful to apps/desktop/src/contrib/runtime-loader.ts)', () => {
+// Fast unit tests of the CONTRACT HARNESS (a reproduction of the documented
+// loader behaviour). They prove the harness models the contract; they are NOT
+// proof that real Hermes loads the plugin — verify:plugin (installed
+// runtime-loader.ts) and scripts/e2e-real-loader.mjs cover that.
+describe('contract-harness loader guards (models apps/desktop/src/contrib/runtime-loader.ts)', () => {
   it('rewrites only mapped import specifiers, never string literals', () => {
     const src = "import { host } from '@hermes/plugin-sdk'\nimport React from 'react'\nconst s = 'react'\n"
     const out = rewriteSpecifiers(src, MAP)

@@ -1,5 +1,6 @@
 import { CheckCircle2, ExternalLink, LoaderCircle, ShieldCheck } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import { gateExistingCodexGrant } from '../../../lib/codex-existing-grant'
 import { hermesClient } from '../../../lib/hermes-client'
 import type { OAuthStart } from '../../../lib/hermes/providers'
 
@@ -26,8 +27,30 @@ export function CodexOAuth({
     }
   }, [])
 
+  // Evidence boundary — when may an openai-codex connection mint FRESH 24h provider evidence?
+  //   • Device-code approval (begin → poll `approved`): the provider just ISSUED a token in
+  //     response to the user's approval. That handshake IS a live round-trip, so it proves
+  //     the grant and finish() may record evidence directly.
+  //   • Existing on-disk grant ("use this connection"): Hermes reports logged_in from a
+  //     REFRESH-FREE snapshot (creds exist), which is NOT proof the grant still works. So
+  //     useExisting() must run a real, non-destructive liveness probe (main-process
+  //     probeCodexGrant → official /usage endpoint) and only reach finish() when the probe
+  //     proves the grant is live. A revoked/expired/unreachable grant records NO evidence,
+  //     so onboarding stays incomplete and the failure is surfaced in the UI.
   const finish = async () => {
-    await hermesClient.activateProvider('openai-codex')
+    const { model } = await hermesClient.activateProvider('openai-codex')
+    if (window.hermesDesktop?.recordProviderEvidence) {
+      await window.hermesDesktop
+        .recordProviderEvidence({
+          provider: 'openai-codex',
+          model: model || null,
+          validatedAt: new Date().toISOString(),
+          ok: true,
+          reachable: true,
+          method: 'validate'
+        })
+        .catch(() => {})
+    }
     if (!cancelled.current) onConnected()
   }
 
@@ -74,6 +97,16 @@ export function CodexOAuth({
     setWorking(true)
     setError('')
     try {
+      // A stored grant is NOT proof it still works — probe it live before minting evidence.
+      // Fail closed if the probe capability is unavailable (never a blind pass).
+      const probe = window.hermesDesktop?.probeCodexGrant
+      const gate = gateExistingCodexGrant(probe ? await probe() : null)
+      if (!gate.allow) {
+        // Revoked / expired / unreachable grant → NO evidence, onboarding stays incomplete.
+        setError(gate.error)
+        setWorking(false)
+        return
+      }
       await finish()
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'לא ניתן להפעיל את החיבור')

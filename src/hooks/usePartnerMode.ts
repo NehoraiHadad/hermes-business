@@ -28,7 +28,11 @@ export function usePartnerMode() {
     }
   }, [refresh])
 
-  const apply = useCallback(async (patch: Partial<PartnerSettings>) => {
+  // The single UI boundary for partner mutations. It records any failure into `error`
+  // state and RESOLVES (never rejects) so a `void apply(...)` click handler can never
+  // leak an unhandled promise rejection. Returns the applied state, or null on failure
+  // (callers that need to sequence on success check the return value, never a throw).
+  const apply = useCallback(async (patch: Partial<PartnerSettings>): Promise<PartnerState | null> => {
     setBusy(true)
     setError('')
     try {
@@ -37,7 +41,7 @@ export function usePartnerMode() {
       return next
     } catch (caught) {
       if (mounted.current) setError(caught instanceof Error ? caught.message : 'החלת ההגדרות נכשלה')
-      throw caught
+      return null
     } finally {
       if (mounted.current) setBusy(false)
     }
@@ -45,7 +49,7 @@ export function usePartnerMode() {
 
   const addRoot = useCallback(async () => {
     if (!state) return
-    const path = await chooseFolder()
+    const path = await chooseFolder().catch(() => null)
     if (!path || state.roots.some(root => root.path === path)) return
     await apply({ roots: [...state.roots, { path, access: 'ro' }] })
   }, [state, apply])

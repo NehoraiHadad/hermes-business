@@ -61,6 +61,15 @@ function isJobPaused(job) {
   return Boolean(job && (job.state === 'paused' || job.enabled === false || job.paused === true))
 }
 
+// Identity for a scheduled-task row across BOTH doors this shell reads: the
+// companion backend projects `id`, the fallback active-only cron.manage RPC emits
+// `job_id` (== the same id), and both carry a human `name`. cron.manage's
+// resolve_job_ref accepts any of them as a mutation key, so prefer the stable id,
+// then job_id, then name — one place, no inline `id || job_id || name` scattered.
+function cronJobId(job) {
+  return (job && (job.id || job.job_id || job.name)) || null
+}
+
 // Single source of truth for the scheduled-task list: normalize a cron.manage
 // result to { jobs, pausedListingSupported }. In Hermes 0.19.x the gateway RPC
 // door (cronjob action:'list' -> list_jobs(include_disabled=False)) is
@@ -117,6 +126,39 @@ function useAsync(load, deps) {
   return state
 }
 
+// Pure, dependency-free normalization for the scheduled-task backend payload.
+// Kept out of cron-source.js (which imports the runtime-only @hermes/plugin-sdk)
+// so the degrade/fallback decision is unit-testable in a bare VM.
+
+// Extract the jobs array from a backend payload, or null when the payload is
+// malformed (not an object/array, or missing a `jobs` array). Returning null —
+// rather than [] — lets the caller DEGRADE to the active-only door instead of
+// silently claiming paused-inclusive support over an empty/garbage response.
+function extractJobs(payload) {
+  if (Array.isArray(payload)) return payload
+  if (payload && typeof payload === 'object' && Array.isArray(payload.jobs)) return payload.jobs
+  return null
+}
+
+// Decide whether a companion-backend payload can be TRUSTED as the paused-
+// inclusive source. Returns { jobs, pausedListingSupported: true } on a well-
+// formed, non-degraded body with a real jobs array (possibly empty), or null to
+// signal "degrade to the active-only cron.manage door". Degrades on:
+//   - null / non-object-or-array payload
+//   - an explicit degraded:true or paused_listing_supported:false body
+//   - a payload with no `jobs` array (missing/garbage flag or shape)
+function resolveBackendPayload(payload) {
+  const explicitlyDegraded =
+    payload == null ||
+    (typeof payload === 'object' &&
+      !Array.isArray(payload) &&
+      (payload.degraded === true || payload.paused_listing_supported === false));
+  if (explicitlyDegraded) return null
+  const jobs = extractJobs(payload);
+  if (!jobs) return null
+  return { jobs, pausedListingSupported: true }
+}
+
 // Single source of truth for the scheduled-task LIST, active + paused.
 //
 // The desktop PluginContext hands each plugin a `rest(path)` door that is
@@ -145,12 +187,6 @@ function hasPausedInclusiveDoor() {
   return typeof pluginRest === 'function'
 }
 
-function normalizeJobs(payload) {
-  if (Array.isArray(payload)) return payload
-  if (payload && Array.isArray(payload.jobs)) return payload.jobs
-  return []
-}
-
 // Load scheduled tasks with capability detection.
 //   Preferred: the companion backend door (paused-inclusive, authoritative).
 //   Fallback:  the active-only cron.manage gateway RPC — used when the backend
@@ -164,13 +200,13 @@ async function loadScheduledTasks() {
   if (pluginRest) {
     try {
       const payload = await pluginRest('/cron/jobs');
-      // The backend itself fails closed to a degraded body on a scheduler error
-      // (paused_listing_supported:false / degraded:true). Don't claim paused-
-      // inclusive support in that case — fall through to the active-only door so
-      // the UI degrades honestly instead of hiding its own fallback notice.
-      const degraded = payload && (payload.degraded === true || payload.paused_listing_supported === false);
-      if (!degraded) {
-        return { jobs: normalizeJobs(payload), pausedListingSupported: true, source: 'plugin-backend' }
+      // resolveBackendPayload returns null (degrade) on a null/malformed/non-array/
+      // missing-flag or explicitly-degraded body, so the UI falls back to the
+      // active-only door and shows its honest notice instead of hiding a fallback
+      // behind an empty list. Only a well-formed non-degraded body is trusted.
+      const resolved = resolveBackendPayload(payload);
+      if (resolved) {
+        return { ...resolved, source: 'plugin-backend' }
       }
     } catch {
       // fall through to the active-only gateway door
@@ -497,6 +533,10 @@ function buildVerifiedSnapshot(input = {}) {
     provider_ready: status.provider_ready,
     provider_state: status.provider_state,
     provider_label: status.provider_label,
+    // Honest configured-vs-usable, so the durable receipt records provider facts from
+    // authoritative state (a configured key is NOT proof of usability).
+    provider_configured: status.provider_configured === true,
+    provider_usable: status.provider_usable === true,
     provider_sources: status.provider_sources,
     runtime_running: Boolean(runtime && runtime.running),
     hermes_version: runtime && runtime.version ? runtime.version : null,
@@ -1108,7 +1148,7 @@ function Automations({ storage }) {
   }, []);
 
   async function toggle(job) {
-    const id = job.id || job.name;
+    const id = cronJobId(job);
     if (!id) return
     const paused = isJobPaused(job);
     try {
@@ -1148,7 +1188,7 @@ function Automations({ storage }) {
                   h(
                     'div',
                     {
-                      key: job.id || job.name || index,
+                      key: cronJobId(job) || index,
                       className:
                         'flex flex-wrap items-center justify-between gap-3 rounded-[4px] border border-(--ui-stroke-secondary) px-3 py-2.5'
                     },

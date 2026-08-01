@@ -14,7 +14,8 @@ export function AppModalLayer({
   setTasks,
   setSkills,
   setConnections,
-  setToast
+  setToast,
+  onRefresh
 }: {
   modal: ModalKind
   connection: Connection | null
@@ -24,8 +25,12 @@ export function AppModalLayer({
   setSkills: Dispatch<SetStateAction<Skill[]>>
   setConnections: Dispatch<SetStateAction<Connection[]>>
   setToast: (message: string) => void
+  onRefresh?: () => Promise<unknown>
 }) {
-  const providerConnected = () => {
+  const providerConnected = async () => {
+    // Refresh authoritative state AFTER auth so provider readiness / connections reflect
+    // the new credential — the onboarding completion gate reads the fresh value, not stale.
+    if (onRefresh) await onRefresh().catch(() => {})
     setToast('ספק ה־AI חובר בהצלחה')
     closeModal()
   }
@@ -45,10 +50,17 @@ export function AppModalLayer({
       {modal === 'provider' ? (
         <ProviderModal
           onClose={closeModal}
-          onOAuthConnected={providerConnected}
+          onOAuthConnected={() => void providerConnected()}
           onConnect={async (provider, key) => {
-            await hermesClient.connectProvider(provider, key)
-            providerConnected()
+            // connectProvider throws unless the credential was PROVEN live (never on a
+            // reachable:false / unprobed provider). It returns non-secret evidence scoped
+            // to the exact provider+model — persist it so the onboarding gate and restart
+            // resume can require FRESH evidence, then refresh authoritative app state.
+            const { validation } = await hermesClient.connectProvider(provider, key)
+            if (window.hermesDesktop?.recordProviderEvidence) {
+              await window.hermesDesktop.recordProviderEvidence(validation).catch(() => {})
+            }
+            await providerConnected()
           }}
         />
       ) : null}

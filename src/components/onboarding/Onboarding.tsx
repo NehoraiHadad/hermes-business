@@ -27,6 +27,7 @@ export function Onboarding({
   const [step, setStep] = useState(1)
   const [data, setData] = useState(EMPTY_ONBOARDING)
   const [saving, setSaving] = useState(false)
+  const [completeError, setCompleteError] = useState('')
   const total = 5
   const patch = (values: Partial<OnboardingData>) => setData(current => ({ ...current, ...values }))
 
@@ -87,6 +88,8 @@ export function Onboarding({
                   ? 'בודק את Hermes…'
                   : runtime.running
                     ? 'המשך'
+                    : runtime.error
+                      ? 'נסה להפעיל את Hermes שוב'
                     : 'התקן את Hermes והמשך'}
               {!installing && runtime?.running ? <ArrowLeft size={16} /> : null}
             </button>
@@ -100,8 +103,15 @@ export function Onboarding({
               disabled={saving || !runtime?.running}
               onClick={async () => {
                 setSaving(true)
+                setCompleteError('')
                 try {
                   await onComplete(data)
+                } catch (caught) {
+                  // Fail closed: durable completion was not confirmed, so stay on
+                  // onboarding and tell the user instead of silently "finishing".
+                  setCompleteError(
+                    caught instanceof Error ? caught.message : 'לא ניתן היה לשמור את ההיכרות ב־Hermes. נסה שוב.'
+                  )
                 } finally {
                   setSaving(false)
                 }
@@ -112,6 +122,7 @@ export function Onboarding({
             </button>
           )}
         </div>
+        {completeError ? <p className="form-error onboarding__error">{completeError}</p> : null}
       </section>
     </div>
   )

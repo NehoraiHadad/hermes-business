@@ -1,12 +1,20 @@
-// Faithful Node reproduction of the OFFICIAL Hermes Desktop runtime-plugin
-// loader pipeline (apps/desktop/src/contrib/runtime-loader.ts +
-// apps/desktop/src/sdk/runtime.ts), so this suite discovers the business-shell
-// plugin exactly as the shipped renderer does — integrity check -> bare-specifier
-// rewrite (@hermes/plugin-sdk / react -> live shim modules) -> module import ->
-// validate default HermesPlugin -> register(ctx). The ONLY substitution is the
-// module transport: the browser uses `URL.createObjectURL(Blob)`, unavailable in
-// Node, so the identical shim source is imported via `data:` URLs. The rewrite,
-// integrity, unsupported-import and validation logic are byte-for-byte the same.
+// UNIT CONTRACT HARNESS — NOT the real Hermes loader, and never proof of one.
+//
+// This is a hand-written Node reproduction of the DOCUMENTED behaviour of the
+// Hermes Desktop runtime-plugin pipeline (apps/desktop/src/contrib/
+// runtime-loader.ts + sdk/runtime.ts): integrity check -> bare-specifier rewrite
+// (@hermes/plugin-sdk / react -> live shim modules) -> module import -> validate
+// default HermesPlugin -> register(ctx). It exists ONLY to exercise our plugin's
+// contract in fast, offline unit tests. It is a separate implementation that can
+// drift from the real loader, so:
+//   * it must NEVER be cited as evidence that real Hermes loads the plugin —
+//     that is what verify:plugin (real installed source) and the opt-in
+//     real-loader E2E (scripts/e2e-real-loader.mjs) are for;
+//   * the module transport differs by necessity (the browser loader uses
+//     `URL.createObjectURL(Blob)`, unavailable in Node, so shim source is
+//     imported via `data:` URLs here).
+// The authoritative check that the real loader still behaves this way is
+// verify:plugin, which inspects the installed runtime-loader.ts directly.
 
 import { createHash } from 'node:crypto'
 
@@ -45,9 +53,10 @@ export async function verifyIntegrity(bytes, integrity) {
 
 const dataUrl = src => `data:text/javascript;base64,${Buffer.from(src, 'utf8').toString('base64')}`
 
-/** Build a shim module that re-exports a global namespace's live members — the
- *  exact strategy of sdk/runtime.ts (export names derived from the namespace so
- *  they can't drift), transported as a data: URL instead of a Blob URL. */
+/** Build a shim module that re-exports a global namespace's live members —
+ *  mirroring the documented strategy of sdk/runtime.ts (export names derived
+ *  from the namespace so they can't drift), transported as a data: URL instead
+ *  of a Blob URL. This is a harness copy, not the shipped code. */
 function shimUrl(globalKey, ns) {
   const names = Object.keys(ns).filter(name => name !== 'default' && /^[A-Za-z_$][\w$]*$/.test(name))
   const src =
@@ -68,9 +77,10 @@ export function buildImportMap(sdk, React) {
 }
 
 /**
- * Run the full official pipeline over one plugin source. Returns the validated
- * default HermesPlugin export (id + register), or throws exactly where the
- * renderer would (integrity / unsupported import / invalid export).
+ * Run the harness pipeline over one plugin source. Returns the validated default
+ * HermesPlugin export (id + register), or throws where the documented loader
+ * contract would (integrity / unsupported import / invalid export). This models
+ * the real loader for unit tests; it is NOT the real loader.
  */
 export async function loadRuntimePlugin({ source, bytes, integrity, sdk, React }) {
   if (integrity && !(await verifyIntegrity(bytes ?? Buffer.from(source, 'utf8'), integrity))) {
@@ -89,11 +99,11 @@ export async function loadRuntimePlugin({ source, bytes, integrity, sdk, React }
   return plugin
 }
 
-/** Faithful reproduction of the official `pluginPathSuffix`
+/** Harness copy of the documented `pluginPathSuffix` behaviour
  *  (apps/desktop/src/hermes.ts): normalize to a leading-slash suffix and reject
  *  any `..` segment so a relative path can't normalize out of the plugin's
  *  namespace into a core route or another plugin's API. The namespace IS the
- *  boundary. */
+ *  boundary. verify:plugin checks the real hermes.ts still enforces this. */
 export function pluginPathSuffix(path) {
   const raw = String(path == null ? '' : path)
   const suffix = raw.startsWith('/') ? raw : `/${raw}`
@@ -104,17 +114,18 @@ export function pluginPathSuffix(path) {
 }
 
 /**
- * A faithful PluginContext (contrib/plugin.ts createPluginContext): register /
- * registerMany scope the id to `<pluginId>:<localId>` and stamp
+ * A harness PluginContext modelled on contrib/plugin.ts createPluginContext:
+ * register / registerMany scope the id to `<pluginId>:<localId>` and stamp
  * `source: 'plugin:<pluginId>'`, and storage is namespaced per plugin. Captured
- * contributions ARE the inventory the settings "Plugins" page renders.
+ * contributions stand in for the inventory the settings "Plugins" page renders.
  *
- * `rest` mirrors the official `pluginRest`: it is namespace-locked BY
- * CONSTRUCTION to `/api/plugins/<pluginId>` and rejects `..`. A caller may
- * inject `restFetch({ path, method, body })` (e.g. the live isolated gateway's
- * REST client) to exercise the plugin's own backend door end-to-end; with no
- * fetcher there is no desktop bridge, matching the shipped renderer where
- * `window.hermesDesktop.api` is required.
+ * `rest` models the documented `pluginRest`: namespace-locked BY CONSTRUCTION to
+ * `/api/plugins/<pluginId>` and rejects `..`. A caller may inject
+ * `restFetch({ path, method, body })` (e.g. the live isolated gateway's REST
+ * client) to exercise the plugin's own backend door end-to-end; with no fetcher
+ * there is no desktop bridge, as in the real renderer where
+ * `window.hermesDesktop.api` is required. This is a test double, not the real
+ * PluginContext.
  */
 export function createCaptureContext(pluginId, { restFetch } = {}) {
   const contributions = []
