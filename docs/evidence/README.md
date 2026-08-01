@@ -66,6 +66,21 @@ node scripts/capture-evidence.mjs approval --isolated raw-iso.json
 npm run verify:evidence
 ```
 
+## Provenance rule (git_state × git_head)
+
 `git_state` is `working-tree` when captured before committing the changes under
-review; it flips to `committed` (and `git_head` must equal `HEAD`) once the
-evidence is captured from a clean tree.
+review; it flips to `committed` once the evidence is captured from a clean tree.
+Correspondence (`scripts/lib/git-provenance.mjs`) then classifies how the
+recorded `git_head` relates to the current `HEAD`:
+
+- **committed** stays valid only when `git_head` **is** `HEAD`, or when every
+  commit from `git_head` to `HEAD` touches **only** durable evidence envelopes
+  (`docs/evidence/*.json`). This resolves the refresh paradox: committing the
+  envelopes themselves advances `HEAD` yet keeps them valid, while **any**
+  code / config / app / Hermes-compat change since `git_head` invalidates them
+  and forces a re-capture. The allowlist is intentionally narrow — the
+  `forensics/` subdir and prose docs are excluded so anything outside the
+  machine-checked envelopes fails closed.
+- **working-tree** records an uncommitted snapshot, so `git_head` is only a
+  *base*: it must be `HEAD` or a real ancestor. A bogus, stale, or non-ancestor
+  head now fails closed (previously working-tree skipped the check entirely).

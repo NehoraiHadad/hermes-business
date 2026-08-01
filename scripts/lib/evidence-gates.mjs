@@ -4,6 +4,7 @@
 // independently testable, and so the CLI stays a thin orchestrator.
 
 import { SCHEMA_VERSION, redactDeep } from './evidence.mjs'
+import { classifyProvenance } from './git-provenance.mjs'
 
 export const CATEGORIES = new Set(['packaged-e2e', 'thin-installer', 'shared-state', 'approval', 'telegram'])
 export const STATUSES = new Set(['passed', 'blocked', 'skipped'])
@@ -75,15 +76,25 @@ export function checkRedaction(env, fail) {
   }
 }
 
-// Correspondence to the current tree: app/Hermes versions must match, and a
-// committed envelope's git_head must equal HEAD (working-tree envelopes are the
-// pre-commit case and are exempt).
-export function checkCorrespondence(env, current, fail) {
+// Which git_head→HEAD relations (see git-provenance.mjs) each state may hold.
+// committed: HEAD itself or an evidence-only refresh on top — any code/config
+// change since invalidates. working-tree: an uncommitted snapshot whose head is
+// just a base needing only to be real/reachable, closing the old bypass.
+const VALID_RELATIONS = {
+  committed: new Set(['equal', 'evidence-descendant']),
+  'working-tree': new Set(['equal', 'evidence-descendant', 'code-descendant'])
+}
+
+// Correspondence: app/Hermes versions must match, and git_head must relate to
+// HEAD in a way its git_state permits. The classifier is injectable for tests.
+export function checkCorrespondence(env, current, fail, classify = classifyProvenance) {
   if (env.app_version !== current.app) fail(`app_version ${env.app_version} != current ${current.app}`)
   if (env.hermes_range !== current.range) fail(`hermes_range ${env.hermes_range} != current ${current.range}`)
-  if (!['committed', 'working-tree'].includes(env.git_state)) fail(`invalid git_state "${env.git_state}"`)
-  if (env.git_state === 'committed' && env.git_head !== current.git_head) {
-    fail(`git_head ${env.git_head?.slice(0, 12)} != HEAD ${current.git_head.slice(0, 12)} (and not marked working-tree)`)
+  if (!['committed', 'working-tree'].includes(env.git_state)) return fail(`invalid git_state "${env.git_state}"`)
+  const { relation } = classify(env.git_head, current.git_head, { cwd: current.cwd })
+  if (!VALID_RELATIONS[env.git_state].has(relation)) {
+    fail(`git_head ${String(env.git_head).slice(0, 12)} vs HEAD ${current.git_head.slice(0, 12)}: ` +
+      `${relation} is not valid for a ${env.git_state} envelope`)
   }
 }
 

@@ -70,18 +70,25 @@ describe('verifyEvidence', () => {
     expect(result.errors.join()).toMatch(/email|redacted/)
   })
 
-  it('rejects a committed envelope whose git_head is not HEAD, but allows working-tree', () => {
+  it('rejects a bogus/unreachable git_head for BOTH committed and working-tree', () => {
+    // The all-zeros hash resolves to no object, so it is neither HEAD nor an
+    // ancestor. Fail closed regardless of state — working-tree is no longer an
+    // unlimited bypass for arbitrary heads.
     const dir = scratchDir()
-    const committed = buildEnvelope('shared-state', { ok: true }, { tool: 't' })
-    committed.git_state = 'committed'
-    committed.git_head = '0'.repeat(40)
-    write(dir, 'shared-state.json', committed)
-    expect(verifyEvidence({ dir }).ok).toBe(false)
+    for (const git_state of ['committed', 'working-tree']) {
+      const env = buildEnvelope('shared-state', { ok: true }, { tool: 't' })
+      env.git_state = git_state
+      env.git_head = '0'.repeat(40)
+      write(dir, 'shared-state.json', env)
+      expect(verifyEvidence({ dir }).ok).toBe(false)
+    }
+  })
 
-    const workingTree = buildEnvelope('shared-state', { ok: true }, { tool: 't' })
-    workingTree.git_state = 'working-tree'
-    workingTree.git_head = '0'.repeat(40)
-    write(dir, 'shared-state.json', workingTree)
+  it('accepts a working-tree envelope based on the current HEAD', () => {
+    const dir = scratchDir()
+    const env = buildEnvelope('shared-state', { ok: true }, { tool: 't' })
+    env.git_state = 'working-tree' // git_head is the current HEAD → equal → valid
+    write(dir, 'shared-state.json', env)
     expect(verifyEvidence({ dir }).ok).toBe(true)
   })
 })
