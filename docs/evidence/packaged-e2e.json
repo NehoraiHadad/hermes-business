@@ -1,22 +1,13 @@
 {
   "schema_version": 1,
   "category": "packaged-e2e",
-  "status": "passed",
+  "status": "blocked",
   "app_version": "0.3.3",
   "hermes_range": ">=0.19.0 <0.20.0",
-  "git_head": "5dd297e91a347088a7701ba8ceb34c06a702d25c",
+  "git_head": "2abe197fce2ba34fddd259bbe2391424f29bce7b",
   "git_state": "committed",
-  "captured_at": "2026-08-01T08:37:24.237Z",
-  "tool": "e2e-installed-isolated.mjs",
+  "captured_at": "2026-08-01T09:16:04.465Z",
+  "tool": "release evidence lifecycle",
   "redacted": true,
-  "summary": {
-    "ran": true, "artifact_attested": true, "artifact_kind": "win-unpacked-current",
-    "qa_namespace_applied": true, "isolated_runtime": true, "ws_on_isolated_port": true,
-    "isolated_session_count": 0, "isolated_home_populated": true,
-    "live_home_untouched": true, "live_config_unchanged": true,
-    "live_marker_stable_equal": true, "live_structural_additions": 0,
-    "live_content_rewrites": 0, "live_unsafe_entries": 0,
-    "live_volatile_runtime_changes": 0, "temp_home_removed": true,
-    "isolated_port_free": true, "no_residual": true
-  }
+  "summary": { "reason": "requires packaged recapture after onboarding changes" }
 }
