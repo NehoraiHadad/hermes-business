@@ -22,7 +22,7 @@ Copy-Item -LiteralPath (Join-Path $root 'installer\bootstrap-companion.ps1') `
 
 $policyPayload = Join-Path $payloadRoot 'whatsapp-policy'
 New-Item -ItemType Directory -Force -Path $policyPayload | Out-Null
-foreach ($policyFile in @('__init__.py', 'policy.py', 'ingest.py', 'contract.py', 'surface.py', 'guards.py', 'transport.py', 'registry.py', 'plugin.yaml')) {
+foreach ($policyFile in @('__init__.py', 'policy.py', 'ingest.py', 'contract.py', 'surface.py', 'guards.py', 'transport.py', 'registry.py', 'guard_core.py', 'surface_core.py', 'dispatch.py', 'telegram_policy.py', 'telegram_contract.py', 'telegram_surface.py', 'telegram_transport.py', 'telegram_registry.py', 'plugin.yaml')) {
   Copy-Item -LiteralPath (Join-Path $root "hermes-plugin\business-whatsapp-policy\$policyFile") `
     -Destination (Join-Path $policyPayload $policyFile)
 }

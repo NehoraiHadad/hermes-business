@@ -141,10 +141,13 @@ export function requirePassProof(env, fail) {
   }
 }
 
-// Run every gate against one envelope, funneling failures through `fail`.
-export function verifyEnvelope(env, current, fail) {
+// Run every gate against one envelope, funneling failures through `fail`. The
+// caller passes a shared, per-run `classify` (see memoizeProvenance) so a batch
+// of envelopes that share git_heads spends git subprocesses on the unique heads
+// only, not once per envelope. Defaults to the raw classifier for single use.
+export function verifyEnvelope(env, current, fail, classify = classifyProvenance) {
   checkSchema(env, fail)
   checkRedaction(env, fail)
-  checkCorrespondence(env, current, fail)
+  checkCorrespondence(env, current, fail, classify)
   if (env.status === 'passed') requirePassProof(env, fail)
 }

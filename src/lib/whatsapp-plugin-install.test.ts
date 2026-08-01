@@ -99,19 +99,27 @@ describe('installer packaging references the policy plugin', () => {
     const bootstrap = readFileSync(path.join(repoRoot, 'installer', 'bootstrap.ps1'), 'utf8')
     // Every Hermes CLI call (plugin enablement, gateway) must target the selected install.
     expect(bootstrap).toContain('$env:HERMES_HOME = $HermesHome')
+    // bootstrap.ps1 dot-sources its local install steps (Install-BusinessPayload)
+    // from installer/lib/BusinessInstall.ps1; the transactional guarantee below
+    // holds across the installer as a whole, so assert against that sourced module.
+    expect(bootstrap).toContain('BusinessInstall.ps1')
+    const payload = readFileSync(
+      path.join(repoRoot, 'installer', 'lib', 'BusinessInstall.ps1'),
+      'utf8'
+    )
     // The policy payload is installed and enabled inside ONE payload transaction so
     // that a failure to enable rolls the plugin + skill back (fail closed) — the
     // transactional refactor replaced the old Install-WhatsappPolicyPlugin helper.
-    expect(bootstrap).toContain('Invoke-PayloadTransaction')
-    expect(bootstrap).toContain("Join-Path $PayloadRoot 'whatsapp-policy'")
-    expect(bootstrap).toContain('plugins enable business-whatsapp-policy')
+    expect(payload).toContain('Invoke-PayloadTransaction')
+    expect(payload).toContain("Join-Path $PayloadRoot 'whatsapp-policy'")
+    expect(payload).toContain('plugins enable business-whatsapp-policy')
     // Enablement must abort (throw) on non-zero exit so the transaction rolls back
     // instead of leaving the safety plugin copied-but-disabled.
-    expect(bootstrap).toMatch(/plugins enable business-whatsapp-policy[\s\S]*?\$LASTEXITCODE -ne 0[\s\S]*?throw/)
+    expect(payload).toMatch(/plugins enable business-whatsapp-policy[\s\S]*?\$LASTEXITCODE -ne 0[\s\S]*?throw/)
     // The thin bootstrap must copy every runtime payload file (fail-closed
     // parity with the packaged companion).
     for (const file of paths.WHATSAPP_POLICY_PLUGIN_FILES) {
-      expect(bootstrap, `bootstrap.ps1 missing ${file}`).toContain(`'${file}'`)
+      expect(payload, `BusinessInstall.ps1 missing ${file}`).toContain(`'${file}'`)
     }
   })
 

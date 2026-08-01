@@ -41,6 +41,9 @@ declare global {
     getWhatsappPolicy: () => Promise<WhatsappPolicy>
     setWhatsappPolicy: (policy: WhatsappPolicy) => Promise<WhatsappPolicy>
     ensureWhatsappPolicy: () => Promise<{ ok: boolean; enabled: boolean }>
+    getTelegramPolicy: () => Promise<TelegramPolicy>
+    setTelegramPolicy: (policy: TelegramPolicy) => Promise<TelegramPolicy>
+    ensureTelegramPolicy: () => Promise<{ ok: boolean; enabled: boolean }>
     createDiagnostics: () => Promise<{ ok: boolean; canceled?: boolean; path?: string }>
     getRecentLogs: () => Promise<{ lines: string[] }>
     getVersions: () => Promise<Record<string, string>>
@@ -60,6 +63,12 @@ declare global {
   type WhatsappPolicy = {
     version: 1
     mode: 'read_only' | 'selected_chats'
+    reply_chats: string[]
+  }
+
+  type TelegramPolicy = {
+    version: 1
+    mode: 'full_access' | 'read_only' | 'selected_chats'
     reply_chats: string[]
   }
 

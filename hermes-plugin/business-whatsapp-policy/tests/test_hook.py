@@ -126,12 +126,14 @@ class HookBehaviour(TempHomeCase, unittest.TestCase):
         )
         self.assertEqual(result["action"], "skip")
 
-    def test_ignores_non_whatsapp(self):
+    def test_ignores_unrelated_platform(self):
+        # A platform this messaging policy does not manage (e.g. Discord) is left
+        # untouched — the hook returns None so Hermes dispatches it normally.
         self.patch_home()
         write_policy(self.home, "read_only", [])
         self.assertIsNone(
             pre_gateway_dispatch(
-                event=self.event("telegram", "42"),
+                event=self.event("discord", "42"),
                 session_store=Store(),
             )
         )

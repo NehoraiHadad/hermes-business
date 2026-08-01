@@ -76,3 +76,23 @@ export function classifyProvenance(head, current, { git = runGit, cwd } = {}) {
   const evidenceOnly = changed.length > 0 && changed.every(p => EVIDENCE_ARTIFACT_RE.test(p))
   return { relation: evidenceOnly ? 'evidence-descendant' : 'code-descendant', changed }
 }
+
+/** Wrap a classifier so each distinct (head, current) pair is classified once per
+ * run. The verifier checks many envelopes that share only a handful of git_heads
+ * against one current HEAD; without this, every envelope re-spawns the same
+ * merge-base + diff subprocesses (O(envelopes) git calls → O(unique heads)).
+ *
+ * classifyProvenance is a pure function of the repo's git state, which cannot
+ * change mid-run, so a fail-closed result ('divergent'/'unknown') is as cacheable
+ * as a passing one — fail-closed semantics are preserved, never weakened. The
+ * classifier stays injectable: pass a fake to make this deterministic in tests. */
+export function memoizeProvenance(classify = classifyProvenance) {
+  const cache = new Map()
+  return (head, current, opts) => {
+    // JSON-encode the pair so no two distinct (head, current) inputs — including
+    // '', 'unknown' or an odd separator char — can ever collide on one key.
+    const key = JSON.stringify([head, current])
+    if (!cache.has(key)) cache.set(key, classify(head, current, opts))
+    return cache.get(key)
+  }
+}

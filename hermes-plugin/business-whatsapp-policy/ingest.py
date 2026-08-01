@@ -6,6 +6,8 @@ import time
 from typing import Any
 
 SILENT_MARKER = "NO_REPLY"
+WHATSAPP_PLACEHOLDER = "[התקבלה הודעת WhatsApp ללא טקסט]"
+TELEGRAM_PLACEHOLDER = "[התקבלה הודעת Telegram ללא טקסט]"
 
 
 def _append(store: Any, session_id: str, role: str, content: str, **extra: Any) -> None:
@@ -15,7 +17,7 @@ def _append(store: Any, session_id: str, role: str, content: str, **extra: Any) 
     )
 
 
-def ingest_without_reply(event: Any, store: Any) -> bool:
+def ingest_without_reply(event: Any, store: Any, placeholder: str = WHATSAPP_PLACEHOLDER) -> bool:
     if store is None or event is None or getattr(event, "source", None) is None:
         return False
     entry = store.get_or_create_session(event.source)
@@ -33,7 +35,7 @@ def ingest_without_reply(event: Any, store: Any) -> bool:
 
     text = str(getattr(event, "text", "") or "").strip()
     if not text:
-        text = "[התקבלה הודעת WhatsApp ללא טקסט]"
+        text = placeholder
     extra = {"message_id": message_id} if message_id else {}
     _append(store, session_id, "user", text, **extra)
     _append(store, session_id, "assistant", SILENT_MARKER)

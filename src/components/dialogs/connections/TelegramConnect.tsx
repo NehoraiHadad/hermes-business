@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { hermesClient } from '../../../lib/hermes-client'
 import type { Connection } from '../../../types'
 import { Modal } from '../../ui/Modal'
+import { TelegramPolicyForm } from './TelegramPolicyForm'
 
 // Telegram uses the built-in Hermes gateway — token + user id, no MCP.
 export function TelegramConnect({
@@ -23,6 +24,9 @@ export function TelegramConnect({
     setSaving(true)
     setError('')
     try {
+      // Fail closed: refuse to connect unless the reply-policy plugin is active,
+      // so a live Telegram bot is never served without the read-only guard.
+      if (!hermesClient.demo) await window.hermesDesktop?.ensureTelegramPolicy()
       await hermesClient.connectTelegram(token, userId)
       onConnected(connection.id)
       onClose()
@@ -47,6 +51,7 @@ export function TelegramConnect({
           <p>הדבק כאן את ה־token שקיבלת ואת מזהה המשתמש שלך.</p>
         </div>
       </div>
+      <TelegramPolicyForm />
       <div className="modal-form">
         <label>
           <span>Bot token</span>

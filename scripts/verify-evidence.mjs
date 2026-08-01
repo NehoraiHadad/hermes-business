@@ -18,8 +18,12 @@ import { readdirSync, readFileSync, existsSync } from 'node:fs'
 import path from 'node:path'
 import { EVIDENCE_DIR, ROOT_DIR, appVersion, hermesRange, gitInfo } from './lib/evidence.mjs'
 import { verifyEnvelope } from './lib/evidence-gates.mjs'
+import { memoizeProvenance } from './lib/git-provenance.mjs'
 
-export function verifyEvidence({ dir = EVIDENCE_DIR } = {}) {
+// `classify` is injectable purely for tests (deterministic/counting fakes); the
+// default is a fresh per-run memoizer so a batch of envelopes classifies each
+// distinct git_head once instead of re-spawning merge-base + diff per envelope.
+export function verifyEvidence({ dir = EVIDENCE_DIR, classify = memoizeProvenance() } = {}) {
   const errors = []
   // cwd anchors the provenance git calls (merge-base/diff) at the repo root.
   const current = { app: appVersion(), range: hermesRange(), cwd: ROOT_DIR, ...gitInfo() }
@@ -40,7 +44,7 @@ export function verifyEvidence({ dir = EVIDENCE_DIR } = {}) {
     // (e.g. a git subprocess error) becomes a per-file error, never a crash that
     // would silently abort verification of the remaining envelopes.
     try {
-      verifyEnvelope(env, current, msg => errors.push(`${file}: ${msg}`))
+      verifyEnvelope(env, current, msg => errors.push(`${file}: ${msg}`), classify)
     } catch (e) {
       errors.push(`${file}: verification error (${e.message})`)
     }

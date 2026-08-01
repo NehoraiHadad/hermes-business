@@ -29,20 +29,11 @@ const {
   setMiniPinned,
   hideAssistant
 } = require('./windows.cjs')
-const { getWhatsappPolicy } = require('./whatsapp-policy.cjs')
-const { saveWhatsappPolicySynced } = require('./whatsapp-policy-sync.cjs')
+const { registerMessagingPolicyIpc } = require('./ipc-messaging.cjs')
 const { isAllowedExternalUrl } = require('./url-policy.cjs')
 const { applyOfficialHermesUpdate } = require('./hermes-update.cjs')
 const { getPartnerState, applyPartnerMode } = require('./business-partner.cjs')
 const { getCuratorInsights } = require('./curator-insights.cjs')
-
-function ensureWhatsappSafety() {
-  const result = installWhatsappPolicyPlugin()
-  if (!result.ok || !result.enabled) {
-    throw new Error('רכיב ההגנה של WhatsApp אינו פעיל. החיבור לא יופעל במצב לא בטוח.')
-  }
-  return result
-}
 
 // Single place that maps every renderer IPC channel to a module function. Keeps
 // the wiring auditable and the feature modules free of Electron IPC concerns.
@@ -72,12 +63,7 @@ function registerIpc() {
   ipcMain.handle('hermes:google:finish', (_event, code) => finishGoogleSetup(code))
   ipcMain.handle('hermes:google:status', getGoogleStatus)
   ipcMain.handle('hermes:gateway:ensure', () => ensureGatewayBackground())
-  ipcMain.handle('hermes:whatsapp-policy:get', getWhatsappPolicy)
-  ipcMain.handle('hermes:whatsapp-policy:set', async (_event, policy) => {
-    ensureWhatsappSafety()
-    return saveWhatsappPolicySynced(policy)
-  })
-  ipcMain.handle('hermes:whatsapp-policy:ensure', ensureWhatsappSafety)
+  registerMessagingPolicyIpc(ipcMain)
   ipcMain.handle('hermes:open-external', (_event, url) => {
     if (!isAllowedExternalUrl(url)) throw new Error('External URL is not allowed')
     return shell.openExternal(url)

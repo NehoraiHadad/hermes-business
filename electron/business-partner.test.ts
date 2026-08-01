@@ -128,10 +128,12 @@ describe('business-partner Skill is shipped by BOTH install paths', () => {
     expect(nsi).toContain('business-partner.SKILL.md')
 
     const bootstrap = fs.readFileSync(path.join(repoRoot, 'installer', 'bootstrap.ps1'), 'utf8')
-    // Installed as part of the transactional payload to the canonical skills path.
-    expect(bootstrap).toContain('business-partner.SKILL.md')
-    expect(bootstrap).toContain("skills\\business\\business-partner\\SKILL.md")
-    expect(bootstrap).toContain('Invoke-PayloadTransaction')
+    expect(bootstrap).toContain('BusinessInstall.ps1')
+    // Local install steps live in the dot-sourced BusinessInstall.ps1 module.
+    const payload = fs.readFileSync(path.join(repoRoot, 'installer', 'lib', 'BusinessInstall.ps1'), 'utf8')
+    expect(payload).toContain('business-partner.SKILL.md')
+    expect(payload).toContain("skills\\business\\business-partner\\SKILL.md")
+    expect(payload).toContain('Invoke-PayloadTransaction')
   })
 })
 

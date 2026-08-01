@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { classifyProvenance, EVIDENCE_ARTIFACT_RE } from './git-provenance.mjs'
+import { classifyProvenance, memoizeProvenance, EVIDENCE_ARTIFACT_RE } from './git-provenance.mjs'
 import { checkCorrespondence } from './evidence-gates.mjs'
 
 // A deterministic fake git: ancestry + changed paths come from fixture maps, so
@@ -56,6 +56,40 @@ describe('classifyProvenance', () => {
       throw new Error('unexpected git ' + args.join(' '))
     }
     expect(classifyProvenance('BASE', HEAD, { git }).relation).toBe('divergent')
+  })
+})
+
+describe('memoizeProvenance', () => {
+  it('classifies each distinct (head, current) pair exactly once', () => {
+    const calls = []
+    const counting = (head, current) => { calls.push([head, current]); return { relation: 'equal', changed: [] } }
+    const classify = memoizeProvenance(counting)
+    // Same pair five times → underlying classifier invoked once.
+    for (let i = 0; i < 5; i++) classify('BASE', 'HEAD1', { cwd: '.' })
+    expect(calls).toEqual([['BASE', 'HEAD1']])
+  })
+  it('does not collapse distinct pairs, and returns the cached result verbatim', () => {
+    let n = 0
+    const counting = (head) => ({ relation: 'equal', changed: [], serial: n++, head })
+    const classify = memoizeProvenance(counting)
+    const a1 = classify('A', 'HEAD1')
+    const b = classify('B', 'HEAD1')
+    const a2 = classify('A', 'HEAD1') // cached — no new call
+    expect(n).toBe(2) // only A and B were computed
+    expect(a1).toBe(a2) // same cached object reference
+    expect(b.head).toBe('B')
+  })
+  it('caches fail-closed relations too — a divergent verdict is not recomputed', () => {
+    let calls = 0
+    const counting = () => { calls++; return { relation: 'divergent', changed: [] } }
+    const classify = memoizeProvenance(counting)
+    expect(classify('BOGUS', 'HEAD1').relation).toBe('divergent')
+    expect(classify('BOGUS', 'HEAD1').relation).toBe('divergent')
+    expect(calls).toBe(1)
+  })
+  it('defaults to the real classifier when none is injected', () => {
+    // No fake: distinct-but-equal heads short-circuit before any git call.
+    expect(memoizeProvenance()('HEAD1', 'HEAD1').relation).toBe('equal')
   })
 })
 

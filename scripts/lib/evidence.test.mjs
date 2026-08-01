@@ -2,6 +2,7 @@ import os from 'node:os'
 import { afterAll, describe, expect, it } from 'vitest'
 import { buildEnvelope, redactDeep, redactPaths, appVersion, hermesRange } from './evidence.mjs'
 import { verifyEvidence } from '../verify-evidence.mjs'
+import { memoizeProvenance } from './git-provenance.mjs'
 import { scratchDir, cleanupScratch, writeEnvelope as write } from './evidence-fixtures.mjs'
 
 afterAll(cleanupScratch)
@@ -90,6 +91,28 @@ describe('verifyEvidence', () => {
     env.git_state = 'working-tree' // git_head is the current HEAD → equal → valid
     write(dir, 'shared-state.json', env)
     expect(verifyEvidence({ dir }).ok).toBe(true)
+  })
+
+  it('classifies a shared git_head once across many envelopes (no redundant git)', () => {
+    // Regression guard for the O(envelopes) → O(unique heads) provenance batching.
+    // Five envelopes share one git_head/current pair; the memoized classifier must
+    // invoke the underlying (git-spawning) classifier exactly once for the batch.
+    const dir = scratchDir()
+    let underlying = 0
+    const counting = (head, current, opts) => {
+      underlying++
+      return { relation: head === current ? 'equal' : 'code-descendant', changed: [] }
+    }
+    const classify = memoizeProvenance(counting)
+    for (let i = 0; i < 5; i++) {
+      const env = buildEnvelope('shared-state', { ok: true, count: i }, { tool: 't' })
+      env.git_state = 'working-tree' // all share the current HEAD → one pair
+      write(dir, `shared-state-${i}.json`, env)
+    }
+    const result = verifyEvidence({ dir, classify })
+    expect(result.ok).toBe(true)
+    expect(result.files.length).toBe(5)
+    expect(underlying).toBe(1) // classified once for all five, not five times
   })
 })
 

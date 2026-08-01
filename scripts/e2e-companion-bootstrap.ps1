@@ -60,7 +60,7 @@ try {
     -Destination (Join-Path $payloadRoot 'business-bootstrap.SKILL.md')
   $policyPayload = Join-Path $payloadRoot 'whatsapp-policy'
   New-Item -ItemType Directory -Force -Path $policyPayload | Out-Null
-  foreach ($name in @('__init__.py', 'policy.py', 'ingest.py', 'contract.py', 'surface.py', 'guards.py', 'transport.py', 'registry.py', 'plugin.yaml')) {
+  foreach ($name in @('__init__.py', 'policy.py', 'ingest.py', 'contract.py', 'surface.py', 'guards.py', 'transport.py', 'registry.py', 'guard_core.py', 'surface_core.py', 'dispatch.py', 'telegram_policy.py', 'telegram_contract.py', 'telegram_surface.py', 'telegram_transport.py', 'telegram_registry.py', 'plugin.yaml')) {
     Copy-Item -LiteralPath (Join-Path $root "hermes-plugin\business-whatsapp-policy\$name") `
       -Destination (Join-Path $policyPayload $name)
   }

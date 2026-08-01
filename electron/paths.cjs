@@ -90,6 +90,14 @@ const WHATSAPP_POLICY_PLUGIN_FILES = Object.freeze([
   'guards.py',
   'transport.py',
   'registry.py',
+  'guard_core.py',
+  'surface_core.py',
+  'dispatch.py',
+  'telegram_policy.py',
+  'telegram_contract.py',
+  'telegram_surface.py',
+  'telegram_transport.py',
+  'telegram_registry.py',
   'plugin.yaml'
 ])
 

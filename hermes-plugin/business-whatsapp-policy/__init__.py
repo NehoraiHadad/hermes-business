@@ -1,106 +1,144 @@
-"""Hermes hooks for passive WhatsApp intake and guarded outbound delivery."""
+"""Hermes hooks for the business *messaging* reply policy: passive intake and
+guarded outbound for both the WhatsApp and Telegram families.
+
+One fail-closed engine (:mod:`.guard_core` / :mod:`.surface_core` /
+:mod:`.dispatch`) serves every family. The ``pre_gateway_dispatch`` hook routes
+each inbound message to its family handler (read-only ingests and skips; only an
+explicitly authorized target is allowed), and :func:`register` installs the
+transport guards for whichever adapters the installed Hermes exposes.
+
+The package id stays ``business-whatsapp-policy`` for install/migration
+compatibility; it is now the general business messaging-policy engine.
+"""
 
 from __future__ import annotations
 
 import logging
 
-from .ingest import ingest_without_reply
-from .policy import PLATFORMS, can_reply, load_policy
+from .dispatch import platform_value, read_only_dispatch, reply_identifiers
+from .ingest import TELEGRAM_PLACEHOLDER, WHATSAPP_PLACEHOLDER
+from .policy import PLATFORMS as WHATSAPP_PLATFORMS
+from .policy import can_reply as wa_can_reply
+from .policy import load_policy as wa_load_policy
 from .registry import install_registry_guards
+from .telegram_policy import PLATFORMS as TELEGRAM_PLATFORMS
+from .telegram_policy import can_reply as tg_can_reply
+from .telegram_policy import load_policy as tg_load_policy
+from .telegram_registry import install_telegram_guards
 from .transport import AdapterContractError
 
 logger = logging.getLogger(__name__)
 
+_WHATSAPP_GROUP_TYPES = {"group"}
+# Telegram normalizes raw chat types to dm/group/forum/channel; everything that
+# is not a dm is authorized by the CHAT id, never an individual sender.
+_TELEGRAM_GROUP_TYPES = {"group", "forum", "channel"}
 
-def _platform_value(source) -> str:
-    value = getattr(source, "platform", "")
-    return str(getattr(value, "value", value) or "").lower()
+
+def _wa_is_group(source) -> bool:
+    chat_type = str(getattr(source, "chat_type", "") or "").lower()
+    chat_id = str(getattr(source, "chat_id", "") or "").lower()
+    return chat_type in _WHATSAPP_GROUP_TYPES or chat_id.endswith("@g.us")
 
 
-def pre_gateway_dispatch(*, event=None, session_store=None, **_kwargs):
-    source = getattr(event, "source", None)
-    if source is None or _platform_value(source) not in PLATFORMS:
-        return None
+def _tg_is_group(source) -> bool:
+    return str(getattr(source, "chat_type", "") or "").lower() in _TELEGRAM_GROUP_TYPES
 
+
+def _dispatch(event, session_store, *, load_policy, can_reply, is_group, reason, placeholder):
+    source = event.source
     try:
         from hermes_cli.config import get_hermes_home
 
         policy = load_policy(get_hermes_home())
-        chat_id = getattr(source, "chat_id", "")
-        chat_type = str(getattr(source, "chat_type", "") or "").lower()
-        is_group = chat_type == "group" or str(chat_id).lower().endswith("@g.us")
-        identifiers = (
-            (chat_id,)
-            if is_group
-            else (
-                chat_id,
-                getattr(source, "user_id", ""),
-                getattr(source, "user_id_alt", ""),
-            )
+        authorized = can_reply(policy, *reply_identifiers(source, is_group(source)))
+    except Exception:
+        # A policy-resolution failure must never open the connection.
+        logger.exception("Messaging policy evaluation failed; dispatch remains blocked")
+        authorized = False
+    return read_only_dispatch(
+        event, session_store, authorized=authorized, reason=reason, placeholder=placeholder
+    )
+
+
+def pre_gateway_dispatch(*, event=None, session_store=None, **_kwargs):
+    source = getattr(event, "source", None)
+    if source is None:
+        return None
+    platform = platform_value(source)
+    if platform in WHATSAPP_PLATFORMS:
+        return _dispatch(
+            event,
+            session_store,
+            load_policy=wa_load_policy,
+            can_reply=wa_can_reply,
+            is_group=_wa_is_group,
+            reason="business_whatsapp_read_only",
+            placeholder=WHATSAPP_PLACEHOLDER,
         )
-        if can_reply(policy, *identifiers):
-            return {"action": "allow"}
-    except Exception:
-        logger.exception("WhatsApp policy evaluation failed; dispatch remains blocked")
+    if platform in TELEGRAM_PLATFORMS:
+        return _dispatch(
+            event,
+            session_store,
+            load_policy=tg_load_policy,
+            can_reply=tg_can_reply,
+            is_group=_tg_is_group,
+            reason="business_telegram_read_only",
+            placeholder=TELEGRAM_PLACEHOLDER,
+        )
+    return None
 
-    # Persistence is best-effort, but silence is not: a storage failure must
-    # never turn a read-only message into a normal agent dispatch.
-    try:
-        ingest_without_reply(event, session_store)
-    except Exception:
-        logger.exception("Passive WhatsApp ingest failed; dispatch remains blocked")
-    return {"action": "skip", "reason": "business_whatsapp_read_only"}
 
-
-def _disable_whatsapp_platforms(reason: str) -> None:
+def _disable_platforms(names, reason: str) -> None:
     """Best-effort fail-closed fallback: if we could not install guards, unregister
-    the WhatsApp platforms so no *unguarded* adapter can connect. Prefer a
-    disabled WhatsApp connection over one that could send without policy."""
+    the platform(s) so no *unguarded* adapter can connect."""
     try:
         from gateway.platform_registry import platform_registry
     except Exception:
         # No registry to disable against (e.g. CLI-only context). The
         # pre_gateway_dispatch hook remains the enforcement point.
         return
-    for name in ("whatsapp", "whatsapp_cloud"):
+    for name in names:
         try:
             if platform_registry.unregister(name):
                 logger.error(
-                    "business-whatsapp-policy: disabled platform %s (%s).",
-                    name,
-                    reason,
+                    "business messaging policy: disabled platform %s (%s).", name, reason
                 )
         except Exception:  # pragma: no cover - defensive
-            logger.exception("Failed to disable WhatsApp platform %s", name)
+            logger.exception("Failed to disable platform %s", name)
+
+
+def _install_guards(label, installer, home_getter, disable_names) -> None:
+    try:
+        installer(home_getter)
+    except AdapterContractError as exc:
+        logger.error(
+            "business messaging policy: %s safety contract failed (%s); "
+            "disabling the connection.",
+            label,
+            exc,
+        )
+        _disable_platforms(disable_names, "safety contract failed")
+    except Exception as exc:  # pragma: no cover - depends on gateway internals
+        logger.error(
+            "business messaging policy: %s transport guards not installed (%s); "
+            "disabling the connection as a fail-closed fallback.",
+            label,
+            exc,
+        )
+        _disable_platforms(disable_names, "guard install failed")
 
 
 def register(ctx) -> None:
     from hermes_cli.config import get_hermes_home
 
-    # Register the fail-closed dispatch hook FIRST. It is the primary
-    # enforcement point: if it is not registered, WhatsApp messages would
-    # dispatch normally and the agent could reply. The transport guards are
-    # defense-in-depth for standalone/scheduled and interactive-tap sends.
+    # The fail-closed dispatch hook is the PRIMARY enforcement point for both
+    # families: without it, messages would dispatch normally and the agent could
+    # reply. The transport guards are defense-in-depth for standalone/scheduled
+    # and interactive-tap sends. Each family disables independently so a drift in
+    # one never silently disarms the other.
     ctx.register_hook("pre_gateway_dispatch", pre_gateway_dispatch)
-    try:
-        install_registry_guards(get_hermes_home)
-    except AdapterContractError as exc:
-        # The registry/adapter surface no longer matches what we verified. Do
-        # NOT log-and-continue: disable the WhatsApp connection so nothing sends
-        # unguarded. The hook still blocks the dispatch path either way.
-        logger.error(
-            "business-whatsapp-policy: WhatsApp safety contract failed (%s); "
-            "disabling the WhatsApp connection.",
-            exc,
-        )
-        _disable_whatsapp_platforms("safety contract failed")
-    except Exception as exc:  # pragma: no cover - depends on gateway internals
-        # An unexpected error installing guards leaves standalone/interactive
-        # outbound paths unverified. A safety plugin fails closed: disable the
-        # platforms rather than serve them unguarded.
-        logger.error(
-            "business-whatsapp-policy: transport guards not installed (%s); "
-            "disabling the WhatsApp connection as a fail-closed fallback.",
-            exc,
-        )
-        _disable_whatsapp_platforms("guard install failed")
+    _install_guards(
+        "WhatsApp", install_registry_guards, get_hermes_home, ("whatsapp", "whatsapp_cloud")
+    )
+    _install_guards("Telegram", install_telegram_guards, get_hermes_home, ("telegram",))

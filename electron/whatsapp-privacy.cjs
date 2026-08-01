@@ -21,7 +21,8 @@ const { hermesHome } = require('./paths.cjs')
 // ``diagnosticsExclusions()`` documents that contract for any future collector.
 
 const WHATSAPP_PRIVATE_RELATIVE_FILES = Object.freeze([
-  path.join('business', 'whatsapp-policy.json')
+  path.join('business', 'whatsapp-policy.json'),
+  path.join('business', 'telegram-policy.json')
 ])
 
 function isWin() {
