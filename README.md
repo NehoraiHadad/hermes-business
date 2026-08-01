@@ -15,15 +15,18 @@ MVP/Alpha מקומי ל־Windows (מוכן לפיילוט, אך עדיין לא 
 ## מה עובד
 
 - זיהוי או התקנת Hermes תואם ללא Terminal.
-- Provider דרך מנגנון ההגדרה של Hermes; OpenAI Codex OAuth נבדק בפועל.
+- Provider דרך מנגנון ההגדרה של Hermes. בדיקה אוטומטית מאמתת שמצב ה־OAuth הקיים
+  של OpenAI Codex תואם ל־UI; הפעלת provider ו־inference חיים נצפו ידנית על מחשב
+  הבדיקה ואינם משוחזרים בבדיקה אוטומטית עצמאית.
 - onboarding שמתחיל Skill אמיתי בשם `business-bootstrap`.
 - הסוכן שואל שאלות דרך `clarify.request`; התשובה חוזרת ב־`clarify.respond`.
 - רשימת Sessions משותפת וחיפוש בסיסי.
 - Streaming, Stop, קבצים מצורפים ופעילות כלי בשפה פשוטה.
 - אישורים דרך `approval.request` / `approval.respond`, כולל דחייה שנבדקה בפועל.
 - Google Workspace דרך ה־Skill הרשמי של Hermes.
-- Telegram דרך Messaging API הרשמי של Hermes; בוט ייעודי עבר הודעה אמיתית
-  הלוך־ושוב והשיחה הופיעה גם ב־Hermes Desktop המלא.
+- Telegram דרך Messaging API הרשמי של Hermes. הבדיקה האוטומטית מאמתת את כרטיס
+  ה־Telegram מול `/api/messaging/platforms` ואת דיאלוג החיבור; round-trip חי של
+  הודעה נצפה ידנית פעם אחת על מחשב הבדיקה ואינו משוחזר בבדיקה אוטומטית עצמאית.
 - WhatsApp בשני המסלולים בשקיפות: Meta Cloud הרשמי כברירת המחדל העסקית,
   ו־WhatsApp Web/QR של Hermes כחלופה לא־רשמית.
 - מדיניות מענה fail-closed ל־WhatsApp (קריאה־בלבד או צ׳אטים נבחרים), נאכפת ב־plugin
@@ -44,9 +47,9 @@ MVP/Alpha מקומי ל־Windows (מוכן לפיילוט, אך עדיין לא 
 release/העוזר לעסק Setup 0.3.3.exe
 ```
 
-- גודל: `102,669,826` bytes.
-- SHA-256:
-  `5529B70A90CCF71F98A9E6B62A37ED8EEB766CC0EA3CE36A85118592569591B0`
+- גודל וה־SHA-256 של המתקין משתנים בכל build ואינם משוכפלים כאן כדי שלא יתיישנו.
+  מקור האמת הוא הקובץ הנוצר `release/SHA256SUMS.txt` (git-ignored). הרֵץ
+  `npm run checksums` כדי לחשב אותו מעץ ה־release הנוכחי.
 - מתקין per-user אחד הכולל את ה־Companion.
 - בהפעלה ראשונה מזהה Hermes, ובמידת הצורך מפעיל את ה־bootstrap הרשמי.
 - מתקין את ה־Plugin ואת `business-bootstrap`, ומפעיל Gateway ברקע.
@@ -145,15 +148,17 @@ electron/          runtime, IPC, חלונות, אבחון, Google ו־plugin ins
 נבדקו מול Hermes Agent `0.19.0`; resolver המתקין מצא גם release רשמי תואם
 `0.19.1` (`v2026.7.30`).
 
-- `63/63` בדיקות Vitest ו־`17/17` בדיקות plugin עברו.
+- בדיקות Vitest (‏51 קבצים, ‏257 עברו, ‏1 דילוג) ובדיקות מדיניות ה־WhatsApp
+  ב־Python (‏40) עברו.
 - TypeScript/Vite build, Plugin contract, bootstrap resolver ואימות Git blob של
   המתקין הרשמי עברו.
 - המתקין המלא והמתקין הזעיר הותקנו בשקט עם exit code `0`.
 - האפליקציה המותקנת עברה E2E מול Hermes חי ללא console/page errors.
 - מסך WhatsApp המותקן עבר E2E: ברירת מחדל read-only, מעבר לצ׳אטים נבחרים,
   סנכרון להגדרות Hermes, חזרה ל־read-only ויצירת QR אמיתי.
-- בוט Telegram ייעודי עבר הודעה אמיתית הלוך־ושוב דרך ה־Gateway; ה־session
-  המשותף נפתח גם ב־Hermes Desktop המלא.
+- כרטיס ה־Telegram אומת אוטומטית מול `/api/messaging/platforms` ודיאלוג החיבור
+  נפתח ונסגר; round-trip חי של הודעה דרך ה־Gateway נצפה ידנית ואינו חלק מבדיקה
+  אוטומטית עצמאית.
 - שאלה מובנית של הסוכן הוצגה ונענתה דרך RPC הרשמי.
 - `session.resume` החזיר את אותו transcript; `tool.start/tool.complete` התקבלו עם
   אותו tool id, ו־`session.interrupt` עצר תשובת Streaming פעילה.
@@ -169,11 +174,15 @@ electron/          runtime, IPC, חלונות, אבחון, Google ו־plugin ins
 - Google Workspace זמין, אך OAuth אינו מחובר במחשב הבדיקה. נדרש
   `client_secret.json` של Google Cloud והסכמה בדפדפן.
 - לא נשמרו credentials מומצאים ולא נעקף מסך הסכמה.
-- חיבור WhatsApp Web נסרק בפועל. הודעה נכנסת נשמרה ב־Session המשותף ונחסמה לפני
-  dispatch במצב read-only: ללא inference, ללא Tool Calls וללא outbound delivery.
-- עדכון Hermes אמיתי עבר דרך המעטפת מ־`0.19.0` ל־`0.19.1`: Hermes Desktop,
-  ה־gateway וה־runtime נסגרו באופן מבוקר, updater הרשמי רץ, Health Check עבר,
-  ו־70 Sessions, ‏64 Skills והמשימות נשמרו לפני ואחרי.
+- מדיניות ה־WhatsApp והonboarding מכוסות בבדיקות אוטומטיות (מדיניות read-only,
+  מעבר לצ׳אטים נבחרים, יצירת QR). intake חי של הודעה נכנסת דרך WhatsApp Web נצפה
+  ידנית פעם אחת: ההודעה נשמרה ב־Session ונחסמה לפני dispatch במצב read-only (ללא
+  inference, ללא Tool Calls וללא outbound delivery); זו תצפית ידנית, לא בדיקה
+  אוטומטית עצמאית.
+- מסלול העדכון מכוסה אוטומטית בבדיקת check-flow לא־הרסנית (`test:e2e:installed-update`)
+  ובבדיקות יחידה (`hermes-update-flow`, `hermes-compat`, `hermes-rollback`). עדכון
+  Hermes חי מ־`0.19.0` ל־`0.19.1` (סגירה מבוקרת, updater רשמי, Health Check, שמירת
+  Sessions/Skills/משימות) בוצע ידנית פעם אחת ואינו חלק מבדיקה אוטומטית בטוחה.
 - Meta Coexistence הוא המסלול הרשמי המתאים למספר שכבר פעיל ב־WhatsApp
   Business App, אך Hermes `0.19.x` עדיין אינו מממש Embedded Signup או את
   אירועי הסנכרון שלו. הוא אינו מוצג במוצר כאילו הוא זמין.

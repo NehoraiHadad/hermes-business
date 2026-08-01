@@ -13,10 +13,18 @@ import path from 'node:path'
 /**
  * Redact secrets from any string before it reaches stdout, stderr or a
  * collected log buffer. Covers query-string tokens/tickets/codes, HTTP
- * Authorization headers, JSON-ish secret fields and the well-known key shapes
- * (OpenAI `sk-`, Google `AIza`, Telegram bot tokens). Idempotent: running it
- * twice, or on already-clean text, yields the same string, so it is safe to
- * apply both at capture time and again on the final serialized payload.
+ * Authorization headers, JSON-ish secret fields, the well-known key shapes
+ * (OpenAI `sk-`, Google `AIza`, Telegram bot tokens) and email addresses.
+ * Idempotent: running it twice, or on already-clean text, yields the same
+ * string, so it is safe to apply both at capture time and again on the final
+ * serialized payload.
+ *
+ * Email handling preserves the domain (useful technical/routing data) while
+ * eliminating the user/customer identity in the local part:
+ * `jane.doe@shop.co.il` becomes `<redacted>@shop.co.il`. The placeholder ends
+ * in `>` so the local-part class never abuts the surviving `@`, keeping the
+ * pass idempotent. The canonical email pattern is mirrored in
+ * `electron/redact.cjs` for production diagnostics.
  */
 export function sanitize(value) {
   return String(value || '')
@@ -33,6 +41,7 @@ export function sanitize(value) {
       /\b(sk-[A-Za-z0-9_-]{12,}|AIza[A-Za-z0-9_-]{20,}|\d{7,}:[A-Za-z0-9_-]{20,})\b/g,
       '<redacted>'
     )
+    .replace(/[A-Za-z0-9._%+-]+@([A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,})/g, '<redacted>@$1')
 }
 
 /** Serialize a value to pretty JSON with every secret redacted. */

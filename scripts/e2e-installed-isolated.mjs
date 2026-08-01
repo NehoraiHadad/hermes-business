@@ -1,0 +1,142 @@
+// Packaged-companion ISOLATED E2E — thin orchestrator.
+//
+// Boots the freshly built companion against a throwaway HERMES_HOME on an
+// isolated loopback port (the QA side of the electron/qa-runtime.cjs contract),
+// proves the live Hermes profile is never touched, and — opt-in via
+// HERMES_BUSINESS_E2E_APPROVAL=1 — drives a REAL, denied approval end-to-end over
+// the official gateway RPC/event path. The harness owns the temp home (create →
+// own → delete) and emits one redactable JSON report on stdout. The attestation
+// gate, isolation case, approval case and teardown/forensics live in
+// scripts/lib/isolated-e2e/.
+
+import os from 'node:os'
+import path from 'node:path'
+import { safeJson } from './lib/e2e-harness.mjs'
+import { repoRoot } from './lib/build-attestation.mjs'
+import {
+  launchInstalledApp,
+  openFirstWindow,
+  tempUserDataDir,
+  waitForRuntimeRunning
+} from './lib/installed-app.mjs'
+import { verifyBoot } from './lib/probes/installed/boot.mjs'
+import {
+  chooseIsolatedPort,
+  createTempHermesHome,
+  isolatedLaunchEnv,
+  liveHermesHome,
+  removeTempHome
+} from './lib/isolated-runtime.mjs'
+import { hermesHomeMarker } from './lib/isolated-marker.mjs'
+import { resolveAttestedArtifact } from './lib/isolated-e2e/attestation-gate.mjs'
+import { runApprovalCase } from './lib/isolated-e2e/approval-case.mjs'
+import { assessAndGateIsolation, computeRunVerdict } from './lib/isolated-e2e/isolation-run.mjs'
+import { finalizeTeardown } from './lib/isolated-e2e/teardown.mjs'
+
+const runApproval = process.env.HERMES_BUSINESS_E2E_APPROVAL === '1'
+const liveHome = liveHermesHome()
+// Snapshot the live profile-defining marker BEFORE anything runs.
+const liveMarkerBefore = hermesHomeMarker(liveHome)
+
+const tempHome = createTempHermesHome()
+const isolatedPort = await chooseIsolatedPort()
+const probePath = path.join(os.tmpdir(), `hermes-iso-approval-probe-${process.pid}.txt`)
+
+const root = repoRoot()
+const report = {
+  ok: false,
+  mode: 'qa-isolated',
+  app_version_source: 'packaged',
+  artifact_attested: false,
+  artifact_kind: null,
+  qa_namespace_applied: false,
+  artifact: {},
+  isolation: {},
+  approval: runApproval ? { enabled: true } : { enabled: false },
+  teardown: {}
+}
+
+// ── ARTIFACT ATTESTATION GATE (fail BEFORE launch) ───────────────────────────
+let executablePath
+let appDirectory
+let expectedNonce = null
+try {
+  const gate = resolveAttestedArtifact({ root })
+  report.artifact = gate.artifact
+  if (!gate.ok) {
+    report.error = gate.error
+    report.teardown = { aborted_before_launch: true }
+    removeTempHome(tempHome)
+    console.log(safeJson(report))
+    process.exit(1)
+  }
+  report.artifact_attested = true
+  report.artifact_kind = gate.artifactKind
+  expectedNonce = gate.expectedNonce
+  executablePath = gate.executablePath
+  appDirectory = gate.appDirectory
+} catch (error) {
+  report.error = String(error?.message || error)
+  report.teardown = { aborted_before_launch: true }
+  removeTempHome(tempHome)
+  console.log(safeJson(report))
+  process.exit(1)
+}
+
+const { HERMES_HOME, ...cleanEnv } = process.env // never let a stray HERMES_HOME leak in
+const launchEnv = { ...cleanEnv, ...isolatedLaunchEnv({ home: tempHome, port: isolatedPort }) }
+
+let electronApp = null
+try {
+  electronApp = await launchInstalledApp({
+    executablePath,
+    appDirectory,
+    userDataDir: tempUserDataDir('hermes-iso-e2e'),
+    env: launchEnv
+  })
+  const { page } = await openFirstWindow(electronApp)
+  await verifyBoot({ page, consoleMessages: [], pageErrors: [], screenshotPath: path.join(os.tmpdir(), `hermes-iso-boot-${process.pid}.png`) })
+
+  const runtime = await waitForRuntimeRunning(page)
+  // Assess isolation and run both fail-fast gates (structural, then the tested
+  // four-invariant set) BEFORE any session/prompt/credential-seed/approval.
+  await assessAndGateIsolation({
+    page,
+    runtime,
+    isolatedPort,
+    tempHome,
+    expectedNonce,
+    liveMarkerBefore,
+    report
+  })
+
+  if (runApproval) {
+    report.approval = await runApprovalCase({ page, liveHome, tempHome, probePath })
+  }
+
+  report.ok = computeRunVerdict({ report, runApproval })
+} catch (error) {
+  report.error = String(error?.message || error)
+} finally {
+  try {
+    if (electronApp) await electronApp.close()
+  } catch {
+    /* ignore */
+  }
+  // Reap the port, delete the temp home, re-snapshot the live marker and derive
+  // the teardown verdict (mutates report.teardown + report.ok). If the live
+  // profile's defining state moved, a redacted forensic report is preserved.
+  await finalizeTeardown({
+    report,
+    tempHome,
+    isolatedPort,
+    liveHome,
+    liveMarkerBefore,
+    probePath,
+    forensicDir: path.join(root, 'docs', 'evidence', 'forensics'),
+    runApproval
+  })
+}
+
+console.log(safeJson(report))
+process.exit(report.ok ? 0 : 1)

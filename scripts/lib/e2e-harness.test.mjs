@@ -20,10 +20,19 @@ describe('sanitize', () => {
     expect(sanitize('{"api_key":"live_supersecretvalue"}')).toBe('{"api_key":"<redacted>"}')
   })
 
+  it('redacts email local parts while preserving the domain', () => {
+    expect(sanitize('owner jane.doe@shop.co.il replied')).toBe('owner <redacted>@shop.co.il replied')
+    expect(sanitize('{"contact":"a+b@sub.example.com"}')).toBe('{"contact":"<redacted>@sub.example.com"}')
+    // A second pass must not corrupt an already-redacted address.
+    expect(sanitize(sanitize('user@gmail.com'))).toBe('<redacted>@gmail.com')
+  })
+
   it('is idempotent and leaves clean text untouched', () => {
     const clean = 'POC E2E — shared session 2026-07-31'
     expect(sanitize(clean)).toBe(clean)
     expect(sanitize(sanitize('?token=abcd1234EFGH'))).toBe('?token=<redacted>')
+    // ws URLs and versions have no real email — must survive untouched.
+    expect(sanitize('ws://127.0.0.1:9119/api/ws build 2026.7.30')).toBe('ws://127.0.0.1:9119/api/ws build 2026.7.30')
   })
 
   it('does not touch benign markers, timestamps or geometry in report JSON', () => {

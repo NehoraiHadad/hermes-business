@@ -204,8 +204,12 @@ Hermes טוען Skills מאותו Hermes Home. ה־POC הוכיח:
 ## Providers וחיבורים
 
 Provider setup הרשמי כולל OpenAI, Anthropic, Gemini/Google, OpenRouter
-וספקים נוספים לפי ה־registry של גרסת Hermes. OpenAI Codex OAuth נבדק עם
-inference אמיתי.
+וספקים נוספים לפי ה־registry של גרסת Hermes. הבדיקה האוטומטית של אשף ההגדרה
+(`scripts/lib/probes/installed/setup-wizard.mjs`) קוראת את מצב ה־OAuth הקיים של
+OpenAI Codex (`/api/providers/oauth`) ומאמתת שה־UI תואם ל־`logged_in` — היא אינה
+מבצעת הפעלה. הפעלת provider ו־inference/Streaming חיים עם OpenAI Codex נצפו ידנית
+על מחשב הבדיקה, ואינם משוחזרים על ידי בדיקה אוטומטית עצמאית (ה־E2E החי של
+`e2e-hermes` רץ provider-free כברירת מחדל).
 
 ### Google Workspace
 
@@ -225,13 +229,15 @@ authenticated=false
 Telegram הוא Messaging Platform רשמי. ה־POC משתמש ב־API הרשמי להגדרה,
 restart ו־test, ומסמן “מחובר” רק לאחר תשובת test תקינה.
 
-במחשב הבדיקה נוצר וחובר בוט ייעודי `@HermesBizPOC_9834209_bot`. לאחר עצירה
-מכוונת של ה־Gateway, פעולת החיבור מהמעטפת הפעילה אותו מחדש, שמרה את ההגדרה
-והעבירה test תקין. הודעה אמיתית מהמשתמש קיבלה את התשובה המדויקת
-`TELEGRAM_E2E_OK_1785502052728`; `/sethome` הגדיר את הערוץ כיעד ברירת המחדל.
-ה־session `20260731_154757_b501cb5b` הופיע דרך `hermes sessions list --source
-telegram` ונפתח עם אותו תוכן גם ב־Hermes Desktop המלא. ה־Bot Token אינו מתועד
-ואינו נכלל בחבילת האבחון.
+הכיסוי האוטומטי ל־Telegram (`scripts/lib/probes/installed/connections.mjs`)
+מאמת את כרטיס ה־Telegram מול `/api/messaging/platforms` ופותח/סוגר את דיאלוג
+החיבור — הוא אינו שולח הודעה.
+
+בנוסף, בתצפית ידנית חד־פעמית על מחשב הבדיקה, נוצר וחובר בוט ייעודי, ולאחר עצירה
+מכוונת של ה־Gateway פעולת החיבור מהמעטפת הפעילה אותו מחדש, שמרה את ההגדרה והעבירה
+test תקין; הודעה מהמשתמש קיבלה תשובה מדויקת, `/sethome` הגדיר את הערוץ כיעד ברירת
+המחדל, וה־session הופיע גם ב־Hermes Desktop המלא. זו תצפית ידנית ואינה משוחזרת על
+ידי בדיקה אוטומטית עצמאית. ה־Bot Token אינו מתועד ואינו נכלל בחבילת האבחון.
 
 ### WhatsApp
 
@@ -372,9 +378,11 @@ runtime מסונתז ו־README ואינה קוראת/עוברת על ה־home, 
 
 בדיקת מנגנון חיה הפעילה `hermes serve` מקומי עם token פרטי, קראה
 `/api/health`, התחילה onboarding, צפתה ברצף
-`installing → starting → waiting`, אימתה שקיים `qr_payload`, וה־QR נסרק בפועל.
-לאחר החיבור התקבלה הודעה אמיתית במצב read-only; היא נשמרה ב־Session ונחסמה
-לפני inference או outbound delivery.
+`installing → starting → waiting` ואימתה שקיים `qr_payload`. סריקת ה־QR וקבלת
+הודעה נכנסת חיה נצפו ידנית פעם אחת: ההודעה נשמרה ב־Session ונחסמה במצב read-only
+לפני inference או outbound delivery. זו תצפית ידנית; הכיסוי האוטומטי ל־WhatsApp
+מכסה מדיניות וonboarding UI (`e2e-installed-whatsapp-ui`, `e2e-whatsapp-onboarding`),
+לא הודעה חיה.
 
 ## Scheduled Tasks
 
@@ -518,9 +526,10 @@ tokens, raw logs, שיחות, מיילים, קבצי עסק או פרטי לקו
 הזעיר כולל bootstrap, Plugin ו־Skill; Hermes עצמו יורד מה־release הרשמי,
 וה־Companion יורד לפי manifest חיצוני עם גרסה, URL ו־SHA-256.
 
-ה־artifact הסופי שנבנה והותקן הוא `release/העוזר לעסק Setup 0.3.3.exe`, בגודל
-`102,669,826` bytes וב־SHA-256
-`5529B70A90CCF71F98A9E6B62A37ED8EEB766CC0EA3CE36A85118592569591B0`.
+ה־artifact הסופי שנבנה והותקן הוא `release/העוזר לעסק Setup 0.3.3.exe`. הגודל
+וה־SHA-256 המדויקים משתנים בכל build ולכן אינם משוכפלים בפרוזה; מקור האמת הוא
+הקובץ הנוצר `release/SHA256SUMS.txt` (git-ignored), הנכתב על ידי
+`npm run checksums` מעץ ה־release הנוכחי.
 
 מנגנון הרשת עבר E2E מול שרת loopback: הורדת manifest, אימות SHA-256 והתקנה
 שקטה של ה־Companion הסופי. artifact רשת לפרסום עדיין דורש
@@ -559,7 +568,8 @@ reducer אירועי הצ׳אט, חוזה התאימות, אימות הגיבו�
 
 ## תוצאות קבלה — 31 ביולי 2026
 
-- `63/63` בדיקות Vitest ו־`17/17` בדיקות plugin עברו.
+- בדיקות Vitest (‏51 קבצים, ‏257 עברו, ‏1 דילוג) ובדיקות מדיניות ה־WhatsApp
+  ב־Python (‏40) עברו.
 - Plugin contract, bootstrap resolver, אימות Git blob של install.ps1 הרשמי
   ו־TypeScript/Vite build עברו.
 - `npm audit --omit=dev` החזיר `0` חולשות; Electron שודרג ל־`43.2.0`.
@@ -573,11 +583,14 @@ reducer אירועי הצ׳אט, חוזה התאימות, אימות הגיבו�
 - מדיניות WhatsApp עברה E2E באפליקציה המותקנת בשני מצבי המדיניות; QR אמיתי
   הופק, וה־plugin המותקן הוכיח ש־Cloud נוצר דרך factory עטוף ושכפתור
   אינטראקטיבי חסום ב־read-only.
-- לאחר סריקת ה־QR התקבל אירוע אמיתי ונשמר פסיבית ב־Session של Hermes. לוג ה־gateway
-  הוכיח `business_whatsapp_read_only`; מסד הנתונים הוכיח 0 tokens, ‏0 API/Tool Calls
-  ו־0 delivery obligations, ולכן המופע הזה לא שלח תשובה.
-- Telegram עבר E2E חי: בוט ייעודי, Gateway restart אוטומטי, הודעה ותשובה
-  מדויקות, home channel ו־session משותף שנפתח ב־Hermes Desktop.
+- בתצפית ידנית חד־פעמית, לאחר סריקת ה־QR התקבל אירוע נכנס ונשמר פסיבית ב־Session
+  של Hermes: לוג ה־gateway הראה `business_whatsapp_read_only`; מסד הנתונים הראה
+  0 tokens, ‏0 API/Tool Calls ו־0 delivery obligations, ולכן המופע הזה לא שלח תשובה.
+  אין לכך בדיקה אוטומטית עצמאית — הכיסוי האוטומטי הוא מדיניות וonboarding UI.
+- Telegram: הכיסוי האוטומטי מאמת את הכרטיס מול `/api/messaging/platforms` ואת
+  דיאלוג החיבור. round-trip חי (בוט ייעודי, Gateway restart, הודעה/תשובה מדויקות,
+  home channel, session משותף ב־Hermes Desktop) נצפה ידנית פעם אחת ואינו משוחזר
+  אוטומטית.
 - Skill ו־Scheduled Task עברו מול APIs הרשמיים.
 - diagnostics ZIP עבר בדיקת allowlist.
 - המתקין המלא הותקן עם exit code `0`; מסלול מתקין הרשת עבר E2E מלא מול manifest
@@ -607,8 +620,9 @@ GET    /api/providers/oauth/openai-codex/poll/<session>?profile=default
 DELETE /api/providers/oauth/sessions/<session>?profile=default
 ```
 
-במחשב הבדיקה `logged_in=true`; בחירת “השתמש בחיבור הזה” הפעילה את provider
-`openai-codex`, ו־inference + Streaming עברו. אסימון OAuth אינו נחשף ל־renderer.
+בתצפית ידנית על מחשב הבדיקה `logged_in=true`; בחירת “השתמש בחיבור הזה” הפעילה את
+provider `openai-codex`, ו־inference + Streaming עברו — הפעלה ו־inference חיים אלה
+הם תצפית ידנית, לא בדיקה אוטומטית עצמאית. אסימון OAuth אינו נחשף ל־renderer.
 גם API keys נשמרים רק לאחר `/api/providers/validate` עם `ok=true`; כשל רשת או מפתח
 דחוי אינו נכתב ל־Hermes.
 
@@ -618,18 +632,19 @@ DELETE /api/providers/oauth/sessions/<session>?profile=default
 - Hermes קיים: הוצג מצב פועל, מסך Provider הציג את Codex OAuth הקיים, וכפתורי
   Google Workspace ו־Telegram פתחו את תהליכי החיבור הרשמיים.
 
-Google נבדק גם במסלול כשל בטוח: קובץ client secret חסר נדחה, וסטטוס האימות נשאר
-ללא שינוי. השלמת consent אמיתי עדיין דורשת קובץ Google של המשתמש. Telegram חובר
-לאחר מכן עם Bot Token ו־allowed user ID אמיתיים, ועבר את הבדיקה החיה המתוארת לעיל.
+Google נבדק גם במסלול כשל בטוח, וזהו המסלול המכוסה אוטומטית
+(`scripts/lib/probes/installed/connections.mjs`): קובץ client secret חסר נדחה,
+וסטטוס האימות נשאר ללא שינוי. השלמת consent אמיתי עדיין דורשת קובץ Google של
+המשתמש. חיבור ה־Telegram החי המתואר לעיל הוא תצפית ידנית, לא בדיקה אוטומטית.
 
 ## מטריצת קבלה
 
 | דרישה | מצב | ראיה |
 |---|---|---|
 | התקנה בלי Terminal | עבר | clean bootstrap ל־Hermes Home ריק + NSIS מותקן exit 0 |
-| חיבור Provider | עבר | Codex OAuth `logged_in=true`, activation ו־inference אמיתי |
+| חיבור Provider | עבר (אוטומטי: קריאת מצב) | הבדיקה קוראת `logged_in` ומאמתת UI; activation + inference חיים = תצפית ידנית |
 | היכרות עם המשתמש והעסק | עבר | `business-bootstrap` הפעיל `clarify.request/respond` |
-| חיבור שירות חיצוני | עבר | Telegram עבר הודעה אמיתית הלוך־ושוב וה־session נפתח בשני הממשקים; Google עדיין ממתין ל־consent |
+| חיבור שירות חיצוני | עבר (אוטומטי: כרטיס+דיאלוג) | Telegram: אימות כרטיס מול `/api/messaging/platforms` + דיאלוג חיבור; round-trip חי = תצפית ידנית; Google: כשל בטוח אוטומטי, ממתין ל־consent |
 | שיחה ו־Streaming | עבר | `message.delta`, Stop ו־`message.complete` בבינארי המותקן |
 | הצגת ואישור פעולות | עבר | מצב manual זמני; destructive delete נדחה והמצב הוחזר ל־smart |
 | משימה מתוזמנת | עבר | create, list, pause ו־cleanup דרך Cron API |
@@ -638,8 +653,9 @@ Google נבדק גם במסלול כשל בטוח: קובץ client secret חסר
 | תקינות וחבילת אבחון | עבר | health/update + ZIP עם שני קבצי allowlist בלבד |
 
 אין חסם קוד ידוע ל־Google או Telegram. השלמת Google עדיין דורשת consent ופרטי
-גישה של המשתמש. WhatsApp Web עבר סריקה ובדיקת intake אמיתית במצב read-only;
-פרטי הגישה אינם נמצאים ב־repository או בחבילת האבחון.
+גישה של המשתמש. סריקת WhatsApp Web ובדיקת intake חיה במצב read-only הן תצפית
+ידנית חד־פעמית (הכיסוי האוטומטי הוא מדיניות וonboarding UI); פרטי הגישה אינם
+נמצאים ב־repository או בחבילת האבחון.
 
 ## שותף עסקי (Business Partner) וארגז חול נייטיב
 

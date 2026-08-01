@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "category": "thin-installer",
+  "status": "passed",
+  "app_version": "0.3.3",
+  "hermes_range": ">=0.19.0 <0.20.0",
+  "git_head": "985dd3a80c403e81c03c3fc9416117e41e481671",
+  "git_state": "working-tree",
+  "captured_at": "2026-07-31T21:46:24.223Z",
+  "tool": "e2e-thin-network-installer.ps1",
+  "redacted": true,
+  "summary": {
+    "ok": true,
+    "isolated": true,
+    "cases_total": 9,
+    "cases_passed": 9,
+    "all_cases_green": true
+  }
+}

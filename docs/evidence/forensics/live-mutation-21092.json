@@ -1,0 +1,32 @@
+{
+  "kind": "live-profile-mutation",
+  "detected_at_run_pid": 21092,
+  "approval_requested": false,
+  "note": "Redacted, hash/inventory-only. No config contents, credentials or paths.",
+  "auto_restore_performed": false,
+  "auto_restore_withheld_reason": "before-snapshot is a sha256 marker (not exact bytes); mutation not conclusively isolatable from concurrent live-gateway writes",
+  "config_changed": true,
+  "config_hash_before": "55a689bb9dd09658e0d662577184b18b1a738049881d164db481db11ee2f9128",
+  "config_hash_after": "54e824282fc6394c0062807f3beb008e8ce4db16fbf5ed920a8925aeaf21036e",
+  "marker_digest_before": "e27745fbd4ceaf624f80b9043b3469aaf34fa93eac0b5996a8d2c2e731a2c42e",
+  "marker_digest_after": "6a3cf183e94bbbc5ed0f195b6d330c932953481caee617829d7ead0c5a3a54c8",
+  "marker_digest_equal": false,
+  "profile_defining_unchanged": false,
+  "structural_added_removed": {},
+  "inventory_before": {
+    "sessions": 2,
+    "cron": 7,
+    "skills": 19,
+    "plugins": 1,
+    "agents": 0,
+    "workflows": 0
+  },
+  "inventory_after": {
+    "sessions": 2,
+    "cron": 7,
+    "skills": 19,
+    "plugins": 1,
+    "agents": 0,
+    "workflows": 0
+  }
+}

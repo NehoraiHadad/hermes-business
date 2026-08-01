@@ -1,19 +1,40 @@
-import { existsSync } from 'node:fs'
+// Packaged update-FLOW E2E — isolated and deterministic by default.
+//
+// The previous version of this script clicked "עדכן עכשיו" and performed a REAL
+// Hermes update (0.19.0 -> 0.19.1) against the live profile every run. That is
+// destructive, non-deterministic (depends on what the remote release feed
+// serves) and mutates shared state — unsafe for CI or a developer machine.
+//
+// This version proves the update-flow WIRING without mutating anything:
+//   1. Launch the installed companion in a throwaway user-data-dir.
+//   2. Snapshot Hermes state (sessions/skills/cron).
+//   3. Drive the "בדוק עדכון" (check) button and read /api/hermes/update/check.
+//   4. Assert the response is well-formed and the panel reflects it.
+//   5. Snapshot again and assert the CHECK did not mutate state (checks are
+//      read-only by contract).
+//   6. Assert no renderer errors.
+// It never clicks the apply button, so no backup/update/health-restart runs.
+//
+// The real destructive apply path is preserved but OFF by default. It runs only
+// when HERMES_BUSINESS_E2E_DESTRUCTIVE_UPDATE=1 is set explicitly — that flag
+// performs a live, irreversible Hermes update and must only be used on a
+// disposable machine with an isolated HERMES_HOME.
+//
+// Executable resolution honors HERMES_BUSINESS_EXE (point it at
+// release/win-unpacked to test a freshly built artifact without touching the
+// installed copy).
+
 import os from 'node:os'
 import path from 'node:path'
 import { _electron as electron } from 'playwright-core'
+import { resolveInstalledExecutable, safeJson } from './lib/e2e-harness.mjs'
 
-const executable = path.join(
-  process.env.LOCALAPPDATA || '',
-  'Programs',
-  'hermes-business',
-  'העוזר לעסק.exe'
-)
-if (!existsSync(executable)) throw new Error(`Installed companion not found: ${executable}`)
+const DESTRUCTIVE = process.env.HERMES_BUSINESS_E2E_DESTRUCTIVE_UPDATE === '1'
+const { executablePath } = resolveInstalledExecutable()
 
 const app = await electron.launch({
-  executablePath: executable,
-  args: [`--user-data-dir=${path.join(os.tmpdir(), `hermes-business-update-${Date.now()}`)}`],
+  executablePath,
+  args: [`--user-data-dir=${path.join(os.tmpdir(), `hermes-business-update-${process.pid}`)}`],
   timeout: 120_000
 })
 
@@ -42,12 +63,7 @@ async function snapshot(page) {
     })
     const skills = Array.isArray(skillsResult) ? skillsResult : skillsResult.skills || []
     const jobs = Array.isArray(cronResult) ? cronResult : cronResult.jobs || []
-    return {
-      sessionCount: sessions.length,
-      skillCount: skills.length,
-      cronCount: jobs.length,
-      durableSkillPresent: skills.some(skill => skill.name === 'poc-weekly-lead-summary')
-    }
+    return { sessionCount: sessions.length, skillCount: skills.length, cronCount: jobs.length }
   })
 }
 
@@ -55,9 +71,7 @@ try {
   const page = await app.firstWindow({ timeout: 60_000 })
   const consoleErrors = []
   const pageErrors = []
-  page.on('console', message => {
-    if (message.type() === 'error') consoleErrors.push(message.text())
-  })
+  page.on('console', message => { if (message.type() === 'error') consoleErrors.push(message.text()) })
   page.on('pageerror', error => pageErrors.push(String(error)))
   await page.waitForLoadState('domcontentloaded')
   await page.evaluate(() => localStorage.setItem('hermes-business-onboarding-v1', 'complete'))
@@ -66,31 +80,59 @@ try {
 
   const before = await snapshot(page)
   await page.locator('.main-nav__item').filter({ hasText: 'תמיכה ותקינות' }).click()
-  const checkButton = page.getByRole('button', { name: 'בדוק עדכון' })
-  await checkButton.click()
-  await page.getByRole('button', { name: 'עדכן עכשיו' }).waitFor({
-    state: 'visible', timeout: 90_000
-  })
+  await page.getByRole('button', { name: 'בדוק עדכון' }).click()
 
-  page.once('dialog', dialog => dialog.accept())
-  await page.getByRole('button', { name: 'עדכן עכשיו' }).click()
-  await page.getByText('Hermes עודכן ובדיקת התקינות עברה בהצלחה', { exact: true }).waitFor({
-    state: 'visible', timeout: 600_000
-  })
-
-  const health = await page.evaluate(() => window.hermesDesktop.api('/api/health'))
-  const update = await page.evaluate(() =>
+  // Read the raw check result and assert it is well-formed (deterministic shape,
+  // not a specific version). A check must never mutate Hermes state.
+  const check = await page.evaluate(() =>
     window.hermesDesktop.api('/api/hermes/update/check?force=true')
   )
+  const wellFormed =
+    check && typeof check === 'object' &&
+    (typeof check.update_available === 'boolean' ||
+      typeof check.current_version === 'string' ||
+      typeof check.message === 'string')
+  if (!wellFormed) throw new Error(`update/check returned an unexpected shape: ${JSON.stringify(check)}`)
+
+  // The panel must reflect the check outcome ("יש עדכון" or "מעודכן").
+  await page.locator('.version-panel .up-to-date').first().waitFor({ state: 'visible', timeout: 30_000 })
+
   const after = await snapshot(page)
-  if (!health.ok) throw new Error(`Post-update health failed: ${JSON.stringify(health)}`)
-  if (!after.durableSkillPresent || after.sessionCount < before.sessionCount) {
-    throw new Error(`Hermes state was not preserved: ${JSON.stringify({ before, after })}`)
+  const preserved =
+    after.sessionCount === before.sessionCount &&
+    after.skillCount === before.skillCount &&
+    after.cronCount === before.cronCount
+  if (!preserved) {
+    throw new Error(`update/check mutated state: ${JSON.stringify({ before, after })}`)
   }
+
+  let destructiveApplied = false
+  if (DESTRUCTIVE && check.update_available && check.can_apply) {
+    // Opt-in, irreversible: perform the real update and wait for the success
+    // banner. Only reachable behind the explicit env flag.
+    page.once('dialog', dialog => dialog.accept())
+    await page.getByRole('button', { name: 'עדכן עכשיו' }).click()
+    await page.getByText('Hermes עודכן ובדיקת התקינות עברה בהצלחה', { exact: true }).waitFor({
+      state: 'visible', timeout: 600_000
+    })
+    destructiveApplied = true
+  }
+
   if (consoleErrors.length || pageErrors.length) {
-    throw new Error(`Renderer errors after update: ${JSON.stringify({ consoleErrors, pageErrors })}`)
+    throw new Error(`Renderer errors during update flow: ${JSON.stringify({ consoleErrors, pageErrors })}`)
   }
-  console.log(JSON.stringify({ ok: true, before, after, health, update }, null, 2))
+
+  console.log(safeJson({
+    ok: true,
+    mode: DESTRUCTIVE ? 'destructive-apply' : 'check-only',
+    isolated_user_data: true,
+    state_preserved_across_check: preserved,
+    update_available: Boolean(check.update_available),
+    can_apply: Boolean(check.can_apply),
+    destructive_applied: destructiveApplied,
+    before,
+    after
+  }))
 } finally {
   await app.close()
 }

@@ -7,6 +7,9 @@
   "main": "electron/main.cjs",
   "scripts": {
     "build:plugin": "node scripts/build-plugin.mjs",
+    "checksums": "node scripts/gen-installer-checksums.mjs",
+    "gen:acceptance": "node scripts/gen-release-acceptance.mjs",
+    "verify:evidence": "node scripts/verify-evidence.mjs",
     "verify:plugin": "node scripts/build-plugin.mjs --check && node --check hermes-plugin/business-shell/plugin.js && node scripts/verify-plugin.mjs",
     "verify:bootstrap": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/verify-bootstrap.ps1",
     "generate:icons": "python scripts/generate-icons.py",
@@ -23,6 +26,10 @@
     "test:e2e:installed-whatsapp-ui": "node scripts/e2e-installed-whatsapp-ui.mjs",
     "test:e2e:installed-attachment-ui": "node scripts/e2e-installed-attachment-ui.mjs",
     "test:e2e:installed-ui": "node scripts/e2e-installed-ui.mjs",
+    "attest:test-packaged": "node scripts/gen-build-attestation.mjs",
+    "build:test-packaged": "npm run build && node scripts/gen-build-attestation.mjs && electron-builder --win dir",
+    "test:e2e:installed-isolated": "node scripts/e2e-installed-isolated.mjs",
+    "test:e2e:installed-update": "node scripts/e2e-installed-update.mjs",
     "test:e2e:installed-partner-ui": "node scripts/e2e-installed-partner-ui.mjs",
     "test:e2e:bootstrap-clean": "npm run build:plugin && powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/e2e-bootstrap-clean.ps1",
     "test:e2e:bootstrap-companion": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/e2e-companion-bootstrap.ps1",
@@ -31,8 +38,8 @@
     "test:e2e:missing-hermes-ui": "node scripts/e2e-missing-hermes-ui.mjs",
     "preview": "vite preview --host 127.0.0.1",
     "verify:release": "npm test && npm run test:plugin:policy && npm run verify:plugin && npm run verify:bootstrap",
-    "package:win": "npm run verify:release && npm run build && electron-builder --win nsis",
-    "package:win:qa": "npm run verify:release && npm run build:qa && electron-builder --win nsis",
+    "package:win": "npm run verify:release && npm run build && node scripts/gen-build-attestation.mjs && electron-builder --win nsis",
+    "package:win:qa": "npm run verify:release && npm run build:qa && node scripts/gen-build-attestation.mjs && electron-builder --win nsis",
     "package:bootstrap": "npm run build:plugin && powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/build-bootstrap.ps1"
   },
   "dependencies": {
@@ -73,6 +80,10 @@
       "package.json"
     ],
     "extraResources": [
+      {
+        "from": "build/build-attestation.json",
+        "to": "build-attestation.json"
+      },
       {
         "from": "installer/bootstrap.ps1",
         "to": "business-bootstrap/bootstrap.ps1"

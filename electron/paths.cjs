@@ -2,11 +2,21 @@ const { spawnSync } = require('node:child_process')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
+const { getQaRuntimeOverride } = require('./qa-runtime.cjs')
 
 // Filesystem discovery for the Hermes install and the bundled plugin payloads.
 // Pure lookups with no runtime state, so every other module can depend on it.
 
 function hermesHome() {
+  // Automated-QA isolation: when the main-process-only override is active, every
+  // home-derived read/write in this process targets the throwaway temp home, so
+  // the packaged E2E never mutates the live profile. getQaRuntimeOverride throws
+  // (fail-closed) if a QA run was requested with an invalid home. The binary
+  // lookup in findHermes() is intentionally NOT redirected here — it still finds
+  // the real installed Hermes because the QA contract uses its own env vars, not
+  // HERMES_HOME.
+  const qa = getQaRuntimeOverride()
+  if (qa.enabled) return qa.hermesHome
   if (process.env.HERMES_HOME) return process.env.HERMES_HOME
   if (process.platform === 'win32' && process.env.LOCALAPPDATA) {
     return path.join(process.env.LOCALAPPDATA, 'hermes')

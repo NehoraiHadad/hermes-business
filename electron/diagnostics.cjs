@@ -4,6 +4,14 @@ const path = require('node:path')
 const AdmZip = require('adm-zip')
 const { getVersions, hermesApi, getRuntimeState } = require('./runtime.cjs')
 const { getMainWindow } = require('./windows.cjs')
+const { redactSecrets } = require('./redact.cjs')
+
+// Serialize the diagnostics manifest to pretty JSON and run the defense-in-depth
+// redaction pass so that any secret- or email-shaped string that survived the
+// allow-list is stripped before it is written to disk. Exported for tests.
+function serializeDiagnostics(manifest) {
+  return redactSecrets(JSON.stringify(manifest, null, 2))
+}
 
 // Builds a strictly allow-listed diagnostics ZIP: a runtime/health summary and a
 // README only. No API keys, tokens, conversation/email content, business files,
@@ -75,17 +83,20 @@ async function createDiagnosticsBundle() {
     status: safeStatus
   }
   const zip = new AdmZip()
-  zip.addFile('diagnostics.json', Buffer.from(JSON.stringify(manifest, null, 2)))
+  zip.addFile('diagnostics.json', Buffer.from(serializeDiagnostics(manifest)))
   zip.addFile(
     'README.txt',
     Buffer.from(
-      [
-        'Hermes Business diagnostic bundle',
-        '',
-        'This bundle intentionally contains only an allow-listed runtime summary.',
-        'Raw logs are excluded because they may contain conversation or business content.',
-        'No API keys, tokens, email content, chat content, business files, customer data, or secrets are included.'
-      ].join('\n')
+      redactSecrets(
+        [
+          'Hermes Business diagnostic bundle',
+          '',
+          'This bundle intentionally contains only an allow-listed runtime summary.',
+          'Raw logs are excluded because they may contain conversation or business content.',
+          'No API keys, tokens, emails, chat content, business files, customer data, or secrets are included.',
+          'Any email address that survived the allow-list is stripped to <redacted>@domain.'
+        ].join('\n')
+      )
     )
   )
   const defaultName = `hermes-diagnostics-${new Date().toISOString().slice(0, 10)}.zip`
@@ -99,4 +110,4 @@ async function createDiagnosticsBundle() {
   return { ok: true, path: result.filePath }
 }
 
-module.exports = { createDiagnosticsBundle }
+module.exports = { createDiagnosticsBundle, serializeDiagnostics }

@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "category": "shared-state",
+  "status": "passed",
+  "app_version": "0.3.3",
+  "hermes_range": ">=0.19.0 <0.20.0",
+  "git_head": "985dd3a80c403e81c03c3fc9416117e41e481671",
+  "git_state": "working-tree",
+  "captured_at": "2026-07-31T21:42:32.663Z",
+  "tool": "e2e-hermes-shared-state.mjs",
+  "redacted": true,
+  "summary": {
+    "ok": true,
+    "health": true,
+    "provider_free": true,
+    "live_home_untouched": true,
+    "session_shared": {
+      "via_rest": true,
+      "via_rpc": true
+    },
+    "cron_shared": {
+      "via_rpc": true,
+      "on_disk": true,
+      "removed": true
+    },
+    "skill_shared": {
+      "via_rpc": true,
+      "skill_count": 63
+    },
+    "path_evidence": {
+      "under_isolated_home": true,
+      "present": {
+        "home": true,
+        "plugins": false,
+        "desktop_plugins": true,
+        "memories": true,
+        "skills": true,
+        "sessions": true,
+        "cron": true,
+        "workspace_db": true
+      }
+    },
+    "plugin": {
+      "installed": true,
+      "integrity_verified": true,
+      "status": "loaded",
+      "enabled": true,
+      "contributions_count": 3,
+      "route_provider_free": true,
+      "shared_state": {
+        "provider_ready": true,
+        "session_visible_via_plugin_host": true,
+        "cron_list_ok": true,
+        "bootstrap_skill_visible": true
+      },
+      "uninstall": {
+        "disk_door_empty": true,
+        "residue_gone": true,
+        "writes_confined_to_isolated_home": true
+      }
+    },
+    "approval_mapping": {
+      "official_method": "approval.respond",
+      "competing_engine": false
+    }
+  }
+}

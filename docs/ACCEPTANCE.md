@@ -131,6 +131,7 @@ Durable facts about those artifacts:
 | QA demo-only attachment flow | QA companion | temp userData + fixture | **PASS** — pick/remove chip + attachment-only send |
 | Partner-sandbox degraded guard (Docker stopped) | unit-covered | n/a | **PASS via unit tests** — Docker request fails closed to local guard |
 | **Thin network installer (hermetic)** | portable-zip QA artifact | throwaway temp `install` root + temp `HERMES_HOME`, loopback HTTP server, auto-cleaned | **PASS** — see below |
+| **Packaged companion — isolated runtime + real approval deny** | production win-unpacked | throwaway temp `HERMES_HOME` (owned by the harness) + isolated high loopback port, auto-cleaned | **PASS** — see 4c |
 
 **Hermetic thin-installer E2E** (`npm run test:e2e:thin-installer`,
 `scripts/e2e-thin-network-installer.ps1`). Fully self-contained: it builds small
@@ -181,6 +182,46 @@ shape validation, and fail-closed when the entrypoint is absent after extraction
 (activates a personality that needs a real Hermes install). Its safety-critical
 assertions are covered green by unit tests (`partner-mode`, `sandbox-config`,
 `partner-settings`, `business-partner`).
+
+### 4c. Packaged companion — isolated runtime + real approval deny
+
+`npm run test:e2e:installed-isolated` (`scripts/e2e-installed-isolated.mjs`) is the
+**safe replacement** for the previously-blocked live-connected packaged UI suite.
+It boots the freshly built production companion against a **throwaway
+`HERMES_HOME`** the harness creates/owns/deletes, on an **isolated high loopback
+port**, using the new main-process-only QA runtime override
+(`electron/qa-runtime.cjs`). Production is unaffected: with no QA env the override
+returns `{enabled:false}` and the runtime takes its exact one-live-home path.
+
+The override contract is **fail-closed and unavailable to the renderer**: it reads
+only main-process `process.env`, requires an explicit sentinel
+(`HERMES_BUSINESS_QA_RUNTIME=isolated-temp-home`), validates that the home is an
+absolute, canonical, **empty, newly-created** directory strictly **under the OS
+TEMP root** (rejecting symlink/reparse escapes and the live/default `HERMES_HOME`),
+pins the host to `127.0.0.1`, and pins the port to a safe high range (41000–60000,
+never the default 9119). Any requested-but-invalid override refuses to start rather
+than fall back to the live profile.
+
+Proven in one real run (`docs/evidence/packaged-e2e.json`, `approval.json`, both
+**passed**):
+
+- **isolated runtime** — the companion reports `mode=qa-isolated`, its gateway WS
+  is on the isolated port, and `session.list` is empty (0) versus the live profile's
+  sessions; the temp home is populated by the real Hermes boot.
+- **real approval deny** — under `HERMES_BUSINESS_E2E_APPROVAL=1` the harness drives
+  a genuine turn over the official gateway: `session.create` → `prompt.submit` asks
+  the agent to run a guarded local `terminal` command → the official
+  **`approval.request`** event fires → the harness denies with the official
+  **`approval.respond {choice:'deny'}`** (`resolved:1`) → the target probe file is
+  **never created**. This traverses the real Hermes approval RPC/event path; it is
+  **not** a faked renderer modal.
+- **clean teardown** — the temp home is deleted, the isolated port is free, the
+  probe file is absent, and the live profile's defining state (config.yaml bytes +
+  the skill/cron/plugin/agent/workflow **name sets**) is unchanged. A same-name
+  size/timestamp bump by the user's concurrently-running live gateway (bound to
+  9119, which this run never touches) is attributed and excluded — only a **new
+  named** skill/cron/session (the old suite's additive signature) would count as a
+  live mutation.
 
 ### 4a. Installed-Hermes shared-state E2E (isolated home, official surfaces)
 
@@ -234,7 +275,7 @@ path even when a key is present.
 **Commands & results (this acceptance run):**
 
 ```
-npm test                              # 49 files, 242 pass / 1 skip (incl. hermes-shared-home guard + plugin-loader tests)
+npm test                              # 55 files, 311 pass / 1 skip (incl. redact + evidence-verifier + build-attestation + isolated-runtime + qa-runtime/namespace + hermes-shared-home guard + plugin-loader tests)
 HERMES_E2E_NO_LLM=1 node scripts/e2e-hermes-shared-state.mjs   # ok:true — session+cron+skill shared-state, paths, AND the business-shell plugin: install→discover→enabled→same-state→provider-free route render→uninstall zero residue
 node scripts/e2e-hermes-shared-state.mjs   # + live streaming/interrupt when a provider is already available
 node scripts/e2e-hermes.mjs           # ok:true — isolated home; streaming+resume+cron cycle green
@@ -313,7 +354,11 @@ Scope: tracked + untracked source files. Excluded: `node_modules`, `dist`,
 media, git-ignored), and binary/media extensions. Patterns:
 OpenAI/GitHub/Slack/AWS/Google keys, PEM private keys, JWTs. **Result: clean** —
 the only matches are known fake fixtures inside redaction unit tests
-(`src/lib/presentation.test.ts`, `scripts/lib/e2e-harness.test.mjs`).
+(`src/lib/presentation.test.ts`, `scripts/lib/e2e-harness.test.mjs`,
+`electron/redact.test.ts`, `scripts/lib/evidence.test.mjs`), which assert the app
+strips secret/email/path shapes. The git-ignored working dir `.tmp-hermes-home/`
+(an isolated Hermes home from an E2E run) contains only upstream placeholder
+tokens (`sk-xxxx…`, `ghp_xxxx…`) and is out of scope like everything ignored.
 
 ---
 

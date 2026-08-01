@@ -1,0 +1,62 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://hermes-business/docs/evidence/schema.json",
+  "title": "Hermes Business acceptance evidence envelope",
+  "description": "Small, redacted, machine-readable envelope for one acceptance category. Verified by scripts/verify-evidence.mjs and scripts/lib/evidence.test.mjs.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "category",
+    "status",
+    "app_version",
+    "hermes_range",
+    "git_head",
+    "git_state",
+    "redacted",
+    "summary"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "const": 1 },
+    "category": {
+      "enum": ["packaged-e2e", "thin-installer", "shared-state", "approval"],
+      "description": "Which acceptance surface this evidence covers."
+    },
+    "status": {
+      "enum": ["passed", "blocked", "skipped"],
+      "description": "passed = suite ran green; blocked = could not run safely (see summary.reason); skipped = intentionally not exercised."
+    },
+    "app_version": {
+      "type": "string",
+      "description": "Companion version from package.json at capture time; the verifier requires it to equal the current tree."
+    },
+    "hermes_range": {
+      "type": ["string", "null"],
+      "description": "Supported Hermes range from hermes-compat.json; verifier requires a match."
+    },
+    "git_head": {
+      "type": "string",
+      "description": "Full git HEAD SHA at capture time."
+    },
+    "git_state": {
+      "enum": ["committed", "working-tree"],
+      "description": "committed = HEAD had no uncommitted changes and git_head must equal current HEAD; working-tree = captured pre-commit with local changes present."
+    },
+    "captured_at": {
+      "type": ["string", "null"],
+      "description": "ISO-8601 capture timestamp (machine clock), or null."
+    },
+    "tool": {
+      "type": ["string", "null"],
+      "description": "The script that produced the raw run this envelope reduces."
+    },
+    "redacted": {
+      "const": true,
+      "description": "Always true: the summary passed through sanitize + redactPaths."
+    },
+    "summary": {
+      "type": "object",
+      "description": "Scalar-only reduction (booleans / counts / enums). Never contains paths, logs, prompts, chat content, usernames, tokens, emails or binaries."
+    }
+  }
+}

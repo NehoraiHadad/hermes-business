@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "category": "packaged-e2e",
+  "status": "passed",
+  "app_version": "0.3.3",
+  "hermes_range": ">=0.19.0 <0.20.0",
+  "git_head": "985dd3a80c403e81c03c3fc9416117e41e481671",
+  "git_state": "working-tree",
+  "captured_at": "2026-08-01T00:01:40.370Z",
+  "tool": "e2e-installed-isolated.mjs",
+  "redacted": true,
+  "summary": {
+    "ran": true,
+    "artifact_attested": true,
+    "artifact_kind": "win-unpacked-current",
+    "qa_namespace_applied": true,
+    "isolated_runtime": true,
+    "ws_on_isolated_port": true,
+    "isolated_session_count": 0,
+    "isolated_home_populated": true,
+    "live_home_untouched": true,
+    "live_config_unchanged": true,
+    "live_structural_additions": 0,
+    "temp_home_removed": true,
+    "isolated_port_free": true,
+    "no_residual": true
+  }
+}
