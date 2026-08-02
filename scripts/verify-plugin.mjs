@@ -55,6 +55,18 @@ if (!bootstrapSkill.includes('name: business-bootstrap')) failures.push('busines
 if (!bootstrapSkill.includes('Ask one question at a time')) failures.push('business-bootstrap lacks progressive questions')
 if (!bootstrapSkill.includes('Never request API keys')) failures.push('business-bootstrap lacks secret-handling rules')
 if (!bootstrapSkill.includes('Recommend one connection')) failures.push('business-bootstrap lacks connection guidance')
+// Conversation-first contract: no visible numbered phases, draft->confirm->persist,
+// just-in-time connections, first value before optional setup.
+if (/^#+\s*Phase\s+\d/im.test(bootstrapSkill)) failures.push('business-bootstrap exposes numbered phases; onboarding must read as one conversation')
+if (!/draft/i.test(bootstrapSkill) || !/explicit confirmation/i.test(bootstrapSkill)) failures.push('business-bootstrap lacks the draft -> recap -> explicit confirm -> persist contract')
+if (!/stay unknown/i.test(bootstrapSkill)) failures.push('business-bootstrap must keep unconfirmed facts unknown instead of guessing')
+if (!/stated goal/i.test(bootstrapSkill)) failures.push('business-bootstrap connections must be intent-led (tied to a stated goal)')
+if (!/First value before optional setup/i.test(bootstrapSkill)) failures.push('business-bootstrap must deliver first value before optional setup')
+const partnerSkill = readFileSync(rel('hermes-plugin/business-partner/SKILL.md'), 'utf8')
+if (!partnerSkill.includes('name: business-partner')) failures.push('business-partner Skill metadata is missing')
+if (!/explicit owner approval/i.test(partnerSkill)) failures.push('business-partner lacks the explicit-approval boundary for send/spend/publish/delete')
+if (!/do the\s+work directly/i.test(partnerSkill)) failures.push('business-partner must not force delegation for ordinary tasks')
+if (!/smallest high-leverage\s+next step/i.test(partnerSkill)) failures.push('business-partner lacks the proactive smallest-next-step posture')
 
 // ---- 2. Live plugin requirements vs the pinned snapshot ---------------------
 const req = extractPluginRequirements(source)

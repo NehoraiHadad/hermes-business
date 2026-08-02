@@ -18,7 +18,6 @@ export function OnboardingSurface({
   installError,
   onInstall,
   onProvider,
-  onConnection,
   beginConversation,
   onFinished,
   children
@@ -32,7 +31,6 @@ export function OnboardingSurface({
   installError: string
   onInstall: () => Promise<unknown>
   onProvider: () => void
-  onConnection: (id: string) => void
   beginConversation: (input: { userMessage: string; skillName: string; instruction: string }) => Promise<void>
   // introStarted=false means the DURABLE setup completed but the guided intro chat did
   // not start — a distinct, retryable outcome, never a silent success.
@@ -74,12 +72,11 @@ export function OnboardingSurface({
     <>
       <Onboarding
         runtime={runtime}
-        connections={connections}
+        providerStatus={providerStatus}
         installing={installing}
         installError={installError}
         onInstall={onInstall}
         onProvider={onProvider}
-        onConnection={onConnection}
         onComplete={complete}
       />
       {children}

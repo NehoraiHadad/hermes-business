@@ -1,5 +1,4 @@
-const { ipcMain, dialog, shell } = require('electron')
-const { spawn } = require('node:child_process')
+const { app, ipcMain, dialog, shell } = require('electron')
 const fs = require('node:fs')
 const path = require('node:path')
 const {
@@ -7,8 +6,7 @@ const {
   startHermes,
   restartHermes,
   hermesApi,
-  getVersions,
-  baseUrl
+  getVersions
 } = require('./runtime.cjs')
 const { recentLogs } = require('./logs.cjs')
 const { createDiagnosticsBundle } = require('./diagnostics.cjs')
@@ -38,6 +36,7 @@ const { probeProviderCredential } = require('./provider-probe.cjs')
 const { probeCodexGrant } = require('./codex-probe.cjs')
 const { getProviderEvidence, recordProviderEvidence } = require('./provider-evidence.cjs')
 const { guardStatusWithActivation, readGuardActivationJournal } = require('./whatsapp-guard-journal.cjs')
+const { openFullSurface } = require('./open-full.cjs')
 
 // Single place that maps every renderer IPC channel to a module function. Keeps
 // the wiring auditable and the feature modules free of Electron IPC concerns.
@@ -87,24 +86,7 @@ function registerIpc() {
     return shell.openExternal(url)
   })
   ipcMain.handle('hermes:open-full', async (_event, surface) => {
-    const command = findHermes()
-    if (surface === 'desktop' && command) {
-      const child = spawn(command, ['desktop'], { detached: true, stdio: 'ignore', windowsHide: true })
-      child.unref()
-      return { ok: true }
-    }
-    if (surface === 'logs') {
-      const logPath = path.join(hermesHome(), 'logs')
-      fs.mkdirSync(logPath, { recursive: true })
-      await shell.openPath(logPath)
-      return { ok: true }
-    }
-    if (surface === 'settings') {
-      await shell.openExternal(`${baseUrl()}/settings`)
-      return { ok: true }
-    }
-    await shell.openExternal(baseUrl())
-    return { ok: true }
+    return openFullSurface(surface, { command: findHermes(), home: hermesHome(), shell })
   })
   ipcMain.handle('hermes:install', async () => {
     if (findHermes()) {
@@ -122,6 +104,7 @@ function registerIpc() {
           '-ExecutionPolicy', 'Bypass',
           '-File', path.join(stagingRoot, 'bootstrap.ps1'),
           '-PayloadRoot', stagingRoot,
+          '-BootstrapVersion', app.getVersion(),
           '-HermesHome', hermesHome(),
           '-SkipCompanionInstall',
           '-NoLaunch'

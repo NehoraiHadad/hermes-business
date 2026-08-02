@@ -137,3 +137,21 @@
   font-size: 10.5px;
 }
 
+.settings-menu {
+  width: 270px;
+}
+
+.dropdown-menu__section {
+  margin: 6px 4px 3px;
+  padding: 8px 7px 4px;
+  color: var(--muted);
+  border-top: 1px solid var(--line);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.settings-menu button > svg:last-child:not(:first-child) {
+  margin-right: auto;
+  color: var(--muted);
+}

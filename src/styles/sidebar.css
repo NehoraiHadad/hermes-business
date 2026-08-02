@@ -83,3 +83,19 @@
   transform: scale(0.72);
   transform-origin: center;
 }
+
+.sidebar--simple {
+  flex-basis: 260px;
+}
+
+.sidebar--simple .brand strong {
+  font-size: 21px;
+}
+
+.sidebar--simple .session-list {
+  min-height: 0;
+}
+
+.sessions-title--simple {
+  padding-inline: 8px;
+}

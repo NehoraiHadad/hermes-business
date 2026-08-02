@@ -116,6 +116,14 @@
         "to": "business-bootstrap/bootstrap-companion.ps1"
       },
       {
+        "from": "installer/lib",
+        "to": "business-bootstrap/lib",
+        "filter": [
+          "*.ps1",
+          "enable_plugin.py"
+        ]
+      },
+      {
         "from": "hermes-plugin/business-shell/plugin.js",
         "to": "business-bootstrap/plugin.js"
       },

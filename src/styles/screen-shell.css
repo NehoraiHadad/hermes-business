@@ -30,6 +30,10 @@
   font-size: 12.5px;
 }
 
+.page-heading--compact {
+  margin-bottom: 18px;
+}
+
 .stats-row {
   display: grid;
   max-width: 1120px;

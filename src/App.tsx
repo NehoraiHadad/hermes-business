@@ -96,7 +96,8 @@ export default function App() {
   const title =
     screen === 'chat'
       ? data.sessions.find(item => item.id === chat.activeSession)?.title || 'שיחה חדשה'
-      : NAV_ITEMS.find(item => item.id === screen)?.label || ''
+      : NAV_ITEMS.find(item => item.id === screen)?.label ||
+        (({ skills: 'ידע והכוונה', connections: 'חיבורים', support: 'עזרה ותמיכה' } as Partial<Record<Screen, string>>)[screen] ?? '')
   const chatScreen = (
     <ChatScreen
       messages={chat.messages}
@@ -146,7 +147,6 @@ export default function App() {
         installError={data.installError}
         onInstall={data.ensureInstalled}
         onProvider={() => setModal('provider')}
-        onConnection={openConnection}
         beginConversation={chat.beginConversation}
         onFinished={({ introStarted }) => {
           setGate('ready')

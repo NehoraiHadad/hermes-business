@@ -64,8 +64,19 @@ export function ChatScreen({
               <span>
                 <Sparkles size={20} />
               </span>
-              <strong>מה נעשה היום?</strong>
-              <p>אפשר לשאול, לנסח הודעה, לסכם מידע או להתחיל משימה חדשה.</p>
+              <strong>מה תרצה להוריד מהראש היום?</strong>
+              <p>תאר מטרה, בעיה או משימה במילים שלך. העוזר יכוון את הצעד הבא ויבקש חיבור רק אם באמת צריך.</p>
+              <div className="empty-suggestions" aria-label="רעיונות להתחלה">
+                {[
+                  'נסח תשובה ללקוח',
+                  'עזור לי לתכנן את השבוע',
+                  'מצא משימה שחוזרת על עצמה'
+                ].map(suggestion => (
+                  <button key={suggestion} type="button" onClick={() => void onSend(suggestion, [])}>
+                    {suggestion}
+                  </button>
+                ))}
+              </div>
             </div>
           ) : null}
           {messages.map(message => (

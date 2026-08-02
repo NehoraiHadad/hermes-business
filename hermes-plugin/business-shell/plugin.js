@@ -295,7 +295,7 @@ function Field({ label, name, value, onChange, multiline = false, placeholder = 
 // Electron wrapper (typed via onboarding-contract.d.ts) and the Rollup-bundled
 // Hermes Desktop plugin consume ONE source — no hand-maintained per-language copy.
 
-const EMPTY_ONBOARDING = {
+const ONBOARDING_FIELD_TEMPLATE = {
   userName: '',
   role: 'בעל/ת העסק',
   language: 'עברית',
@@ -312,6 +312,18 @@ const EMPTY_ONBOARDING = {
   restrictions: '',
   recurringProcesses: '',
   systems: ''
+};
+
+// First run is conversation-led. Keep the complete schema, but do not persist
+// suggested values as if the owner had confirmed them. The bootstrap Skill may
+// use friendly defaults while speaking; durable business facts start unknown.
+const EMPTY_ONBOARDING = {
+  ...ONBOARDING_FIELD_TEMPLATE,
+  role: '',
+  language: '',
+  responseStyle: '',
+  workHours: '',
+  communicationStyle: ''
 };
 
 const ONBOARDING_KEYS = Object.keys(EMPTY_ONBOARDING);

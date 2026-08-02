@@ -56,7 +56,13 @@ export function FullAppShell({
         taskCount={data.tasks.length}
       />
       <div className="app-main">
-        <Topbar title={title} runtime={data.runtime} onOpenFull={onOpenFull} onMini={onMini} />
+        <Topbar
+          title={title}
+          runtime={data.runtime}
+          onOpenFull={onOpenFull}
+          onNavigate={setScreen}
+          onMini={onMini}
+        />
         <MainScreen
           screen={screen}
           chatScreen={chatScreen}

@@ -43,4 +43,9 @@
     min-height: 430px;
     padding-top: 32px;
   }
+
+  .onboarding__card--simple,
+  .onboarding__welcome--simple {
+    min-height: 0;
+  }
 }

@@ -1,5 +1,5 @@
-import { ChevronDown, MessageSquarePlus, MoreHorizontal, Search } from 'lucide-react'
-import { memo, useMemo, useState } from 'react'
+import { ChevronDown, MessageSquarePlus } from 'lucide-react'
+import { memo } from 'react'
 import { NAV_ITEMS } from '../../constants'
 import { hermesClient } from '../../lib/hermes-client'
 import type { Screen, Session } from '../../types'
@@ -21,7 +21,7 @@ const SessionRow = memo(function SessionRow({
       <span className="session-row__preview">{session.preview || 'אין תצוגה מקדימה'}</span>
       <span className="session-row__meta">
         {session.source === 'telegram' ? 'Telegram · ' : ''}
-        {session.id === 'weekly-leads' ? 'לפני 30 דקות' : 'לאחרונה'}
+        לאחרונה
       </span>
     </button>
   )
@@ -46,20 +46,15 @@ export function Sidebar({
   runtime: HermesRuntime | null
   taskCount: number
 }) {
-  const [query, setQuery] = useState('')
-  const visibleSessions = useMemo(() => {
-    const normalized = query.trim().toLowerCase()
-    if (!normalized) return sessions
-    return sessions.filter(item => `${item.title} ${item.preview}`.toLowerCase().includes(normalized))
-  }, [query, sessions])
+  const visibleSessions = sessions.slice(0, 8)
 
   return (
-    <aside className="sidebar">
+    <aside className="sidebar sidebar--simple">
       <div className="brand">
         <Logo />
         <div>
           <strong>העוזר לעסק</strong>
-          <span>פשוט, זמין ומסונכרן</span>
+          <span>עובדים יחד, בשיחה אחת</span>
         </div>
       </div>
 
@@ -85,37 +80,28 @@ export function Sidebar({
         })}
       </nav>
 
-      <div className="sidebar__divider" />
-
-      <div className="sessions-title">
-        <span>שיחות אחרונות</span>
-        <button aria-label="אפשרויות שיחות">
-          <MoreHorizontal size={17} />
-        </button>
-      </div>
-      <label className="sidebar-search">
-        <Search size={15} />
-        <input value={query} onChange={event => setQuery(event.target.value)} placeholder="חיפוש בשיחות" />
-      </label>
-      <div className="session-list">
-        {visibleSessions.map(session => (
-          <SessionRow
-            key={session.id}
-            session={session}
-            active={screen === 'chat' && activeSession === session.id}
-            onSelect={onSelectSession}
-          />
-        ))}
-      </div>
+      {visibleSessions.length ? (
+        <>
+          <div className="sidebar__divider" />
+          <div className="sessions-title sessions-title--simple"><span>שיחות אחרונות</span></div>
+          <div className="session-list">
+            {visibleSessions.map(session => (
+              <SessionRow
+                key={session.id}
+                session={session}
+                active={screen === 'chat' && activeSession === session.id}
+                onSelect={onSelectSession}
+              />
+            ))}
+          </div>
+        </>
+      ) : null}
 
       <div className="sidebar__footer">
         <StatusPill runtime={runtime} demo={hermesClient.demo} />
         <button className="profile-button">
           <span className="avatar">ע</span>
-          <span>
-            <strong>החשבון העסקי שלך</strong>
-            <small>מופעל באמצעות Hermes</small>
-          </span>
+          <span><strong>העסק שלך</strong><small>הידע נשמר ב־Hermes</small></span>
           <ChevronDown size={16} />
         </button>
       </div>

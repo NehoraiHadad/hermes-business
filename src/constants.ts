@@ -5,13 +5,21 @@ import type { ChatMessage, Connection, Screen } from './types'
 // the Hermes plugin cannot drift. Re-exported here to keep existing import sites.
 export { EMPTY_ONBOARDING } from '../shared/onboarding-contract.js'
 
-export const NAV_ITEMS: Array<{ id: Screen; label: string; icon: typeof MessageCircle }> = [
+const ALL_NAV_ITEMS: Array<{ id: Screen; label: string; icon: typeof MessageCircle }> = [
   { id: 'chat', label: 'שיחות', icon: MessageCircle },
   { id: 'tasks', label: 'משימות מתוזמנות', icon: CalendarClock },
   { id: 'skills', label: 'מה העוזר יודע', icon: WandSparkles },
   { id: 'connections', label: 'חיבורים', icon: PlugZap },
   { id: 'support', label: 'תמיכה ותקינות', icon: CircleHelp }
 ]
+// The simple shell exposes only the owner's everyday surfaces. Connections,
+// support and the raw Skill registry remain reachable from the settings menu.
+export const NAV_ITEMS = ALL_NAV_ITEMS
+  .filter(item => item.id === 'chat' || item.id === 'tasks')
+  .map(item => item.id === 'chat'
+    ? { ...item, label: 'שיחה' }
+    : { ...item, label: 'פעילות ומשימות' })
+
 export const INITIAL_MESSAGES: ChatMessage[] = []
 
 export const CONNECTIONS: Connection[] = [

@@ -59,3 +59,27 @@
   font-size: 12px;
   line-height: 1.6;
 }
+
+.empty-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  justify-content: center;
+  margin-top: 18px;
+}
+
+.empty-suggestions button {
+  min-height: 34px;
+  padding: 0 12px;
+  cursor: pointer;
+  color: #5e5975;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid #dcd8e8;
+  border-radius: 18px;
+  font-size: 10.5px;
+}
+
+.empty-suggestions button:hover {
+  background: white;
+  border-color: #aaa7cb;
+}

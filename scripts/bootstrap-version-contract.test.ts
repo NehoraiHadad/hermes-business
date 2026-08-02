@@ -8,6 +8,7 @@ describe('thin-bootstrap version contract', () => {
   const build = read('scripts/build-bootstrap.ps1')
   const bootstrap = read('installer/bootstrap.ps1')
   const nsis = read('installer/business-bootstrap.nsi')
+  const electronIpc = read('electron/ipc.cjs')
   const manifest = read('installer/lib/CompanionManifest.ps1')
   const semver = read('installer/lib/SemVer.ps1')
 
@@ -20,7 +21,18 @@ describe('thin-bootstrap version contract', () => {
 
   it('passes the exact build version into the packaged bootstrap', () => {
     expect(nsis).toContain('-BootstrapVersion "${PRODUCT_VERSION}"')
+    expect(electronIpc).toContain("'-BootstrapVersion', app.getVersion()")
     expect(bootstrap).toContain("$BootstrapVersion = [string](Get-Content -Raw")
+  })
+
+  it('ships the shared bootstrap library in the Electron resources', () => {
+    const resource = pkg.build.extraResources.find(
+      (entry: { to?: string }) => entry.to === 'business-bootstrap/lib'
+    )
+    expect(resource).toMatchObject({
+      from: 'installer/lib',
+      filter: expect.arrayContaining(['*.ps1', 'enable_plugin.py'])
+    })
   })
 
   it('accepts semver prereleases through one shared parser and derived range', () => {

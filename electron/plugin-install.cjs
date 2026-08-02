@@ -12,6 +12,7 @@ const {
 } = require('./paths.cjs')
 const { safeWrite } = require('./atomic-write.cjs')
 const { installCompanionBackend, stageBackendPayload } = require('./backend-install.cjs')
+const { stageBootstrapLibrary } = require('./bootstrap-stage.cjs')
 
 // Installs the bundled Desktop Plugin and its first-run bootstrap Skill into the
 // Hermes home, recording an integrity receipt. Also stages the payload for the
@@ -19,34 +20,41 @@ const { installCompanionBackend, stageBackendPayload } = require('./backend-inst
 // companion backend (dashboard/) install + config enable live in
 // backend-install.cjs so this file stays focused on the desktop-plugin contract.
 
-function stageBusinessBootstrap() {
-  const packagedRoot = path.join(process.resourcesPath, 'business-bootstrap')
-  const sourceRoot = app.isPackaged ? packagedRoot : path.join(__dirname, '..')
-  const sources = app.isPackaged
+function stageBusinessBootstrap(options = {}) {
+  const isPackaged = options.isPackaged ?? app.isPackaged
+  const resourcesPath = options.resourcesPath || process.resourcesPath
+  const tempPath = options.tempPath || app.getPath('temp')
+  const packagedRoot = path.join(resourcesPath, 'business-bootstrap')
+  const sourceRoot = isPackaged ? packagedRoot : path.join(__dirname, '..')
+  const sources = isPackaged
     ? {
         script: path.join(sourceRoot, 'bootstrap.ps1'),
         companionModule: path.join(sourceRoot, 'bootstrap-companion.ps1'),
         plugin: path.join(sourceRoot, 'plugin.js'),
-        skill: path.join(sourceRoot, 'business-bootstrap.SKILL.md')
+        skill: path.join(sourceRoot, 'business-bootstrap.SKILL.md'),
+        partnerSkill: path.join(sourceRoot, 'business-partner.SKILL.md')
       }
     : {
         script: path.join(sourceRoot, 'installer', 'bootstrap.ps1'),
         companionModule: companionBootstrapSource(),
         plugin: path.join(sourceRoot, 'hermes-plugin', 'business-shell', 'plugin.js'),
-        skill: path.join(sourceRoot, 'hermes-plugin', 'business-shell', 'skills', 'business-bootstrap', 'SKILL.md')
+        skill: path.join(sourceRoot, 'hermes-plugin', 'business-shell', 'skills', 'business-bootstrap', 'SKILL.md'),
+        partnerSkill: path.join(sourceRoot, 'hermes-plugin', 'business-partner', 'SKILL.md')
       }
   for (const [name, source] of Object.entries(sources)) {
     if (!fs.existsSync(source)) throw new Error(`The packaged ${name} payload is missing`)
   }
-  const stagingRoot = fs.mkdtempSync(path.join(app.getPath('temp'), 'hermes-business-bootstrap-'))
+  const stagingRoot = fs.mkdtempSync(path.join(tempPath, 'hermes-business-bootstrap-'))
   fs.copyFileSync(sources.script, path.join(stagingRoot, 'bootstrap.ps1'))
   fs.copyFileSync(sources.companionModule, path.join(stagingRoot, 'bootstrap-companion.ps1'))
   fs.copyFileSync(sources.plugin, path.join(stagingRoot, 'plugin.js'))
   fs.copyFileSync(sources.skill, path.join(stagingRoot, 'business-bootstrap.SKILL.md'))
-  stageWhatsappPolicyPayload(sourceRoot, stagingRoot, app.isPackaged)
+  fs.copyFileSync(sources.partnerSkill, path.join(stagingRoot, 'business-partner.SKILL.md'))
+  stageBootstrapLibrary(sourceRoot, stagingRoot, isPackaged)
+  stageWhatsappPolicyPayload(sourceRoot, stagingRoot, isPackaged)
   // The companion backend ships in the SAME staged payload so the bootstrap can
   // install desktop plugin + backend as one transaction (see BusinessInstall.ps1).
-  stageBackendPayload(sourceRoot, stagingRoot, app.isPackaged)
+  stageBackendPayload(sourceRoot, stagingRoot, isPackaged)
   return stagingRoot
 }
 
