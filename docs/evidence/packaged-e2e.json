@@ -4,11 +4,11 @@
   "status": "passed",
   "app_version": "0.4.0-alpha.1",
   "hermes_range": ">=0.19.0 <0.20.0",
-  "git_head": "e79519d03ebada2389381f08bc1abd8c81636cca",
+  "git_head": "ada8d25da8eb2c2c93baa677146e3b89b491a99d",
   "git_state": "committed",
   "subject_scheme": 3,
   "subject_fingerprint": "1a897d38e55b3eea1a10c4b3bba9e70a1d5d4c76dc4a9ef270d4346cf1cbb73c",
-  "captured_at": "2026-08-02T05:54:39.261Z",
+  "captured_at": "2026-08-02T06:06:59.359Z",
   "tool": "e2e-installed-isolated.mjs",
   "redacted": true,
   "summary": {
@@ -31,7 +31,7 @@
     "live_structural_additions": 0,
     "live_content_rewrites": 0,
     "live_unsafe_entries": 0,
-    "live_volatile_runtime_changes": 2,
+    "live_volatile_runtime_changes": 0,
     "temp_home_removed": true,
     "isolated_port_free": true,
     "no_residual": true

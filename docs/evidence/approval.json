@@ -4,11 +4,11 @@
   "status": "passed",
   "app_version": "0.4.0-alpha.1",
   "hermes_range": ">=0.19.0 <0.20.0",
-  "git_head": "e79519d03ebada2389381f08bc1abd8c81636cca",
+  "git_head": "ada8d25da8eb2c2c93baa677146e3b89b491a99d",
   "git_state": "working-tree",
   "subject_scheme": 3,
   "subject_fingerprint": "042e6f0027ba5653728d8253961330304f0a69e7f12cffc4dbc92e96da7a3d4f",
-  "captured_at": "2026-08-02T05:54:39.888Z",
+  "captured_at": "2026-08-02T06:07:00.020Z",
   "tool": "e2e-installed-isolated.mjs (real gateway approval.request/respond)",
   "redacted": true,
   "summary": {
