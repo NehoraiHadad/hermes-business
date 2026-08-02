@@ -7,6 +7,7 @@ import { ApprovalCard } from './ApprovalCard'
 import { ClarifyCard } from './ClarifyCard'
 import { ComposerAttachments } from './ComposerAttachments'
 import { MessageBubble } from './MessageBubble'
+import { buildConversationTimeline } from './conversation-timeline'
 import { useComposerAttachments } from './useComposerAttachments'
 
 export function ChatScreen({
@@ -34,6 +35,7 @@ export function ChatScreen({
   const { attachments, setAttachments, fileInput, pickAttachment, onBrowserFiles, removeAttachment } =
     useComposerAttachments(busy)
   const endRef = useRef<HTMLDivElement>(null)
+  const timeline = buildConversationTimeline(messages, activities)
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
@@ -79,10 +81,13 @@ export function ChatScreen({
               </div>
             </div>
           ) : null}
-          {messages.map(message => (
-            <MessageBubble key={message.id} message={message} />
-          ))}
-          <ActivityStrip activities={activities} />
+          {timeline.map(entry =>
+            entry.kind === 'message' ? (
+              <MessageBubble key={`message-${entry.id}`} message={entry.message} />
+            ) : (
+              <ActivityStrip key={`activity-${entry.id}`} activity={entry.activity} />
+            )
+          )}
           {approval ? <ApprovalCard approval={approval} onRespond={onApproval} /> : null}
           {clarify ? <ClarifyCard request={clarify} onRespond={onClarify} /> : null}
           <div ref={endRef} />

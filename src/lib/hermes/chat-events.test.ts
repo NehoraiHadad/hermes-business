@@ -125,7 +125,7 @@ describe('handleGatewayEvent', () => {
     h.emit({ type: 'status.update', session_id: 's1', payload: { text: 'מחפש...' } })
     const statuses = h.state.activities.filter(item => item.id.startsWith('status-'))
     expect(statuses).toHaveLength(1)
-    expect(statuses[0].label).toBe('מחפש...')
+    expect(statuses[0].label).toBe('מחפש')
   })
 
   it('raises an approval request with command and choices', () => {

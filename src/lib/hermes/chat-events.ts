@@ -4,6 +4,9 @@ import type { Activity, Approval, ChatMessage, ClarifyRequest, GatewayEvent } fr
 
 export const now = () => new Date().toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })
 
+let timelineOrder = 0
+export const nextTimelineOrder = () => ++timelineOrder
+
 export type ChatStreamSetters = {
   setBusy: Dispatch<SetStateAction<boolean>>
   setMessages: Dispatch<SetStateAction<ChatMessage[]>>
@@ -29,10 +32,17 @@ function appendAssistantDelta(messages: ChatMessage[], text: string): ChatMessag
   if (!text) return messages
   const index = lastStreamingAssistant(messages)
   if (index < 0) {
-    return [...messages, { id: `assistant-${Date.now()}`, role: 'assistant', text, streaming: true }]
+    return [
+      ...messages,
+      { id: `assistant-${Date.now()}`, role: 'assistant', text, streaming: true, timelineOrder: nextTimelineOrder() }
+    ]
   }
 
-  const updated = { ...messages[index], text: `${messages[index].text}${text}` }
+  const updated = {
+    ...messages[index],
+    text: `${messages[index].text}${text}`,
+    timelineOrder: messages[index].timelineOrder || nextTimelineOrder()
+  }
   if (index === messages.length - 1) {
     return messages.map((message, current) => (current === index ? updated : message))
   }
@@ -60,6 +70,7 @@ function completeAssistant(messages: ChatMessage[], text: string, responsePrevie
             id: `assistant-${Date.now()}`,
             role: 'assistant',
             text,
+            timelineOrder: nextTimelineOrder(),
             streaming: false,
             time: now()
           }
@@ -70,6 +81,7 @@ function completeAssistant(messages: ChatMessage[], text: string, responsePrevie
   const completed: ChatMessage = {
     ...messages[index],
     text: text || messages[index].text,
+    timelineOrder: messages[index].timelineOrder || nextTimelineOrder(),
     streaming: false,
     time: now()
   }
@@ -115,26 +127,44 @@ export function handleGatewayEvent(event: GatewayEvent, runtimeSession: string, 
     setMessages(current => completeAssistant(current, finalText, Boolean(payload.response_previewed)))
   }
   if (event.type === 'tool.start') {
-    const tool = String(payload.name || '')
+    const tool = String(payload.name || payload.tool_name || payload.tool || '')
     setActivities(current => [
       ...current,
-      { id: String(payload.tool_id || Date.now()), tool, label: humanizeTool(tool), status: 'running' }
+      {
+        id: String(payload.tool_id || Date.now()),
+        tool,
+        label: humanizeTool(tool, payload),
+        status: 'running',
+        timelineOrder: nextTimelineOrder()
+      }
     ])
   }
   if (event.type === 'tool.complete') {
     const id = String(payload.tool_id || '')
     setActivities(current =>
       current.map(item =>
-        item.id === id ? { ...item, status: 'done', detail: String(payload.summary || 'הושלם') } : item
+        item.id === id
+          ? {
+              ...item,
+              status: 'done',
+              detail: payload.summary ? String(payload.summary) : undefined
+            }
+          : item
       )
     )
   }
   if (event.type === 'status.update') {
-    const text = String(payload.text || '')
+    const text = String(payload.text || '').replace(/\.{3}|…/g, '').trim()
     if (text) {
       setActivities(current => [
         ...current.filter(item => !item.id.startsWith('status-')),
-        { id: `status-${Date.now()}`, tool: 'status', label: text, status: 'running' }
+        {
+          id: `status-${Date.now()}`,
+          tool: 'status',
+          label: text,
+          status: 'running',
+          timelineOrder: nextTimelineOrder()
+        }
       ])
     }
   }

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { hermesClient } from '../lib/hermes-client'
-import { handleGatewayEvent, now } from '../lib/hermes/chat-events'
+import { handleGatewayEvent, nextTimelineOrder, now } from '../lib/hermes/chat-events'
 import { stageAttachments, type PendingAttachment } from '../lib/hermes/attachments'
 import { startSkillSession } from '../lib/hermes/skill-session'
 import type { Activity, Approval, ChatMessage, ClarifyRequest, Screen, Session } from '../types'
@@ -90,7 +90,14 @@ export function useChat({ setScreen, setToast }: { setScreen: (screen: Screen) =
       const chips = attachments.map(item => ({ name: item.name, kind: item.kind }))
       setMessages(current => [
         ...current,
-        { id: userId, role: 'user', text, time: now(), attachments: chips.length ? chips : undefined }
+        {
+          id: userId,
+          role: 'user',
+          text,
+          timelineOrder: nextTimelineOrder(),
+          time: now(),
+          attachments: chips.length ? chips : undefined
+        }
       ])
       resetConversation()
       setBusy(true)
@@ -140,7 +147,7 @@ export function useChat({ setScreen, setToast }: { setScreen: (screen: Screen) =
           if (message.role !== 'assistant' || !message.streaming) return [message]
           return message.text.trim() ? [{ ...message, streaming: false, time: message.time || now() }] : []
         }),
-        { id: userId, role: 'user', text: answer, time: now() },
+        { id: userId, role: 'user', text: answer, timelineOrder: nextTimelineOrder(), time: now() },
         { id: assistantId, role: 'assistant', text: '', streaming: true }
       ])
       setClarify(null)
@@ -168,7 +175,15 @@ export function useChat({ setScreen, setToast }: { setScreen: (screen: Screen) =
             setScreen('chat')
             setRuntimeSession(created.session_id)
             setActiveSession(created.stored_session_id)
-            setMessages([{ id: `seed-${Date.now()}`, role: 'user', text: userMessage }])
+            setMessages([
+              {
+                id: `seed-${Date.now()}`,
+                role: 'user',
+                text: userMessage,
+                timelineOrder: nextTimelineOrder()
+              }
+            ])
+            resetConversation()
           }
         })
       } catch (error) {

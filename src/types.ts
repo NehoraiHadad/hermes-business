@@ -15,6 +15,7 @@ export type ChatMessage = {
   id: string
   role: 'assistant' | 'user'
   text: string
+  timelineOrder?: number
   time?: string
   streaming?: boolean
   attachments?: ChatAttachmentInfo[]
@@ -25,6 +26,7 @@ export type Activity = {
   tool: string
   label: string
   status: 'running' | 'done'
+  timelineOrder: number
   detail?: string
 }
 

@@ -3,9 +3,13 @@ import { approvalCopy, humanizeTool, redactDiagnosticText } from './presentation
 
 describe('business presentation mapping', () => {
   it('turns internal tool names into plain-language activity', () => {
-    expect(humanizeTool('google_calendar.list_events')).toBe('בודק את היומן…')
-    expect(humanizeTool('gmail.send_message')).toBe('עובר על המייל…')
-    expect(humanizeTool('unknown_internal_tool')).toBe('מתקדם במשימה…')
+    expect(humanizeTool('google_calendar.list_events')).toBe('בודק אירועים ביומן')
+    expect(humanizeTool('gmail.send_message')).toBe('שולח אימייל')
+    expect(humanizeTool('google_workspace.gmail_search')).toBe('מחפש הודעות ב־Gmail')
+    expect(humanizeTool('terminal', { arguments: { command: 'npm test' } })).toBe('מריץ בדיקות')
+    expect(humanizeTool('terminal', { arguments: { command: 'rg -n TODO src' } })).toBe('מחפש בקבצי המחשב')
+    expect(humanizeTool('terminal', { arguments: '{"command":"git status"}' })).toBe('בודק את שינויי הקוד')
+    expect(humanizeTool('unknown_internal_tool')).toBe('מפעיל כלי: unknown internal tool')
   })
 
   it('frames approvals around user intent', () => {
