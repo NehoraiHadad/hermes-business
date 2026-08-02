@@ -17,7 +17,8 @@ import {
   reduceSharedState,
   reduceIsolatedPackaged,
   reduceIsolatedApproval,
-  reduceThinInstaller
+  reduceThinInstaller,
+  reduceTelegram
 } from './lib/evidence-reducers.mjs'
 import { hasManualBindingOverride } from './lib/release/evidence-capture.mjs'
 import { parseJsonInput } from './lib/json-input.mjs'
@@ -48,6 +49,16 @@ if (category === 'shared-state') {
 } else if (category === 'thin-installer') {
   const summary = reduceThinInstaller(raw)
   envelope = buildEnvelope('thin-installer', summary, { tool: 'e2e-thin-network-installer.ps1', status: summary.all_cases_green ? 'passed' : 'blocked', capturedAt: nowIso })
+} else if (category === 'telegram') {
+  const summary = reduceTelegram(raw)
+  const passed = summary.runtime_state === 'connected' &&
+    summary.gateway_running && summary.diagnosis.inbound_reached_hermes &&
+    summary.roundtrip.outbound_delivered
+  envelope = buildEnvelope('telegram', summary, {
+    tool: 'manual-live-probe:hermes-native-gateway (redacted reduction)',
+    status: passed ? 'passed' : 'blocked',
+    capturedAt: nowIso
+  })
 } else if (category === 'approval') {
   // Prefer the real isolated-runtime denial probe when its raw is supplied; the
   // wiring facts (the companion wrapper delegates to the official approval.respond
