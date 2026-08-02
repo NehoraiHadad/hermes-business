@@ -2,9 +2,10 @@ const { spawn } = require('node:child_process')
 const fs = require('node:fs')
 const path = require('node:path')
 
-function launchDetached(command, args, spawnProcess = spawn) {
+function launchDetached(command, args, home, spawnProcess = spawn) {
   const child = spawnProcess(command, args, {
     detached: true,
+    env: { ...process.env, HERMES_HOME: home },
     stdio: 'ignore',
     windowsHide: true
   })
@@ -23,13 +24,13 @@ async function openFullSurface(surface, { command, home, shell, spawnProcess = s
 
   if (!command) throw new Error('Hermes is not installed')
   if (surface === 'desktop') {
-    launchDetached(command, ['desktop'], spawnProcess)
+    launchDetached(command, ['desktop'], home, spawnProcess)
     return { ok: true }
   }
   if (surface === 'dashboard' || surface === 'settings') {
     // Port 9119 belongs to the companion's headless API runtime. Let the real
     // dashboard choose a free port, then open its own authenticated browser UI.
-    launchDetached(command, ['dashboard', '--port', '0'], spawnProcess)
+    launchDetached(command, ['dashboard', '--port', '0'], home, spawnProcess)
     return { ok: true }
   }
   throw new Error(`Unknown Hermes surface: ${surface}`)

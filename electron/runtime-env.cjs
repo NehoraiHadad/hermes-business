@@ -1,13 +1,16 @@
 const { writeRootEnv } = require('./partner-settings.cjs')
 const { childEnvForOverride } = require('./qa-runtime.cjs')
+const { hermesHome } = require('./paths.cjs')
 
-// Assemble the child gateway's environment. Production adds only the session
-// token and the desktop flag (plus the write-guard safe root when that tier is
-// active). Under the QA-isolated contract it also overlays the throwaway
-// HERMES_HOME + hard-disabled channels/telemetry from childEnvForOverride.
+// Assemble the child gateway's environment. Production pins HERMES_HOME to the
+// same resolved profile used by Electron-side setup/status checks; otherwise
+// skill scripts launched by the agent fall back to ~/.hermes while the UI reads
+// %LOCALAPPDATA%/hermes and a real Google connection appears missing. Under the
+// QA-isolated contract the throwaway home overlay remains authoritative.
 function buildChildEnv({ sessionToken, override }) {
   const env = {
     ...process.env,
+    HERMES_HOME: hermesHome(),
     HERMES_DASHBOARD_SESSION_TOKEN: sessionToken,
     HERMES_DESKTOP: '1',
     ...(override.enabled ? childEnvForOverride(override) : {})

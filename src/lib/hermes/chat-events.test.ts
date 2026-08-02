@@ -58,6 +58,58 @@ describe('handleGatewayEvent', () => {
     expect(h.state.messages[0].time).toBeTruthy()
   })
 
+  it('keeps streaming after a clarification answer is inserted into the same turn', () => {
+    const h = harness('s1')
+    h.emit({ type: 'message.start', session_id: 's1', payload: {} })
+    h.state.messages.push({ id: 'clarify-answer', role: 'user', text: 'Gmail / Google Workspace' })
+
+    h.emit({ type: 'message.delta', session_id: 's1', payload: { text: 'כדי לחבר את Gmail' } })
+    h.emit({ type: 'message.complete', session_id: 's1', payload: { text: 'כדי לחבר את Gmail צריך...' } })
+
+    expect(h.state.messages.map(message => message.role)).toEqual(['user', 'assistant'])
+    expect(h.state.messages[1]).toMatchObject({
+      role: 'assistant',
+      streaming: false,
+      text: 'כדי לחבר את Gmail צריך...'
+    })
+  })
+
+  it('creates the final assistant bubble when message.start was missed', () => {
+    const h = harness('s1')
+    h.state.messages.push({ id: 'user', role: 'user', text: 'שלום' })
+
+    h.emit({ type: 'message.complete', session_id: 's1', payload: { text: 'היי!' } })
+
+    expect(h.state.messages[1]).toMatchObject({ role: 'assistant', text: 'היי!', streaming: false })
+    expect(h.state.busy).toBe(false)
+  })
+
+  it('seals interim assistant text and continues the turn in a fresh bubble', () => {
+    const h = harness('s1')
+    h.emit({ type: 'message.start', session_id: 's1', payload: {} })
+    h.emit({ type: 'message.delta', session_id: 's1', payload: { text: 'אני בודק.' } })
+    h.emit({ type: 'message.interim', session_id: 's1', payload: { text: 'אני בודק.', already_streamed: true } })
+    h.emit({ type: 'message.complete', session_id: 's1', payload: { text: 'מצאתי תשובה.' } })
+
+    expect(h.state.messages).toHaveLength(2)
+    expect(h.state.messages[0]).toMatchObject({ text: 'אני בודק.', streaming: false })
+    expect(h.state.messages[1]).toMatchObject({ text: 'מצאתי תשובה.', streaming: false })
+  })
+
+  it('does not duplicate an interim response that message.complete marks as previewed', () => {
+    const h = harness('s1')
+    h.emit({ type: 'message.start', session_id: 's1', payload: {} })
+    h.emit({ type: 'message.interim', session_id: 's1', payload: { text: 'אותה תשובה' } })
+    h.emit({
+      type: 'message.complete',
+      session_id: 's1',
+      payload: { text: 'אותה תשובה', response_previewed: true }
+    })
+
+    expect(h.state.messages).toHaveLength(1)
+    expect(h.state.messages[0]).toMatchObject({ text: 'אותה תשובה', streaming: false })
+  })
+
   it('tracks tool.start and resolves it on tool.complete', () => {
     const h = harness('s1')
     h.emit({ type: 'tool.start', session_id: 's1', payload: { tool_id: 't1', name: 'gmail_search' } })

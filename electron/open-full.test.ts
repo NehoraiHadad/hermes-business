@@ -26,7 +26,23 @@ describe('openFullSurface', () => {
     expect(deps.spawnProcess).toHaveBeenCalledWith(
       'hermes.exe',
       ['dashboard', '--port', '0'],
-      { detached: true, stdio: 'ignore', windowsHide: true }
+      {
+        detached: true,
+        env: { ...process.env, HERMES_HOME: deps.home },
+        stdio: 'ignore',
+        windowsHide: true
+      }
+    )
+    expect(deps.unref).toHaveBeenCalledOnce()
+  })
+
+  it('launches Hermes Desktop against the same home as the companion', async () => {
+    const deps = dependencies()
+    await expect(openFullSurface('desktop', { command: 'hermes.exe', ...deps })).resolves.toEqual({ ok: true })
+    expect(deps.spawnProcess).toHaveBeenCalledWith(
+      'hermes.exe',
+      ['desktop'],
+      expect.objectContaining({ env: expect.objectContaining({ HERMES_HOME: deps.home }) })
     )
     expect(deps.unref).toHaveBeenCalledOnce()
   })

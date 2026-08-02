@@ -127,11 +127,33 @@ export function useChat({ setScreen, setToast }: { setScreen: (screen: Screen) =
   const respondClarify = useCallback(
     async (answer: string) => {
       if (!clarify) return
-      await hermesClient.respondClarify(clarify.requestId, answer)
-      setMessages(current => [...current, { id: `clarify-${Date.now()}`, role: 'user', text: answer, time: now() }])
+      const pending = clarify
+      const stamp = Date.now()
+      const userId = `clarify-${stamp}`
+      const assistantId = `assistant-clarify-${stamp}`
+
+      // Hermes keeps this same turn alive while clarify blocks. Re-anchor the
+      // streaming bubble after the user's answer before releasing the gateway,
+      // so the continuation cannot land behind the newly appended user row.
+      setMessages(current => [
+        ...current.flatMap(message => {
+          if (message.role !== 'assistant' || !message.streaming) return [message]
+          return message.text.trim() ? [{ ...message, streaming: false, time: message.time || now() }] : []
+        }),
+        { id: userId, role: 'user', text: answer, time: now() },
+        { id: assistantId, role: 'assistant', text: '', streaming: true }
+      ])
       setClarify(null)
+      setBusy(true)
+      try {
+        await hermesClient.respondClarify(pending.requestId, answer)
+      } catch (error) {
+        setMessages(current => current.filter(message => message.id !== userId && message.id !== assistantId))
+        setClarify(pending)
+        setToast(error instanceof Error ? error.message : 'שליחת התשובה ל־Hermes נכשלה')
+      }
     },
-    [clarify]
+    [clarify, setToast]
   )
 
   // Seed a new conversation by resolving the requested Skill through Hermes'
