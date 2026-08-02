@@ -7,7 +7,8 @@ const {
   findHermes,
   whatsappPolicyPluginSource,
   WHATSAPP_POLICY_PLUGIN_ID,
-  WHATSAPP_POLICY_PLUGIN_FILES
+  WHATSAPP_POLICY_PLUGIN_FILES,
+  WHATSAPP_POLICY_PLUGIN_OBSOLETE_FILES
 } = require('./paths.cjs')
 
 // Installs the fail-closed WhatsApp reply-policy plugin as a real Hermes user
@@ -30,6 +31,9 @@ function copyPluginFiles(sourceDir, targetDir) {
     const content = fs.readFileSync(source)
     hash.update(name).update(content)
     fs.writeFileSync(path.join(targetDir, name), content, { mode: 0o600 })
+  }
+  for (const name of WHATSAPP_POLICY_PLUGIN_OBSOLETE_FILES) {
+    fs.rmSync(path.join(targetDir, name), { force: true })
   }
   return `sha256-${hash.digest('base64')}`
 }

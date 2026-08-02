@@ -283,8 +283,10 @@ authenticated=false
 
 ### Telegram
 
-Telegram הוא Messaging Platform רשמי. ה־POC משתמש ב־API הרשמי להגדרה,
-restart ו־test, ומסמן “מחובר” רק לאחר תשובת test תקינה.
+Telegram הוא Messaging Platform רשמי. המוצר משתמש רק ב־API הרשמי של Hermes
+להגדרה, restart ו־test, ומסמן “מחובר” רק לאחר תשובת test תקינה. המעטפת מעבירה
+ל־Hermes את ה־Bot Token ואת מזהה המשתמש; אין לה מנגנון הרשאה, allowlist, מצב
+קריאה־בלבד או transport מקביל ל־Telegram. Hermes הוא הבעלים היחיד של החיבור.
 
 הכיסוי האוטומטי ל־Telegram (`scripts/lib/probes/installed/connections.mjs`)
 מאמת את כרטיס ה־Telegram מול `/api/messaging/platforms` ופותח/סוגר את דיאלוג
@@ -294,15 +296,15 @@ restart ו־test, ומסמן “מחובר” רק לאחר תשובת test תק
 מכוונת של ה־Gateway פעולת החיבור מהמעטפת הפעילה אותו מחדש, שמרה את ההגדרה
 והעבירה test תקין.
 
-כעת קיימת גם ראיה מכונתית מצומצמת ומעורפלת (`docs/evidence/telegram.json`, נאכפת
-ב־`npm run verify:evidence`) המתעדת אבחון חי: ה־polling של Telegram תקין, ה־bot
-token תקף, ו־Hermes הוא ה־poller היחיד ללא webhook מתחרה. הודעה נכנסת היסטורית
-אכן הגיעה ל־Hermes ונחסמה משום שהשולח לא היה מורשה באותה עת; ה־allowlist הנוכחי,
-כפי שהוא טעון ב־Gateway הפעיל, מאשר אותו — בלי שינוי בהגדרה או ב־env. הודעת
-בדיקת־חיבור אחת ובלבד יצאה לערוץ ה־home דרך שליחת Hermes הרשמית ואומתה, בלי לגעת
-בצ׳אטים אחרים. סבב טרי ומלא של הודעה מהמשתמש → סוכן → תשובה לאחר ההרשאה נותר הצעד
-הידני האחרון ואינו משוחזר על ידי בדיקה אוטומטית עצמאית. ה־Bot Token אינו מתועד
-ואינו נכלל בחבילת האבחון.
+בבדיקה החיה Gateway רשמי של Hermes התחבר ב־polling, קיבל הודעות משני המשתמשים
+שהוגדרו ב־`TELEGRAM_ALLOWED_USERS`, העביר כל הודעה לסוכן ושלח את תשובת הסוכן
+בחזרה. לוגי Hermes הראו `inbound → response ready → sending response` עבור שני
+הסבבים. גם שליחת connectivity test דרך `hermes send --to telegram` הצליחה.
+ה־Bot Token אינו מתועד ואינו נכלל בחבילת האבחון.
+
+ה־plugin המקומי `business-whatsapp-policy` שולט רק ב־WhatsApp. בדיקות החוזה
+מוודאות ש־Telegram אינו משפחה נשלטת ושגם נתיב `_send_telegram` של Hermes נשאר
+ללא wrapper. כך אין שתי שכבות הרשאה שעלולות לסתור זו את זו.
 
 ### WhatsApp
 

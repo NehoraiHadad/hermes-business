@@ -5,7 +5,7 @@ This is the SINGLE guard engine — it is never duplicated per platform. A guard
 outbound method runs only when the family's reply policy positively authorizes
 the resolved chat target; otherwise it returns a family-appropriate blocked
 result. Each family binds this engine with its own policy loader / normalizer
-through a thin wrapper (see ``guards.py`` and ``telegram_transport.py``).
+through a thin wrapper (see ``guards.py`` and ``transport.py``).
 """
 
 from __future__ import annotations

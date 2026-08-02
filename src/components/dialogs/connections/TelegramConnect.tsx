@@ -1,11 +1,8 @@
 import { LoaderCircle, Send } from 'lucide-react'
 import { useState } from 'react'
 import { hermesClient } from '../../../lib/hermes-client'
-import { connectTelegramWithPolicy } from '../../../lib/telegram-connect'
-import type { TelegramPolicy } from '../../../lib/telegram-policy'
 import type { Connection } from '../../../types'
 import { Modal } from '../../ui/Modal'
-import { TelegramPolicyForm } from './TelegramPolicyForm'
 
 // Telegram uses the built-in Hermes gateway — token + user id, no MCP.
 export function TelegramConnect({
@@ -21,20 +18,11 @@ export function TelegramConnect({
   const [userId, setUserId] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const [explicitPolicy, setExplicitPolicy] = useState<TelegramPolicy | null | undefined>(undefined)
-
   const connect = async () => {
     setSaving(true)
     setError('')
     try {
-      await connectTelegramWithPolicy({
-        token,
-        userId,
-        explicitPolicy,
-        demo: hermesClient.demo,
-        bridge: window.hermesDesktop,
-        connect: (nextToken, nextUserId) => hermesClient.connectTelegram(nextToken, nextUserId)
-      })
+      await hermesClient.connectTelegram(token, userId)
       onConnected(connection.id)
       onClose()
     } catch (caught) {
@@ -58,7 +46,6 @@ export function TelegramConnect({
           <p>הדבק כאן את ה־token שקיבלת ואת מזהה המשתמש שלך.</p>
         </div>
       </div>
-      <TelegramPolicyForm ownerId={userId} onExplicitPolicy={setExplicitPolicy} />
       <div className="modal-form">
         <label>
           <span>Bot token</span>
@@ -73,7 +60,7 @@ export function TelegramConnect({
           <button className="ghost-button" onClick={onClose}>
             ביטול
           </button>
-          <button className="primary-button" disabled={!token || !userId || saving || explicitPolicy === null} onClick={connect}>
+          <button className="primary-button" disabled={!token || !userId || saving} onClick={connect}>
             {saving ? <LoaderCircle className="spin" size={16} /> : <Send size={16} />} חבר Telegram
           </button>
         </div>

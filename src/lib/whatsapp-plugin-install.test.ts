@@ -14,6 +14,7 @@ type PathsModule = {
   whatsappPolicyPluginSource: () => string
   WHATSAPP_POLICY_PLUGIN_ID: string
   WHATSAPP_POLICY_PLUGIN_FILES: string[]
+  WHATSAPP_POLICY_PLUGIN_OBSOLETE_FILES: string[]
 }
 
 const install = require('../../electron/whatsapp-plugin-install.cjs') as InstallModule
@@ -62,6 +63,19 @@ describe('installWhatsappPolicyPlugin', () => {
     )
     const receipt = JSON.parse(readFileSync(path.join(target, 'install-receipt.json'), 'utf8'))
     expect(receipt).toMatchObject({ id: 'business-whatsapp-policy', enabled: true })
+  })
+
+  it('prunes obsolete Telegram guard modules from an existing install', () => {
+    const target = path.join(home, 'plugins', paths.WHATSAPP_POLICY_PLUGIN_ID)
+    const stale = path.join(target, paths.WHATSAPP_POLICY_PLUGIN_OBSOLETE_FILES[0])
+    require('node:fs').mkdirSync(target, { recursive: true })
+    require('node:fs').writeFileSync(stale, 'stale')
+    install.installWhatsappPolicyPlugin({
+      home,
+      hermesCommand: 'hermes',
+      runner: () => ({ status: 0, stdout: '', stderr: '' })
+    })
+    expect(existsSync(stale)).toBe(false)
   })
 
   it('re-checks enablement even when the payload receipt is unchanged', () => {
@@ -121,6 +135,7 @@ describe('installer packaging references the policy plugin', () => {
     for (const file of paths.WHATSAPP_POLICY_PLUGIN_FILES) {
       expect(payload, `BusinessInstall.ps1 missing ${file}`).toContain(`'${file}'`)
     }
+    expect(payload).toContain("Remove-Item -LiteralPath $obsoletePath -Force")
   })
 
   it('the NSI web installer bundles the plugin payload', () => {

@@ -3,8 +3,8 @@
 Proves the shapes this plugin's fix binds to still hold in the installed Hermes,
 so the guard cannot silently become a no-op:
 
-  * ``tools.send_message_tool._send_to_platform`` / ``_send_telegram`` still
-    expose the parameters the transport guard reads (``platform`` / ``chat_id``).
+  * ``tools.send_message_tool._send_to_platform`` still exposes the parameters
+    the WhatsApp transport guard reads (``platform`` / ``chat_id``).
   * ``hermes_cli.plugins.get_pre_tool_call_block_message`` still honors the
     ``{"action": "block", "message": <non-empty str>}`` shape and ignores a
     malformed return (fail-closed on drift — a well-formed block is the only
@@ -27,7 +27,6 @@ out = {"errors": {}}
 try:
     smt = importlib.import_module("tools.send_message_tool")
     out["send_to_platform_params"] = list(inspect.signature(smt._send_to_platform).parameters)
-    out["send_telegram_params"] = list(inspect.signature(smt._send_telegram).parameters)
 except Exception as e:
     out["errors"]["engine"] = repr(e)
 try:
@@ -41,9 +40,9 @@ try:
     if resolver is not None:
         mgr = plugins.get_plugin_manager()
         mgr._hooks["pre_tool_call"] = [lambda **kw: {"action": "block", "message": "BUSINESS_BLOCK"}]
-        out["block_result"] = resolver("send_message", {"target": "telegram:1", "message": "x"})
+        out["block_result"] = resolver("send_message", {"target": "whatsapp:1", "message": "x"})
         mgr._hooks["pre_tool_call"] = [lambda **kw: {"nope": "bar"}]
-        out["malformed_result"] = resolver("send_message", {"target": "telegram:1"})
+        out["malformed_result"] = resolver("send_message", {"target": "whatsapp:1"})
         mgr._hooks["pre_tool_call"] = []
 except Exception as e:
     out["errors"]["resolver"] = repr(e)
@@ -85,8 +84,7 @@ class ToolContract(unittest.TestCase):
         if engine_err:
             self.fail(f"send_message engine import failed: {engine_err}")
         for func, params in TRANSPORT_TARGETS.items():
-            key = "send_to_platform_params" if func == "_send_to_platform" else "send_telegram_params"
-            present = set(self.data.get(key, []))
+            present = set(self.data.get("send_to_platform_params", []))
             missing = set(params) - present
             self.assertEqual(missing, set(), f"{func} lost params {missing}; re-verify guard")
 

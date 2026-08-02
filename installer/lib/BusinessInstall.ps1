@@ -26,7 +26,7 @@ function Install-BusinessPayload {
   $policyPresent = Test-Path -LiteralPath $policySource -PathType Container
   if ($policyPresent) {
     $policyTargetDir = Join-Path $HermesHome 'plugins\business-whatsapp-policy'
-    foreach ($name in @('__init__.py', 'policy.py', 'ingest.py', 'contract.py', 'surface.py', 'guards.py', 'transport.py', 'registry.py', 'guard_core.py', 'surface_core.py', 'dispatch.py', 'telegram_policy.py', 'telegram_contract.py', 'telegram_surface.py', 'telegram_transport.py', 'telegram_registry.py', 'families.py', 'egress.py', 'tool_hook.py', 'tool_transport.py', 'tool_contract.py', 'guard_status.py', 'plugin.yaml')) {
+    foreach ($name in @('__init__.py', 'policy.py', 'ingest.py', 'contract.py', 'surface.py', 'guards.py', 'transport.py', 'registry.py', 'guard_core.py', 'surface_core.py', 'dispatch.py', 'families.py', 'egress.py', 'tool_hook.py', 'tool_transport.py', 'tool_contract.py', 'guard_status.py', 'plugin.yaml')) {
       $files += @{ Source = (Join-Path $policySource $name); Target = (Join-Path $policyTargetDir $name) }
     }
   }
@@ -92,6 +92,17 @@ function Install-BusinessPayload {
     -ReceiptTarget (Join-Path $pluginDirectory 'install-receipt.json') `
     -Activate $activate `
     -ReceiptExtra $receiptExtra | Out-Null
+
+  # Version 0.2 delegates Telegram entirely to Hermes. Prune only the exact
+  # retired modules after the replacement payload committed successfully.
+  if ($policyPresent) {
+    foreach ($obsolete in @('telegram_policy.py', 'telegram_contract.py', 'telegram_surface.py', 'telegram_transport.py', 'telegram_registry.py')) {
+      $obsoletePath = Join-Path $policyTargetDir $obsolete
+      if (Test-Path -LiteralPath $obsoletePath -PathType Leaf) {
+        Remove-Item -LiteralPath $obsoletePath -Force
+      }
+    }
+  }
 }
 
 function Ensure-Gateway {

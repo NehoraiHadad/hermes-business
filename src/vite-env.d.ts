@@ -66,9 +66,6 @@ declare global {
     recordProviderEvidence: (
       evidence: import('./lib/provider-validation').ProviderValidation
     ) => Promise<import('./lib/provider-validation').ProviderValidation | null>
-    getTelegramPolicy: () => Promise<TelegramPolicy>
-    setTelegramPolicy: (policy: TelegramPolicy) => Promise<TelegramPolicy>
-    ensureTelegramPolicy: () => Promise<{ ok: boolean; enabled: boolean }>
     createDiagnostics: () => Promise<{ ok: boolean; canceled?: boolean; path?: string }>
     getRecentLogs: () => Promise<{ lines: string[] }>
     getVersions: () => Promise<Record<string, string>>
@@ -91,11 +88,6 @@ declare global {
     reply_chats: string[]
   }
 
-  type TelegramPolicy = {
-    version: 1
-    mode: 'full_access' | 'read_only' | 'selected_chats'
-    reply_chats: string[]
-  }
 
   type PartnerMode = 'normal' | 'partner'
   type SandboxTier = 'off' | 'guard' | 'docker'

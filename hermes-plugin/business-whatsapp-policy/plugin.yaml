@@ -1,6 +1,6 @@
 name: business-whatsapp-policy
-version: 0.1.0
-description: "Fail-closed business messaging reply policy (WhatsApp + Telegram: read-only, selected-chat, and Telegram full-access) for the business shell. Id kept as business-whatsapp-policy for install/migration compatibility."
+version: 0.2.0
+description: "Fail-closed WhatsApp read-only and selected-chat policy for the business shell. Telegram remains entirely native to Hermes."
 author: העוזר לעסק (Alpha)
 hooks:
   - pre_gateway_dispatch

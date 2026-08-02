@@ -24,14 +24,10 @@ MVP/Alpha מקומי ל־Windows (מוכן לפיילוט, אך עדיין לא 
 - Streaming, Stop, קבצים מצורפים ופעילות כלי בשפה פשוטה.
 - אישורים דרך `approval.request` / `approval.respond`, כולל דחייה שנבדקה בפועל.
 - Google Workspace דרך ה־Skill הרשמי של Hermes.
-- Telegram דרך Messaging API הרשמי של Hermes. הבדיקה האוטומטית מאמתת את כרטיס
-  ה־Telegram מול `/api/messaging/platforms` ואת דיאלוג החיבור, וראיה מכונתית
-  מצומצמת ומעורפלת (`docs/evidence/telegram.json`, נאכפת ב־`npm run verify:evidence`)
-  מתעדת ש־polling של Telegram תקין, ה־bot token תקף, ו־Hermes הוא המאזין היחיד
-  ללא webhook מתחרה. הודעה נכנסת היסטורית אכן הגיעה ל־Hermes ונחסמה משום שהשולח
-  לא היה מורשה באותה עת; ה־allowlist הנוכחי מאשר אותו. הודעת בדיקת־חיבור אחת בלבד
-  יצאה ואומתה דרך שליחת Hermes הרשמית. סבב טרי של הודעה מהמשתמש → סוכן → תשובה
-  לאחר ההרשאה נותר צעד ידני אחרון ואינו משוחזר בבדיקה אוטומטית עצמאית.
+- Telegram דרך Messaging API הרשמי של Hermes בלבד. המעטפת מגדירה Token ומזהה
+  משתמש; Hermes הוא הבעלים היחיד של allowlist, polling, dispatch ושליחה. סבבי
+  הודעה → סוכן → תשובה חיים הצליחו לשני המשתמשים המורשים, וכן connectivity test
+  דרך `hermes send`. אין מדיניות Telegram או transport מקביל במעטפת.
 - WhatsApp בשני המסלולים בשקיפות: Meta Cloud הרשמי כברירת המחדל העסקית,
   ו־WhatsApp Web/QR של Hermes כחלופה לא־רשמית.
 - מדיניות מענה fail-closed ל־WhatsApp (קריאה־בלבד או צ׳אטים נבחרים), נאכפת ב־plugin

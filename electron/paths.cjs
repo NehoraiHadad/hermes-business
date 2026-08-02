@@ -111,11 +111,6 @@ const WHATSAPP_POLICY_PLUGIN_FILES = Object.freeze([
   'guard_core.py',
   'surface_core.py',
   'dispatch.py',
-  'telegram_policy.py',
-  'telegram_contract.py',
-  'telegram_surface.py',
-  'telegram_transport.py',
-  'telegram_registry.py',
   'families.py',
   'egress.py',
   'tool_hook.py',
@@ -123,6 +118,13 @@ const WHATSAPP_POLICY_PLUGIN_FILES = Object.freeze([
   'tool_contract.py',
   'guard_status.py',
   'plugin.yaml'
+])
+const WHATSAPP_POLICY_PLUGIN_OBSOLETE_FILES = Object.freeze([
+  'telegram_policy.py',
+  'telegram_contract.py',
+  'telegram_surface.py',
+  'telegram_transport.py',
+  'telegram_registry.py'
 ])
 
 function whatsappPolicyPluginSource() {
@@ -140,5 +142,6 @@ module.exports = {
   companionBootstrapSource,
   whatsappPolicyPluginSource,
   WHATSAPP_POLICY_PLUGIN_ID,
-  WHATSAPP_POLICY_PLUGIN_FILES
+  WHATSAPP_POLICY_PLUGIN_FILES,
+  WHATSAPP_POLICY_PLUGIN_OBSOLETE_FILES
 }

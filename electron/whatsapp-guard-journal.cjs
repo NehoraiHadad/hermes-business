@@ -6,7 +6,7 @@ const {
   installedPluginVersion
 } = require('./whatsapp-guard.cjs')
 
-// Durable, observable record of the WhatsApp/Telegram guard ACTIVATION transaction: when a
+// Durable, observable record of the WhatsApp guard ACTIVATION transaction: when a
 // plugin update forces a gateway restart, this journal captures each phase so the UI can
 // render a truthful state and a crash-interrupted restart can be recovered on next launch.
 //

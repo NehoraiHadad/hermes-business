@@ -1,22 +1,13 @@
-"""Fail-closed guard for Hermes' ``send_message`` transport engine — the fix for
-the confirmed Telegram egress bypass.
+"""Fail-closed WhatsApp guard for Hermes' shared messaging transport.
 
-The bypass: ``tools.send_message_tool._send_telegram`` builds a raw
-``telegram.Bot(token=...)`` and sends, below the guarded platform adapter /
-``standalone_sender_fn``. cron, the ``hermes send`` CLI, and the MCP
-``messages_send`` tool all reach this engine via *call-time* imports, so
-re-binding the two shared chokepoints in place guards all of them:
-``_send_to_platform`` (family-agnostic; cron imports it directly) and
-``_send_telegram`` (direct-Bot path). Both consult :mod:`.egress`; a blocked send
-returns the engine's own ``{"error": ...}`` shape.
+Hermes cron, CLI and MCP sending paths converge on ``_send_to_platform``. The
+wrapper resolves the destination at call time and applies policy only when the
+platform is WhatsApp. Telegram and every other Hermes-managed platform pass
+through untouched.
 
-Fail-closed contract (:func:`install_tool_guards`): the engine must import and
-BOTH chokepoints be present, async, and carry their required destination params,
-else a :class:`ToolTransportContractError` is raised. Targets are validated before
-any mutation, then bound atomically with rollback, so a partial bind never leaves
-one path deceptively enabled; idempotent re-install succeeds only when the
-wrappers are OURS and still carry the required signature metadata. :func:`register`
-turns that error into a disabled Telegram/WhatsApp family, never an unguarded one.
+The transport contract is validated before mutation and binding is atomic with
+rollback. If the verified Hermes surface drifts, registration disables the
+controlled WhatsApp family instead of pretending enforcement is active.
 """
 
 from __future__ import annotations
@@ -51,12 +42,6 @@ def _resolve_platform(bound: dict, args: tuple) -> tuple:
     return bound.get("platform", args[0] if args else None), bound.get("chat_id")
 
 
-def _resolve_telegram(bound: dict, args: tuple) -> tuple:
-    # _send_telegram(token, chat_id, message, ...): chat_id is 2nd positional; the
-    # family is always "telegram" (the raw-Bot direct path).
-    return "telegram", bound.get("chat_id", args[1] if len(args) > 1 else None)
-
-
 def _make_guard(original: Callable, home_getter: Callable[[], Any], resolve: Callable) -> Callable:
     """Wrap an async chokepoint so a controlled-family send the policy denies
     returns the engine's own ``{"error": ...}`` shape instead of egressing."""
@@ -77,7 +62,6 @@ def _make_guard(original: Callable, home_getter: Callable[[], Any], resolve: Cal
 
 _FACTORIES = {
     "_send_to_platform": lambda o, h: _make_guard(o, h, _resolve_platform),
-    "_send_telegram": lambda o, h: _make_guard(o, h, _resolve_telegram),
 }
 
 

@@ -1,4 +1,4 @@
-"""Pure-stdlib fakes for the WhatsApp/Telegram policy plugin tests.
+"""Pure-stdlib fakes for the WhatsApp policy plugin tests.
 
 Stand-ins for the gateway objects the plugin talks to (store, adapters,
 platform registry). Kept in their own module so tests/support.py stays a thin

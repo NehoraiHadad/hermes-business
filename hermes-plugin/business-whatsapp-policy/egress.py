@@ -5,8 +5,8 @@ the platform is not a business-controlled family OR the family policy permits th
 destination — or a human-readable block reason (deny).
 
 Fail-closed: any error resolving the policy for a controlled family denies the
-send. Non-controlled platforms (discord, slack, signal, ...) are never touched;
-this policy governs only the WhatsApp and Telegram families.
+send. Non-controlled platforms (Telegram, Discord, Slack, Signal, ...) are never
+touched; this policy governs only WhatsApp.
 """
 
 from __future__ import annotations
@@ -19,7 +19,6 @@ from . import families
 logger = logging.getLogger(__name__)
 
 _BLOCK_MESSAGES = {
-    "telegram": "Telegram sending is blocked by the business reply policy.",
     "whatsapp": "WhatsApp sending is blocked by the business reply policy.",
 }
 _GENERIC_BLOCK = "Sending is blocked by the business reply policy."

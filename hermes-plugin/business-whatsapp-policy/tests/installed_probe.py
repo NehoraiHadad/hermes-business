@@ -53,20 +53,6 @@ try:
     out["baileys_has_register"] = hasattr(mod, "register")
 except Exception as e:
     out["errors"]["baileys"] = repr(e)
-try:
-    mod = importlib.import_module("plugins.platforms.telegram.adapter")
-    cls = mod.TelegramAdapter
-    own = {}
-    for k in cls.__mro__:
-        if k.__name__ in ("BasePlatformAdapter", "ABC", "object"):
-            continue
-        own.update({n: v for n, v in vars(k).items()})
-    out["telegram_own_methods"] = [n for n, v in own.items() if callable(v)]
-    out["telegram_has_standalone"] = hasattr(mod, "_standalone_send")
-    out["telegram_has_register"] = hasattr(mod, "register")
-    out["telegram_has_callback_auth"] = hasattr(cls, "_is_callback_user_authorized")
-except Exception as e:
-    out["errors"]["telegram"] = repr(e)
 print(json.dumps(out))
 """
 

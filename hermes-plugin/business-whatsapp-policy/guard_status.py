@@ -43,9 +43,9 @@ logger = logging.getLogger(__name__)
 GUARD_STATUS_SCHEMA = 1
 # The two enforcement doors that must be live for "enforcing" to be true.
 REQUIRED_HOOK = "pre_gateway_dispatch"
-GUARD_FAMILIES = ("whatsapp", "whatsapp_cloud", "telegram")
+GUARD_FAMILIES = ("whatsapp", "whatsapp_cloud")
 # The transport chokepoints the monkeypatch must have bound in THIS process.
-TRANSPORT_CHOKEPOINTS = ("_send_to_platform", "_send_telegram")
+TRANSPORT_CHOKEPOINTS = ("_send_to_platform",)
 # The reader treats a heartbeat older than this (no refresh) as dead → BLOCKED.
 HEARTBEAT_TTL_SECONDS = 90
 _REFRESH_INTERVAL_SECONDS = 20
@@ -126,19 +126,15 @@ def registered_hooks(declared: Iterable[str] = ()) -> list:
 
 
 def _policy_modes(home_getter: Optional[Callable[[], Any]]) -> dict:
-    """Best-effort current policy modes for both families (non-sensitive: mode + count)."""
+    """Best-effort WhatsApp policy mode (non-sensitive: mode + count)."""
     modes: dict = {}
     if home_getter is None:
         return modes
     try:
         home = home_getter()
         from .policy import load_policy as wa_load_policy
-        from .telegram_policy import load_policy as tg_load_policy
-
         wa = wa_load_policy(home)
-        tg = tg_load_policy(home)
         modes["whatsapp"] = {"mode": getattr(wa, "mode", None), "reply_chats": len(getattr(wa, "reply_chats", []) or [])}
-        modes["telegram"] = {"mode": getattr(tg, "mode", None), "reply_chats": len(getattr(tg, "reply_chats", []) or [])}
     except Exception:
         # A policy read failure must never fabricate a mode.
         return {}

@@ -2,17 +2,16 @@
 
 Hermes fires ``pre_tool_call`` for every model-invoked tool and blocks execution
 when a callback returns ``{"action": "block", "message": "<non-empty>"}`` (first
-valid block wins; malformed returns are ignored). We recognize the outbound
-``send_message``-family tools, resolve their destination WITHOUT trusting
-renderer normalization, and block a Telegram or WhatsApp send the current family
-policy does not permit. Every other tool — and non-egress actions such as
-``list`` — passes through unchanged (return ``None``).
+valid block wins; malformed returns are ignored). We recognize outbound
+``send_message``-family tools and apply policy only to WhatsApp destinations.
+Telegram and other Hermes-managed platforms pass through unchanged, as do
+non-egress actions such as ``list``.
 
 Verified caveat: in the installed Hermes, ``send_message`` is NOT a registered
 model tool (cron/CLI/MCP call the transport engine directly, below the hook), so
 this hook is defense-in-depth for any *registered* send_message-shaped model
-tool. The confirmed direct-``telegram.Bot`` bypass is closed at the transport
-layer by :mod:`.tool_transport`. Both doors share :mod:`.egress`.
+tool. The shared WhatsApp transport path is also guarded by
+:mod:`.tool_transport`; both doors use :mod:`.egress`.
 """
 
 from __future__ import annotations
@@ -71,9 +70,8 @@ def pre_tool_call(*, tool_name: str = "", args: Any = None, **_kwargs) -> Option
         return None
     platform, chat_id = _resolve(args)
     if not egress.families.is_controlled(platform):
-        # Not a business-controlled family (or an unparseable platform we cannot
-        # attribute to WhatsApp/Telegram). The transport guard still sees the
-        # resolved platform later; this hook governs only the two families.
+        # Not WhatsApp (or the platform could not be resolved). Hermes remains
+        # the sole owner for Telegram and every other messaging family.
         return None
     block = egress.decision(platform, chat_id, home_getter=_get_home)
     if block:

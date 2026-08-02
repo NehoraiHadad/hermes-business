@@ -15,10 +15,9 @@ from .contract import AdapterContractError
 # guard reads to resolve the destination. These are REQUIRED: a target missing a
 # param, not async, or absent is a surface drift the guard cannot bind, so
 # :func:`.tool_transport.install_tool_guards` raises rather than binding a guard
-# that could not prove the destination. Both chokepoints must bind or none do.
+# that could not prove the destination. Every declared target must bind or none do.
 TRANSPORT_TARGETS = {
     "_send_to_platform": ("platform", "chat_id"),
-    "_send_telegram": ("chat_id",),
 }
 
 # Sentinel attributes stamped on a guard so a re-install can prove idempotency is

@@ -7,7 +7,6 @@ from typing import Any
 
 SILENT_MARKER = "NO_REPLY"
 WHATSAPP_PLACEHOLDER = "[התקבלה הודעת WhatsApp ללא טקסט]"
-TELEGRAM_PLACEHOLDER = "[התקבלה הודעת Telegram ללא טקסט]"
 
 
 def _append(store: Any, session_id: str, role: str, content: str, **extra: Any) -> None:
