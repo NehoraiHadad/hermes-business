@@ -11,7 +11,7 @@ export const Wordmark = ({compact = false}: {compact?: boolean}) => (
   <div dir="rtl" style={{display: 'flex', alignItems: 'center', gap: 16}}>
     <BrandMark size={compact ? 46 : 66} />
     <div>
-      <strong style={{display: 'block', fontSize: compact ? 26 : 38, color: colors.ink}}>העוזר לעסק</strong>
+      <strong style={{display: 'block', fontSize: compact ? 26 : 38, color: colors.ink}}>תכל'ס</strong>
       {!compact && <span style={{fontSize: 21, color: colors.muted}}>פשוט, זמין ומסונכרן</span>}
     </div>
   </div>

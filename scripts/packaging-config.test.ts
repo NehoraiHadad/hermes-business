@@ -138,7 +138,7 @@ describe('branding + version metadata for native resedit', () => {
     // companyName is derived from metadata.author.name; a bare string yields no CompanyName,
     // and the native resedit pass would then drop it from the PE version table.
     expect(typeof pkg.author).toBe('object')
-    expect(String((pkg.author as { name?: string }).name)).toContain('העוזר לעסק')
+    expect(String((pkg.author as { name?: string }).name)).toContain("תכל'ס")
   })
 
   it('carries no user-facing POC label in shipped product metadata', () => {

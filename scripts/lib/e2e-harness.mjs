@@ -93,7 +93,7 @@ export function resolveInstalledExecutable() {
     process.env.LOCALAPPDATA || '',
     'Programs',
     'hermes-business',
-    'העוזר לעסק.exe'
+    "תכל'ס.exe"
   )
   const executablePath = process.env.HERMES_BUSINESS_EXE || defaultExecutable
   const appDirectory = process.env.HERMES_BUSINESS_APP_DIR || ''

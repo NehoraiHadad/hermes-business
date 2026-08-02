@@ -4,7 +4,7 @@ import path from 'node:path'
 import { _electron as electron } from 'playwright-core'
 
 const root = path.resolve(import.meta.dirname, '..')
-const executable = path.join(root, 'release', 'win-unpacked', 'העוזר לעסק.exe')
+const executable = path.join(root, 'release', 'win-unpacked', "תכל'ס.exe")
 if (!existsSync(executable)) throw new Error(`Packaged executable is missing: ${executable}`)
 
 const suffix = `${process.pid}-${Date.now()}`

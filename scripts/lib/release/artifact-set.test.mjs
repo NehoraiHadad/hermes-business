@@ -3,7 +3,7 @@ import { expectedInstallerName, verifyArtifactSet } from './artifact-set.mjs'
 
 // Uses the real (non-ASCII) product name this project ships, to prove versioned
 // naming holds for Hebrew installer names too.
-const PROD = 'העוזר לעסק'
+const PROD = "תכל'ס"
 const V = '0.3.3'
 const good = () => ({ productName: PROD, version: V, installers: [{ name: `${PROD} Setup ${V}.exe` }] })
 

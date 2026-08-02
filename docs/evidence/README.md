@@ -93,7 +93,7 @@ node scripts/capture-evidence.mjs thin-installer raw-thin.json
 
 # packaged companion, isolated runtime + REAL approval deny (needs the built
 # win-unpacked exe; point HERMES_BUSINESS_EXE at it). Emits the raw JSON report.
-$env:HERMES_BUSINESS_EXE = '...\release\win-unpacked\העוזר לעסק.exe'
+$env:HERMES_BUSINESS_EXE = "...\release\win-unpacked\תכל'ס.exe"
 $env:HERMES_BUSINESS_E2E_APPROVAL = '1'
 node scripts/e2e-installed-isolated.mjs > raw-iso.json
 node scripts/capture-evidence.mjs packaged-e2e raw-iso.json

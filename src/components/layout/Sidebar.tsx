@@ -53,7 +53,7 @@ export function Sidebar({
       <div className="brand">
         <Logo />
         <div>
-          <strong>העוזר לעסק</strong>
+          <strong>תכל'ס</strong>
           <span>עובדים יחד, בשיחה אחת</span>
         </div>
       </div>

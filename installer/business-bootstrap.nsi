@@ -4,7 +4,7 @@ ManifestDPIAware true
 !include "MUI2.nsh"
 !include "LogicLib.nsh"
 
-!define PRODUCT_NAME "העוזר לעסק — התקנה מקוונת"
+!define PRODUCT_NAME "תכל'ס — התקנה מקוונת"
 !ifndef PRODUCT_VERSION
   !error "PRODUCT_VERSION must be supplied by scripts/build-bootstrap.ps1"
 !endif

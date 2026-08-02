@@ -15,7 +15,7 @@ param(
   [string]$BootstrapVersion = ''
 )
 
-# bootstrap.ps1 — thin Windows network installer for the העוזר לעסק (Alpha) shell.
+# bootstrap.ps1 — thin Windows network installer for the תכל'ס (Alpha) shell.
 #
 # It never bundles Hermes: it either detects a compatible existing install or
 # downloads the newest official, tagged release inside the tested range and runs

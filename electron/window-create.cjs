@@ -11,7 +11,7 @@ function createTray() {
   if (state.tray) return
   const icon = nativeImage.createFromPath(path.join(app.getAppPath(), 'build', 'icon.png'))
   state.tray = new Tray(icon.resize({ width: 20, height: 20 }))
-  state.tray.setToolTip('העוזר לעסק')
+  state.tray.setToolTip("תכל'ס")
   const { showAssistant } = require('./windows.cjs')
   state.tray.setContextMenu(
     Menu.buildFromTemplate([
@@ -48,7 +48,7 @@ function createWindow() {
     skipTaskbar: mini,
     show: false,
     backgroundColor: '#f7f5ef',
-    title: 'העוזר לעסק',
+    title: "תכל'ס",
     icon: path.join(app.getAppPath(), 'build', 'icon.png'),
     titleBarStyle: 'hidden',
     titleBarOverlay: { color: '#f7f5ef', symbolColor: '#27241f', height: 46 },

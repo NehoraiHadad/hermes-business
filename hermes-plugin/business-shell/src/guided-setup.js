@@ -50,7 +50,7 @@ export async function startGuidedSetup(storage, { force = false } = {}) {
       scheduledTasks: cronJobs.length
     })
     const created = await host.request('session.create', {
-      title: 'הקמת העוזר לעסק',
+      title: "הקמת תכל'ס",
       source: 'desktop'
     })
     await submitBusinessBootstrap(created.session_id, guidedSetupPrompt(snapshot))

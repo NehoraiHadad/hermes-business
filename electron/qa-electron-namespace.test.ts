@@ -17,7 +17,7 @@ import { qaElectronNamespace } from './qa-electron-namespace.cjs'
 const tempHome = path.join(os.tmpdir(), 'hermes-qa-home-collision-fixture')
 const liveDefaultUserData = path.join(
   process.env.APPDATA || 'C:\\Users\\x\\AppData\\Roaming',
-  'העוזר לעסק'
+  "תכל'ס"
 )
 const liveHermesHome = path.join(
   process.env.LOCALAPPDATA || 'C:\\Users\\x\\AppData\\Local',

@@ -9,7 +9,7 @@ import { _electron as electron } from 'playwright-core'
 
 const executablePath =
   process.env.HERMES_BUSINESS_EXE ||
-  path.join(process.env.LOCALAPPDATA || '', 'Programs', 'hermes-business', 'העוזר לעסק.exe')
+  path.join(process.env.LOCALAPPDATA || '', 'Programs', 'hermes-business', "תכל'ס.exe")
 
 if (!existsSync(executablePath)) {
   throw new Error(`Installed companion was not found: ${executablePath}`)

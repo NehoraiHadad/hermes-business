@@ -27,8 +27,8 @@ describe('parsePorcelainZ — renames + non-ASCII (finding 7)', () => {
   })
 
   it('does NOT mangle a non-ASCII / spaced path (no C-quoting in -z)', () => {
-    const recs = parsePorcelainZ(z(['A ', 'release/העוזר לעסק Setup 0.3.3.exe']))
-    expect(recs[0].path).toBe('release/העוזר לעסק Setup 0.3.3.exe')
+    const recs = parsePorcelainZ(z(['A ', "release/תכל'ס Setup 0.3.3.exe"]))
+    expect(recs[0].path).toBe("release/תכל'ס Setup 0.3.3.exe")
   })
 
   it('affectedPaths expands a rename to both sides', () => {

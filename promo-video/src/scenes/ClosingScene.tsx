@@ -20,7 +20,7 @@ export const ClosingScene = () => {
           <div style={{display:'inline-flex',alignItems:'center',gap:9,color:'#dcd7ff',fontSize:22,fontWeight:700}}><Sparkles size={22}/>Hermes שמגיע מוכן לעסק</div>
           <h2 style={{fontSize:76,lineHeight:1.08,letterSpacing:-3,margin:'22px 0 18px'}}>פחות הגדרות.<br/>יותר עבודה שנעשית.</h2>
           <div style={{display:'flex',gap:18,justifyContent:'center',marginTop:30}}>{points.map((point,i)=>{const pp=reveal(frame,fps,35+i*13);return <span key={point} style={{opacity:pp,display:'inline-flex',alignItems:'center',gap:8,padding:'12px 18px',borderRadius:999,background:'#ffffff15',border:'1px solid #ffffff24',fontSize:20}}><Check size={18} color="#6fe2bd"/>{point}</span>;})}</div>
-          <div style={{display:'inline-flex',alignItems:'center',gap:12,padding:'17px 27px',borderRadius:15,background:'#fff',color:colors.purpleDark,fontSize:21,fontWeight:800,marginTop:38,boxShadow:'0 18px 50px #00000035'}}><Download size={22}/>העוזר לעסק · Windows</div>
+          <div style={{display:'inline-flex',alignItems:'center',gap:12,padding:'17px 27px',borderRadius:15,background:'#fff',color:colors.purpleDark,fontSize:21,fontWeight:800,marginTop:38,boxShadow:'0 18px 50px #00000035'}}><Download size={22}/>תכל'ס · Windows</div>
         </div>
       </AbsoluteFill>
     </Backdrop>

@@ -10,7 +10,7 @@ import { resolveProviderStatus, resolveModelReadiness } from './provider-readine
 export const BOOTSTRAP_COMMAND = 'business-bootstrap'
 
 const LINES = [
-  'המשך את הקמת העוזר לעסק. This is guided first-run setup for a non-technical business owner.',
+  "המשך את הקמת תכל'ס. This is guided first-run setup for a non-technical business owner.",
   'המעטפת ביצעה בדיקה תחומה דרך ה־APIs הרשמיים של Hermes. Use this verified snapshot and do not repeat its checks before asking the first missing question.',
   'Never run hermes doctor, broad scans, connectivity suites, update checks, or CLI --help discovery during onboarding.',
   'שאל שאלה אחת קצרה בכל פעם (לכל היותר שתי שאלות קרובות) והסבר בקצרה למה — אל תציג את כל השאלון בבת אחת.',

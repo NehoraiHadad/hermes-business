@@ -74,7 +74,7 @@ export function Onboarding({
       <section className="onboarding__card onboarding__card--simple">
         <div className="onboarding__brand">
           <Logo />
-          <strong>העוזר לעסק</strong>
+          <strong>תכל'ס</strong>
         </div>
 
         <div className="onboarding__content onboarding__welcome onboarding__welcome--simple">

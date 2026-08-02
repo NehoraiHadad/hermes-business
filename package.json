@@ -4,7 +4,7 @@
   "private": true,
   "description": "A friendly always-available business assistant powered by Hermes Agent",
   "author": {
-    "name": "העוזר לעסק (Alpha)"
+    "name": "תכל'ס (Alpha)"
   },
   "main": "electron/main.cjs",
   "scripts": {
@@ -84,7 +84,7 @@
   "build": {
     "afterPack": "scripts/after-pack.cjs",
     "appId": "com.hermes.business",
-    "productName": "העוזר לעסק",
+    "productName": "תכל'ס",
     "asar": true,
     "publish": null,
     "files": [
@@ -190,7 +190,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "העוזר לעסק"
+      "shortcutName": "תכל'ס"
     }
   }
 }

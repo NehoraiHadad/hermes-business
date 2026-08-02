@@ -3,7 +3,7 @@ import { verifyChecksums, versionFromInstallerName, sha256 } from './checksums.m
 
 describe('versionFromInstallerName', () => {
   it('extracts x.y.z from a Setup file name', () => {
-    expect(versionFromInstallerName('העוזר לעסק Setup 0.3.3.exe')).toBe('0.3.3')
+    expect(versionFromInstallerName("תכל'ס Setup 0.3.3.exe")).toBe('0.3.3')
     expect(versionFromInstallerName('App Setup 1.2.0-beta.1.exe')).toBe('1.2.0-beta.1')
     expect(versionFromInstallerName('no-version.exe')).toBeNull()
   })

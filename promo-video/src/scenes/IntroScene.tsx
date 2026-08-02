@@ -17,7 +17,7 @@ export const IntroScene = () => {
       <AbsoluteFill style={{alignItems: 'center', justifyContent: 'center'}}>
         <div dir="rtl" style={{textAlign: 'center', transform: `scale(${0.9 + p * 0.1})`, opacity: p, position: 'relative', zIndex: 2}}>
           <div style={{display: 'flex', justifyContent: 'center', marginBottom: 28}}><BrandMark size={108} /></div>
-          <h1 style={{fontSize: 86, lineHeight: 1, letterSpacing: -4, color: colors.ink, margin: 0}}>העוזר לעסק</h1>
+          <h1 style={{fontSize: 86, lineHeight: 1, letterSpacing: -4, color: colors.ink, margin: 0}}>תכל'ס</h1>
           <p style={{fontSize: 35, color: colors.muted, margin: '25px 0 34px'}}>Hermes החזק — מוכן לעבודה, בלי המורכבות</p>
           <PrimaryButton>פשוט מתחילים לדבר <ArrowLeft size={20} /></PrimaryButton>
         </div>
