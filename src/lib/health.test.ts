@@ -153,7 +153,7 @@ describe('buildSystemHealth — panel rows', () => {
     expect(report.healthy).toBe(false)
   })
 
-  it('surfaces official (cloud) and unofficial (QR) WhatsApp as SEPARATE rows', () => {
+  it('surfaces Business Cloud and personal QR WhatsApp as separate rows', () => {
     const report = buildSystemHealth({ runtime: { running: true } as HermesRuntime, provider: usable, connections: [conn('whatsapp-cloud', 'connected')], tasks })
     expect(report.components.find(c => c.id === 'whatsapp-cloud')?.value).toBe('מחובר')
     expect(report.components.find(c => c.id === 'whatsapp')?.value).toBe('לא מחובר')

@@ -1,4 +1,4 @@
-import { CheckCircle2, ChevronLeft, MessageCircle, ShieldCheck } from 'lucide-react'
+import { CheckCircle2, ChevronLeft, MessageCircle, ShieldAlert, ShieldCheck } from 'lucide-react'
 import type { Connection } from '../../types'
 import { ServiceIcon } from '../ui/ServiceIcon'
 
@@ -15,6 +15,15 @@ function ConnectionRow({
       <div className="connection-card__content">
         <h3>{connection.name}</h3>
         <p>{connection.description}</p>
+        {connection.official === false ? (
+          <div className="connection-risk-note">
+            <ShieldAlert size={14} />
+            <span>
+              הרישום מתבצע באמצעות API צד שלישי. החיבור עלול להשתנות, להפסיק לעבוד
+              או להביא להגבלת החשבון בהתאם למדיניות WhatsApp; מומלץ להשתמש במספר ייעודי.
+            </span>
+          </div>
+        ) : null}
       </div>
       {connection.state === 'connected' ? (
         <button className="connected-button" onClick={() => onConnect(connection)}>
@@ -36,9 +45,6 @@ export function ConnectionsScreen({
   connections: Connection[]
   onConnect: (connection: Connection) => void
 }) {
-  const recommended = connections.filter(connection => connection.official !== false)
-  const experimental = connections.filter(connection => connection.official === false)
-
   return (
     <main className="content-screen">
       <section className="page-heading page-heading--compact">
@@ -58,27 +64,15 @@ export function ConnectionsScreen({
 
       <section className="panel connections-panel">
         <div className="panel__title">
-          <h3>חיבורים מומלצים</h3>
-          <span>שירותים רשמיים שאפשר לנתק בכל רגע</span>
+          <h3>חיבורים זמינים</h3>
+          <span>בחר את השירות שמתאים לעסק; אפשר לנתק כל חיבור בכל רגע</span>
         </div>
         <div className="connections-list">
-          {recommended.map(connection => (
+          {connections.map(connection => (
             <ConnectionRow key={connection.id} connection={connection} onConnect={onConnect} />
           ))}
         </div>
       </section>
-
-      {experimental.length ? (
-        <details className="advanced-connections">
-          <summary>אפשרויות ניסיוניות</summary>
-          <p>האפשרויות האלה אינן המסלול המומלץ ועלולות להיות פחות יציבות.</p>
-          <div className="connections-list connections-list--experimental">
-            {experimental.map(connection => (
-              <ConnectionRow key={connection.id} connection={connection} onConnect={onConnect} />
-            ))}
-          </div>
-        </details>
-      ) : null}
 
       <div className="privacy-note">
         <ShieldCheck size={19} />

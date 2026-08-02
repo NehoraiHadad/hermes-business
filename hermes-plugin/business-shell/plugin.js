@@ -1084,7 +1084,7 @@ function Connections() {
           h(
             'p',
             { className: 'mt-1 max-w-2xl text-xs leading-5 text-(--ui-text-tertiary)' },
-            'Hermes תומך גם ב־WhatsApp Business Cloud API הרשמי וגם ב־Baileys (WhatsApp Web לא רשמי). החיבור הלא רשמי עלול להיחסם; מומלץ מספר ייעודי.'
+            'Hermes תומך גם ב־WhatsApp Business Cloud API וגם בחיבור אישי דרך API צד שלישי. הרישום דרך צד שלישי עלול להשתנות, להיחסם או להביא להגבלת החשבון; מומלץ מספר ייעודי.'
           )
         ),
         h(Button, { variant: 'outline', onClick: () => host.navigate('/messaging') }, 'הצג אפשרויות')

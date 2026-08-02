@@ -80,6 +80,25 @@
   font-size: 10.8px;
 }
 
+.connection-risk-note {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  margin-top: 8px;
+  padding: 8px 10px;
+  color: #77572d;
+  background: var(--amber-soft);
+  border-radius: 8px;
+  font-size: 9.5px;
+  line-height: 1.45;
+}
+
+.connection-risk-note svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: var(--amber);
+}
+
 .risk-note {
   display: block;
   margin-top: 5px;
@@ -178,32 +197,4 @@
 
 .connections-list .connection-card:not(:last-child) {
   border-bottom: 1px solid var(--line);
-}
-
-.advanced-connections {
-  max-width: 1120px;
-  margin: 14px auto 0;
-  padding: 13px 16px;
-  background: #f3f1eb;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-}
-
-.advanced-connections summary {
-  cursor: pointer;
-  color: #69645c;
-  font-size: 11.5px;
-  font-weight: 650;
-}
-
-.advanced-connections > p {
-  margin: 8px 0;
-  color: var(--muted);
-  font-size: 10px;
-}
-
-.connections-list--experimental {
-  overflow: hidden;
-  background: var(--surface);
-  border-radius: 9px;
 }

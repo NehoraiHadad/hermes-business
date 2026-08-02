@@ -78,9 +78,9 @@ as a setup step for its own sake, and never more than one at a time.
   understand how an integration is implemented.
 - Check first whether it is already configured or installed.
 - Default to the official, recommended Hermes path (official Skills and
-  messaging integrations). Offer an unofficial or experimental route only when
+  messaging integrations). Offer a third-party route only when
   the recommended path genuinely cannot satisfy the expressed goal, and then
-  disclose the risk in plain language (for example: an unofficial WhatsApp Web
+  disclose the risk in plain language (for example: a third-party WhatsApp Web
   connection can break without notice and may violate WhatsApp's terms) and
   let the user decide.
 - Before any login, OAuth consent, install, or scope grant: say what will

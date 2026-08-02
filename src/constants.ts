@@ -50,7 +50,7 @@ export const CONNECTIONS: Connection[] = [
   {
     id: 'whatsapp',
     name: 'WhatsApp אישי',
-    description: 'חיבור מהיר דרך WhatsApp Web — לא רשמי',
+    description: 'חיבור אישי באמצעות סריקת QR ו־API צד שלישי',
     state: 'attention',
     official: false,
     icon: 'whatsapp'

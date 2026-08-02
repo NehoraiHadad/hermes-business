@@ -26,11 +26,11 @@ export function WhatsappConnect({
         <div className="whatsapp-connect__head">
           <ServiceIcon type="whatsapp" />
           <div>
-            <h3>{official ? 'WhatsApp Business הרשמי (Meta Cloud)' : 'WhatsApp Web לא רשמי (QR)'}</h3>
+            <h3>{official ? 'WhatsApp Business (Meta Cloud)' : 'WhatsApp אישי (חיבור QR)'}</h3>
             <p>
               {official
                 ? 'חיבור יציב ומאושר של Meta. דורש חשבון עסקי, מספר ייעודי ו־webhook ציבורי.'
-                : 'חיבור מהיר דרך סריקת QR (Baileys). מדמה WhatsApp Web — עלול להישבר או להביא להגבלת החשבון.'}
+                : 'הרישום מתבצע באמצעות API צד שלישי. החיבור עלול להשתנות, להפסיק לעבוד או להביא להגבלת החשבון בהתאם למדיניות WhatsApp.'}
             </p>
           </div>
         </div>

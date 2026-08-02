@@ -64,7 +64,7 @@ export function buildSystemHealth(input: {
     // Official (Meta Cloud) and unofficial (QR/Web) WhatsApp are surfaced SEPARATELY —
     // they are different trust levels, not one "WhatsApp".
     connectorRow('whatsapp-cloud', 'WhatsApp Business (הרשמי)', cloudConnected),
-    connectorRow('whatsapp', 'WhatsApp QR (לא רשמי)', qrConnected)
+    connectorRow('whatsapp', 'WhatsApp אישי (QR)', qrConnected)
   ]
   // Enforcement health: a connected channel is "protected" only with a LIVE guard proof
   // from the running gateway — a policy file alone is not proof. Only shown once the

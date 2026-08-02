@@ -10,10 +10,10 @@
   position: relative;
   z-index: 4;
   display: flex;
-  flex: 0 0 69px;
+  flex: 0 0 94px;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 34px 10px 30px;
+  padding: 46px 34px 10px 30px;
   background: rgba(247, 246, 241, 0.94);
   border-bottom: 1px solid var(--line);
   -webkit-app-region: drag;
