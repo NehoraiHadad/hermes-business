@@ -41,6 +41,7 @@ declare global {
     getGoogleStatus: () => Promise<{ available: boolean; authenticated: boolean }>
     ensureGateway: () => Promise<{ ok: boolean; installed: boolean; running?: boolean }>
     getWhatsappPolicy: () => Promise<WhatsappPolicy>
+    getWhatsappDirectory: () => Promise<WhatsappSource[]>
     setWhatsappPolicy: (policy: WhatsappPolicy) => Promise<WhatsappPolicy>
     ensureWhatsappPolicy: () => Promise<{ ok: boolean; enabled: boolean }>
     // Live guard introspection: the RAW runtime status the messaging-policy guard writes
@@ -83,9 +84,19 @@ declare global {
   }
 
   type WhatsappPolicy = {
-    version: 1
+    version: 2
     mode: 'read_only' | 'selected_chats'
+    behavior: 'monitor' | 'assist'
+    instructions: string
     reply_chats: string[]
+    reply_groups: string[]
+    sources: WhatsappSource[]
+  }
+  type WhatsappSource = {
+    id: string
+    name: string
+    type: 'dm' | 'group'
+    platform: 'whatsapp' | 'whatsapp_cloud'
   }
 
 

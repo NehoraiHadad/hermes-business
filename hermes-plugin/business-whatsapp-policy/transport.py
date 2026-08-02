@@ -77,9 +77,9 @@ def guard_adapter(adapter: Any, platform: str, home_getter: Callable[[], Any]) -
         # Async and synchronous mutating methods must both fail closed: a plain
         # ``def send(...)`` would otherwise bypass the policy entirely.
         if inspect.iscoroutinefunction(original):
-            setattr(adapter, name, _make_async_guard(name, original, home_getter))
+            setattr(adapter, name, _make_async_guard(name, original, home_getter, platform))
         else:
-            setattr(adapter, name, _make_sync_guard(name, original, home_getter))
+            setattr(adapter, name, _make_sync_guard(name, original, home_getter, platform))
 
-    _guard_interactive_auth(adapter, home_getter)
+    _guard_interactive_auth(adapter, home_getter, platform)
     return adapter

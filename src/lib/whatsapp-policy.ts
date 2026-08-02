@@ -1,26 +1,33 @@
-// Shared, pure helpers for the fail-closed WhatsApp reply policy. The Electron
-// main process (electron/whatsapp-policy.cjs) and the Hermes plugin
-// (hermes-plugin/business-whatsapp-policy/policy.py) are the authoritative
-// enforcers; this module mirrors their normalization so the UI validates and
-// previews identically before persisting through the desktop bridge.
-
 export type WhatsappPolicyMode = 'read_only' | 'selected_chats'
+export type WhatsappBehavior = 'monitor' | 'assist'
+export type WhatsappPlatform = 'whatsapp' | 'whatsapp_cloud'
+export type WhatsappSource = {
+  id: string
+  name: string
+  type: 'dm' | 'group'
+  platform: WhatsappPlatform
+}
 
 export type WhatsappPolicy = {
-  version: 1
+  version: 2
   mode: WhatsappPolicyMode
+  behavior: WhatsappBehavior
+  instructions: string
   reply_chats: string[]
+  reply_groups: string[]
+  sources: WhatsappSource[]
 }
 
 export const DEFAULT_WHATSAPP_POLICY: WhatsappPolicy = {
-  version: 1,
+  version: 2,
   mode: 'read_only',
-  reply_chats: []
+  behavior: 'monitor',
+  instructions: '',
+  reply_chats: [],
+  reply_groups: [],
+  sources: []
 }
 
-// Reduce any chat identifier (phone, +phone, whatsapp:JID, @s.whatsapp.net) to
-// the bare digits the plugin matches on. Keep this in lockstep with
-// normalizeChat() in electron/whatsapp-policy.cjs.
 export function normalizeChat(value: string): string {
   const normalized = String(value || '')
     .trim()
@@ -47,18 +54,51 @@ export function allowedUsersForPolicy(policy: WhatsappPolicy): string {
 
 export type PolicyValidation = { policy: WhatsappPolicy } | { error: string }
 
-export function validateWhatsappPolicy(mode: WhatsappPolicyMode, chatsText: string): PolicyValidation {
-  const reply_chats = parseChatList(chatsText)
-  if (mode === 'selected_chats' && reply_chats.length === 0) {
-    return { error: 'יש לבחור לפחות צ׳אט אחד שבו מותר לעוזר לענות.' }
+export function buildWhatsappPolicy(
+  mode: WhatsappPolicyMode,
+  selected: WhatsappSource[],
+  behavior: WhatsappBehavior = 'monitor',
+  instructions = ''
+): PolicyValidation {
+  const sources = [...new Map(selected.map(source => {
+    const platform = source.platform === 'whatsapp_cloud' ? 'whatsapp_cloud' : 'whatsapp'
+    const type = source.type === 'group' ? 'group' : 'dm'
+    const id = String(source.id || '').trim()
+    const safe = { id, name: String(source.name || '').trim().slice(0, 160), type, platform } as WhatsappSource
+    return [`${platform}:${id}`, safe]
+  })).values()].filter(source => source.id && !(source.platform === 'whatsapp_cloud' && source.type === 'group'))
+  if (mode === 'selected_chats' && sources.length === 0) {
+    return { error: 'יש לבחור לפחות שיחה או קבוצה אחת.' }
   }
-  return { policy: { version: 1, mode, reply_chats } }
+  return { policy: {
+    version: 2,
+    mode,
+    behavior: behavior === 'assist' ? 'assist' : 'monitor',
+    instructions: String(instructions).trim().slice(0, 2000),
+    reply_chats: [...new Set(sources.filter(source => source.type === 'dm').map(source => normalizeChat(source.id)))],
+    reply_groups: [...new Set(sources.filter(source => source.type === 'group').map(source => source.id))],
+    sources
+  } }
+}
+
+export function validateWhatsappPolicy(
+  mode: WhatsappPolicyMode,
+  chatsText: string,
+  groups: string[] = [],
+  behavior: WhatsappBehavior = 'monitor',
+  instructions = ''
+): PolicyValidation {
+  const sources: WhatsappSource[] = [
+    ...parseChatList(chatsText).map(id => ({ id, name: 'בחירה שמורה', type: 'dm' as const, platform: 'whatsapp' as const })),
+    ...groups.map(id => ({ id, name: 'בחירה שמורה', type: 'group' as const, platform: 'whatsapp' as const }))
+  ]
+  return buildWhatsappPolicy(mode, sources, behavior, instructions)
 }
 
 export function describeWhatsappPolicy(policy: WhatsappPolicy): string {
   if (policy.mode === 'selected_chats') {
-    const count = policy.reply_chats.length
-    return `העוזר עונה רק ל־${count} צ׳אטים נבחרים. כל השאר נקראים ונשמרים בלבד.`
+    const count = policy.sources?.length || policy.reply_chats.length + policy.reply_groups.length
+    return `העוזר פעיל רק ב־${count} שיחות וקבוצות נבחרות. כל השאר נקראים ונשמרים בלבד.`
   }
   return 'קריאה בלבד: העוזר מתעד את ההודעות אך לעולם לא שולח תשובה או תגובה.'
 }

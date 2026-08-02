@@ -3,17 +3,25 @@ import { useEffect, useState } from 'react'
 import { hermesClient } from '../../../lib/hermes-client'
 import {
   DEFAULT_WHATSAPP_POLICY,
-  chatsToText,
-  validateWhatsappPolicy,
-  type WhatsappPolicyMode
+  buildWhatsappPolicy,
+  type WhatsappBehavior,
+  type WhatsappPlatform,
+  type WhatsappPolicyMode,
+  type WhatsappSource
 } from '../../../lib/whatsapp-policy'
+import { WhatsappSourcePicker } from './WhatsappSourcePicker'
 
 // Fail-closed reply-policy chooser. Enforcement lives in the Hermes plugin and
 // transport layers; this only records the operator's choice through the desktop
 // bridge (default read-only). No mode here can make the agent answer on its own.
-export function WhatsappPolicyForm() {
+export function WhatsappPolicyForm({
+  groupsEnabled = true,
+  platform = 'whatsapp'
+}: { groupsEnabled?: boolean; platform?: WhatsappPlatform }) {
   const [mode, setMode] = useState<WhatsappPolicyMode>('read_only')
-  const [chats, setChats] = useState('')
+  const [behavior, setBehavior] = useState<WhatsappBehavior>('monitor')
+  const [instructions, setInstructions] = useState('')
+  const [selected, setSelected] = useState<WhatsappSource[]>([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [saved, setSaved] = useState(false)
@@ -27,7 +35,9 @@ export function WhatsappPolicyForm() {
           : (await window.hermesDesktop?.getWhatsappPolicy()) || DEFAULT_WHATSAPP_POLICY
         if (!active) return
         setMode(policy.mode)
-        setChats(chatsToText(policy.reply_chats))
+        setBehavior(policy.behavior || 'monitor')
+        setInstructions(policy.instructions || '')
+        setSelected(policy.sources || [])
       } catch (caught) {
         if (active) {
           setError(caught instanceof Error ? caught.message : 'קריאת מדיניות WhatsApp נכשלה.')
@@ -40,7 +50,7 @@ export function WhatsappPolicyForm() {
   }, [])
 
   const save = async () => {
-    const result = validateWhatsappPolicy(mode, chats)
+    const result = buildWhatsappPolicy(mode, selected, behavior, instructions)
     if ('error' in result) {
       setError(result.error)
       return
@@ -88,24 +98,41 @@ export function WhatsappPolicyForm() {
           }}
         />
         <span>
-          <MessageSquareLock size={16} /> <strong>מענה לשיחות פרטיות נבחרות בלבד</strong>
-          <small>רק המספרים שתזין למטה יקבלו מענה. כל השאר ייקראו וישמרו, אך לא ייענו.</small>
+          <MessageSquareLock size={16} /> <strong>מעקב ומענה בשיחות וקבוצות נבחרות</strong>
+          <small>בחר לפי שם. Hermes יקבל רק את המקורות שנבחרו ויחיל את כללי הפעולה והאישורים שלו.</small>
         </span>
       </label>
       {mode === 'selected_chats' ? (
-        <label className="policy-chats">
-          <span>מספרי WhatsApp מותרים, כולל קידומת מדינה (אחד בכל שורה או מופרדים בפסיק)</span>
-          <textarea
-            dir="ltr"
-            rows={4}
-            value={chats}
-            onChange={event => {
-              setChats(event.target.value)
+        <>
+          <WhatsappSourcePicker
+            platform={platform}
+            selected={selected.filter(source => source.platform === platform).map(source => source.id)}
+            groupsEnabled={groupsEnabled}
+            onChange={sources => {
+              setSelected(current => [
+                ...current.filter(source => source.platform !== platform),
+                ...sources
+              ])
               setSaved(false)
             }}
-            placeholder="+972500000000&#10;15551234567"
           />
-        </label>
+          {!groupsEnabled ? <small className="form-hint">קבוצות זמינות בחיבור WhatsApp Web/QR בלבד.</small> : null}
+          <div className="whatsapp-behavior">
+            <strong>איך העוזר יתנהג במקורות שבחרת?</strong>
+            <label>
+              <input type="radio" checked={behavior === 'monitor'} onChange={() => { setBehavior('monitor'); setSaved(false) }} />
+              <span><b>מעקב והצעות לבעל העסק</b><small>שומר ידע ומזהה צורך בפגישה או במעקב, בלי לענות אוטומטית בצ׳אט.</small></span>
+            </label>
+            <label>
+              <input type="radio" checked={behavior === 'assist'} onChange={() => { setBehavior('assist'); setSaved(false) }} />
+              <span><b>סיוע פעיל</b><small>רשאי לענות ולבצע פעולות שהותרו; אישורי Hermes ממשיכים לחול.</small></span>
+            </label>
+            <label className="policy-chats">
+              <span>מה חשוב לזהות או לעשות? אפשר לכתוב בשפה חופשית.</span>
+              <textarea rows={3} value={instructions} onChange={event => { setInstructions(event.target.value); setSaved(false) }} placeholder="לדוגמה: לזהות בקשות לפגישה, לבדוק זמינות ביומן ולהזכיר לי על לקוחות שממתינים למענה." />
+            </label>
+          </div>
+        </>
       ) : null}
       {error ? <p className="form-error">{error}</p> : null}
       <button className="primary-button" disabled={saving} onClick={save}>

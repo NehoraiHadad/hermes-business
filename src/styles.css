@@ -20,6 +20,7 @@
 @import './styles/modal-base.css';
 @import './styles/modal-setup.css';
 @import './styles/whatsapp-connect.css';
+@import './styles/whatsapp-source-picker.css';
 @import './styles/modal-provider.css';
 @import './styles/onboarding-shell.css';
 @import './styles/onboarding-form.css';

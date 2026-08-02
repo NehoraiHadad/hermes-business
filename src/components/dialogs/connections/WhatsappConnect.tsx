@@ -42,7 +42,10 @@ export function WhatsappConnect({
           </div>
         ) : null}
 
-        <WhatsappPolicyForm />
+        <WhatsappPolicyForm
+          groupsEnabled={!official}
+          platform={official ? 'whatsapp_cloud' : 'whatsapp'}
+        />
 
         <hr className="whatsapp-connect__divider" />
 

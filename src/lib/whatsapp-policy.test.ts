@@ -12,16 +12,22 @@ import {
 
 describe('WhatsApp reply-policy helpers', () => {
   it('defaults to fail-closed read-only', () => {
-    expect(DEFAULT_WHATSAPP_POLICY).toEqual({ version: 1, mode: 'read_only', reply_chats: [] })
+    expect(DEFAULT_WHATSAPP_POLICY).toEqual({
+      version: 2, mode: 'read_only', behavior: 'monitor', instructions: '', reply_chats: [], reply_groups: [], sources: []
+    })
   })
 
   it('maps selected direct chats into the native Hermes allowlist', () => {
     expect(allowedUsersForPolicy(DEFAULT_WHATSAPP_POLICY)).toBe('')
     expect(
       allowedUsersForPolicy({
-        version: 1,
+        version: 2,
         mode: 'selected_chats',
-        reply_chats: ['972500000001', '972500000002']
+        behavior: 'monitor',
+        instructions: '',
+        reply_groups: [],
+        reply_chats: ['972500000001', '972500000002'],
+        sources: []
       })
     ).toBe('972500000001,972500000002')
   })
@@ -43,13 +49,20 @@ describe('WhatsApp reply-policy helpers', () => {
 
   it('rejects selected mode with no chats and accepts read-only regardless', () => {
     expect(validateWhatsappPolicy('selected_chats', '   ')).toEqual({
-      error: 'יש לבחור לפחות צ׳אט אחד שבו מותר לעוזר לענות.'
+      error: 'יש לבחור לפחות שיחה או קבוצה אחת.'
     })
     expect(validateWhatsappPolicy('read_only', '   ')).toEqual({
-      policy: { version: 1, mode: 'read_only', reply_chats: [] }
+      policy: { version: 2, mode: 'read_only', behavior: 'monitor', instructions: '', reply_chats: [], reply_groups: [], sources: [] }
     })
     expect(validateWhatsappPolicy('selected_chats', '+1 (555) 123-4567')).toEqual({
-      policy: { version: 1, mode: 'selected_chats', reply_chats: ['15551234567'] }
+      policy: {
+        version: 2, mode: 'selected_chats', behavior: 'monitor', instructions: '',
+        reply_chats: ['15551234567'], reply_groups: [],
+        sources: [{ id: '15551234567', name: 'בחירה שמורה', type: 'dm', platform: 'whatsapp' }]
+      }
+    })
+    expect(validateWhatsappPolicy('selected_chats', '', ['123@g.us'])).toMatchObject({
+      policy: { reply_groups: ['123@g.us'] }
     })
   })
 })

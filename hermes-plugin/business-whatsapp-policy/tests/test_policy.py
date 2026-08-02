@@ -1,5 +1,6 @@
 """Policy normalization and passive-ingest tests."""
 
+import json
 import unittest
 from types import SimpleNamespace
 
@@ -7,6 +8,7 @@ from support import Store, TempHomeCase, write_policy
 
 from business_whatsapp_policy.ingest import SILENT_MARKER, ingest_without_reply
 from business_whatsapp_policy.policy import (
+    can_process,
     can_reply,
     load_policy,
     normalize_identifier,
@@ -36,6 +38,37 @@ class PolicyNormalization(TempHomeCase, unittest.TestCase):
         policy = load_policy(self.home)
         self.assertTrue(can_reply(policy, "15551234567@s.whatsapp.net"))
         self.assertFalse(can_reply(policy, "15550000000"))
+
+    def test_exact_sources_do_not_leak_between_qr_and_cloud(self):
+        business = self.home / "business"
+        business.mkdir()
+        (business / "whatsapp-policy.json").write_text(json.dumps({
+            "mode": "selected_chats",
+            "reply_chats": ["15551234567"],
+            "reply_groups": [],
+            "sources": [{
+                "id": "15551234567@s.whatsapp.net",
+                "type": "dm",
+                "platform": "whatsapp",
+            }],
+        }), encoding="utf-8")
+        policy = load_policy(self.home)
+        self.assertTrue(can_reply(policy, "15551234567", platform="whatsapp"))
+        self.assertFalse(can_reply(policy, "15551234567", platform="whatsapp_cloud"))
+
+    def test_monitoring_processes_selected_source_but_blocks_replies(self):
+        business = self.home / "business"
+        business.mkdir()
+        (business / "whatsapp-policy.json").write_text(json.dumps({
+            "mode": "selected_chats",
+            "behavior": "monitor",
+            "reply_chats": ["15551234567"],
+            "reply_groups": [],
+            "sources": [{"id": "15551234567", "type": "dm", "platform": "whatsapp"}],
+        }), encoding="utf-8")
+        policy = load_policy(self.home)
+        self.assertTrue(can_process(policy, "15551234567", platform="whatsapp"))
+        self.assertFalse(can_reply(policy, "15551234567", platform="whatsapp"))
 
     def test_identifier_and_target_normalization(self):
         self.assertEqual(

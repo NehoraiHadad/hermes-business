@@ -321,6 +321,39 @@ Telegram הוא Messaging Platform רשמי. המוצר משתמש רק ב־API 
   `POST …/{pairing_id}/apply`. הקוד מוצג עם `qrcode.react`, וההמלצה למספר ייעודי
   מודגשת.
 
+#### בורר ידידותי לשיחות ולקבוצות
+
+הבורר אינו ממציא ספר כתובות ואינו מחזיק מאגר שיחות מקביל. הוא קורא דרך תהליך
+ה־main של Electron את `<HERMES_HOME>/channel_directory.json` — ה־cache הרשמי
+ש־Hermes עצמו בונה בעת עליית ה־Gateway ומרענן בערך כל חמש דקות. עבור WhatsApp
+אין enumeration ישיר של אנשי קשר: הרשימה נגזרת מ־Sessions שנצפו בפועל, ורק עבור
+מתאם שמחובר ב־Gateway הנוכחי. לכן שיחה חדשה עשויה להופיע רק אחרי שהגיעה ממנה
+הודעה ולאחר רענון ה־directory; אין להציג את הרשימה כאילו היא ספר הכתובות המלא.
+`channel_directory.json` הוא cache מתחדש ואינו נערך על ידי המעטפת.
+
+בממשק מוצגים רק השם הידידותי וסוג המקור — שיחה פרטית או קבוצה. מזהי WhatsApp
+הטכניים אינם מוצגים למשתמש; הם נשמרים פנימית כדי להעביר ל־Hermes התאמה מדויקת,
+בלי חיפוש prefix או substring. היכולות מפוצלות לפי המתאם:
+
+- `whatsapp` ‏(Baileys/QR) תומך בשיחות פרטיות ובקבוצות; מזהי קבוצה מסתיימים
+  בדרך כלל ב־`@g.us`.
+- `whatsapp_cloud` הרשמי תומך ב־Hermes `0.19.x` בשיחות פרטיות בלבד. הבורר אינו
+  מציג קבוצות במסלול Cloud ואינו יוצר רושם שתמיכת קבוצות רשמית קיימת.
+
+שמירת הבחירה משתמשת במבנה ההגדרות המקורי של Hermes, באותו `default` profile:
+
+- `platforms.whatsapp.dm_policy` ו־`allow_from` מגבילים שולחי DM;
+- `platforms.whatsapp.group_policy` ו־`group_allow_from` מגבילים **מזהי קבוצות**,
+  לא משתתפים מסוימים בתוך קבוצה;
+- `platforms.<adapter>.channel_overrides` משמש רק ל־`model`, ‏`provider` או
+  `system_prompt` ייעודיים לערוץ. הוא אינו מנגנון הרשאה ואינו מחליף allowlist.
+
+העדכון נכתב ב־REST הרשמי עם `PUT /api/config` כ־partial deep merge, כדי לשמר
+הגדרות שנוצרו בממשק Hermes המלא. אין להשתמש ב־`/api/config/raw` ואין לשכתב את
+`config.yaml` כולו. מאחר שהמתאמים טוענים את מדיניות הגישה בעת יצירתם, כל שינוי
+מדיניות מסתיים ב־`POST /api/gateway/restart?profile=default` וב־Health Check;
+הצלחה בשמירה בלבד אינה נחשבת הוכחה שהמדיניות נאכפת ב־Gateway הפעיל.
+
 #### בדיקת פתרון רשמי לפני הרחבה עצמאית
 
 נבדקו התיעוד העדכני של Meta, התיעוד הרשמי של Hermes והקוד המותקן של
@@ -366,11 +399,16 @@ Hermes ובשכבת ה־transport — לא רק ב־UI.
 - **קריאה בלבד (`read_only`, ברירת מחדל):** כל הודעה נכנסת נשמרת ל־session store
   המשותף של Hermes, אך הסוכן לעולם אינו רץ ואין שום תופעת־לוואי יוצאת (תשובה,
   הקלדה, אישור קריאה, תגובה, עריכה/מחיקה, שליחה עצמאית או משימה מתוזמנת).
-- **שיחות פרטיות נבחרות (`selected_chats`):** רק מספרי WhatsApp שנבחרו במפורש
-  מקבלים מענה; כל השאר נשמרים אך לא נענים. בזמן `apply` אותה רשימה נכתבת גם
-  ל־allowlist הרשמי של Hermes, כך שה־hook וה־auth הקיים מסכימים על אותה הרשאה.
-  קבוצות ניתנות להגדרה בממשק Hermes המלא דרך `group_policy/group_allow_from`;
-  ה־POC הפשוט אינו מציג אותן כאילו הוגדרו כשלא הוגדרו.
+- **שיחות וקבוצות נבחרות (`selected_chats`):** במסלול QR אפשר לבחור שיחות פרטיות
+  וקבוצות; במסלול Cloud אפשר לבחור שיחות פרטיות בלבד. רק המקורות שנבחרו במפורש
+  מתקבלים ל־Agent; שאר המקורות נדחים בידי ה־allowlist המקורי של Hermes ואינם נשמרים
+  על ידי המעטפת. בזמן `apply`, שיחות פרטיות נכתבות גם
+  ל־`dm_policy/allow_from` וקבוצות QR ל־`group_policy/group_allow_from` הרשמיים
+  של Hermes, כך שה־hook וה־auth הקיים מסכימים על אותה הרשאה.
+- בתוך `selected_chats` יש שתי התנהגויות: `monitor` מריץ את Hermes כדי לזהות ידע,
+  בקשות לפגישה ולקוחות שממתינים, אך חוסם כל תשובת WhatsApp בשכבת ה־egress;
+  `assist` מאפשר מענה רק למקורות שנבחרו ובכפוף לכל אישורי Hermes. ה־system prompt
+  שב־`channel_overrides` מנחה את העבודה העסקית, אך אינו גבול האבטחה.
 - מדיניות חסרה/לא תקינה → ברירת מחדל `read_only` (fail-closed).
 
 **אכיפה** מסופקת על ידי plugin משתמש אמיתי של Hermes,
@@ -435,11 +473,14 @@ runtime מסונתז ו־README ואינה קוראת/עוברת על ה־home, 
 מעצם הבנייה; `diagnosticsExclusions()` מתעד את החוזה לכל אספן עתידי.
 
 שמירת המדיניות מסנכרנת גם את מנגנוני Hermes הרשמיים דרך REST, לפני כתיבת
-הקובץ המקומי: Baileys מקבל `WHATSAPP_DM_POLICY=pairing` ו־
-`WHATSAPP_ALLOWED_USERS`; Cloud מקבל `WHATSAPP_CLOUD_DM_POLICY=pairing` ו־
-`WHATSAPP_CLOUD_ALLOWED_USERS`. כך כל הודעה יכולה להגיע ל־passive ingest,
-אבל turn פעיל וכפתורים אינטראקטיביים מותרים רק למספרים שנבחרו. סדר הכתיבה
-שומר בכל רגע על החיתוך המחמיר בין המדיניות הישנה והחדשה.
+הקובץ המקומי. `PUT /api/config` מעדכן באופן חלקי את `dm_policy/allow_from`, את
+`group_policy/group_allow_from` במסלול QR, ואת `channel_overrides` כאשר נדרשת
+הנחיית ניטור ייעודית למקור. נתיבי ה־Messaging/Env הקיימים נשמרים לצורכי תאימות
+עם הגדרות הסביבה של המתאמים. לאחר מכן ה־Gateway מופעל מחדש ונבדק; רק אז השינוי
+נחשב פעיל. במצב `read_only` ה־allowlist המקורי לבדו אינו מספיק, משום שהוא מסנן
+inbound ואינו מספק passive ingest עם חסימת egress. לכן מצב זה נשאר באחריות
+ה־plugin המוגן, ולא בידי `channel_overrides` או system prompt. סדר הכתיבה שומר
+בכל רגע על החיתוך המחמיר בין המדיניות הישנה והחדשה.
 
 ראה [../hermes-plugin/business-whatsapp-policy](../hermes-plugin/business-whatsapp-policy).
 

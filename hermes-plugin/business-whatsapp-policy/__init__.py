@@ -12,7 +12,7 @@ import logging
 
 from .dispatch import platform_value, read_only_dispatch, reply_identifiers
 from .ingest import WHATSAPP_PLACEHOLDER
-from .policy import PLATFORMS, can_reply, load_policy
+from .policy import PLATFORMS, can_process, load_policy
 from .registry import install_registry_guards
 from .tool_hook import pre_tool_call
 from .tool_transport import install_tool_guards
@@ -35,7 +35,11 @@ def pre_gateway_dispatch(*, event=None, session_store=None, **_kwargs):
         from hermes_cli.config import get_hermes_home
 
         policy = load_policy(get_hermes_home())
-        authorized = can_reply(policy, *reply_identifiers(source, _is_group(source)))
+        authorized = can_process(
+            policy,
+            *reply_identifiers(source, _is_group(source)),
+            platform=platform_value(source),
+        )
     except Exception:
         logger.exception("WhatsApp policy evaluation failed; dispatch remains blocked")
         authorized = False

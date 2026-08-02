@@ -40,4 +40,6 @@ def authorize(platform: Any, *identifiers: Any, home: Any) -> bool:
     family = family_for(platform)
     if family is None or not any(family.normalize(value) for value in identifiers):
         return False
-    return bool(family.reply(family.load(home), *identifiers))
+    return bool(family.reply(
+        family.load(home), *identifiers, platform=platform_name(platform)
+    ))

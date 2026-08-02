@@ -1,6 +1,7 @@
 const { activateWhatsappGuard } = require('./whatsapp-guard-activation.cjs')
 const { getWhatsappPolicy } = require('./whatsapp-policy.cjs')
 const { saveWhatsappPolicySynced } = require('./whatsapp-policy-sync.cjs')
+const { readWhatsappDirectory } = require('./whatsapp-directory.cjs')
 
 // WhatsApp is connected to an account with existing conversations, so its
 // read-only/selected-chat policy remains a product safety boundary. Telegram is
@@ -15,6 +16,7 @@ async function ensureWhatsappSafety() {
 
 function registerMessagingPolicyIpc(ipcMain) {
   ipcMain.handle('hermes:whatsapp-policy:get', getWhatsappPolicy)
+  ipcMain.handle('hermes:whatsapp-directory:get', readWhatsappDirectory)
   ipcMain.handle('hermes:whatsapp-policy:set', async (_event, policy) => {
     await ensureWhatsappSafety()
     return saveWhatsappPolicySynced(policy)

@@ -20,9 +20,14 @@ afterEach(() => {
 })
 
 type PolicyModule = {
-  getWhatsappPolicy: () => { version: 1; mode: string; reply_chats: string[] }
-  setWhatsappPolicy: (candidate: unknown) => { version: 1; mode: string; reply_chats: string[] }
-  normalizePolicy: (candidate: unknown) => { version: 1; mode: string; reply_chats: string[] }
+  getWhatsappPolicy: () => WhatsappPolicy
+  setWhatsappPolicy: (candidate: unknown) => WhatsappPolicy
+  normalizePolicy: (candidate: unknown) => WhatsappPolicy
+}
+
+type WhatsappPolicy = {
+  version: 2; mode: string; behavior: string; instructions: string
+  reply_chats: string[]; reply_groups: string[]; sources: unknown[]
 }
 
 function load(): PolicyModule {
@@ -32,12 +37,27 @@ function load(): PolicyModule {
 describe('Electron WhatsApp policy persistence', () => {
   it('defaults to read-only when the file is missing or garbage', () => {
     const { getWhatsappPolicy, normalizePolicy } = load()
-    expect(getWhatsappPolicy()).toEqual({ version: 1, mode: 'read_only', reply_chats: [] })
-    expect(normalizePolicy({ mode: 'answer_everyone' })).toEqual({
-      version: 1,
-      mode: 'read_only',
-      reply_chats: []
+    expect(getWhatsappPolicy()).toEqual({
+      version: 2, mode: 'read_only', behavior: 'monitor', instructions: '', reply_chats: [], reply_groups: [], sources: []
     })
+    expect(normalizePolicy({ mode: 'answer_everyone' })).toEqual({
+      version: 2,
+      mode: 'read_only',
+      behavior: 'monitor',
+      instructions: '',
+      reply_chats: [],
+      reply_groups: [],
+      sources: []
+    })
+  })
+
+  it('keeps group JIDs separate from private chats', () => {
+    const { setWhatsappPolicy } = load()
+    const saved = setWhatsappPolicy({
+      mode: 'selected_chats', reply_chats: ['15551234567'], reply_groups: ['12345@g.us']
+    })
+    expect(saved.reply_chats).toEqual(['15551234567'])
+    expect(saved.reply_groups).toEqual(['12345@g.us'])
   })
 
   it('normalizes and de-duplicates selected chats and round-trips through disk', () => {

@@ -134,7 +134,12 @@ def _policy_modes(home_getter: Optional[Callable[[], Any]]) -> dict:
         home = home_getter()
         from .policy import load_policy as wa_load_policy
         wa = wa_load_policy(home)
-        modes["whatsapp"] = {"mode": getattr(wa, "mode", None), "reply_chats": len(getattr(wa, "reply_chats", []) or [])}
+        modes["whatsapp"] = {
+            "mode": wa.get("mode"),
+            "reply_chats": len(wa.get("sources") or []) or (
+                len(wa.get("reply_chats") or []) + len(wa.get("reply_groups") or [])
+            ),
+        }
     except Exception:
         # A policy read failure must never fabricate a mode.
         return {}

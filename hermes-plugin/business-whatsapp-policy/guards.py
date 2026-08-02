@@ -33,8 +33,8 @@ def _read_receipt_target(data: dict) -> Any:
     return data.get("chatId") or data.get("senderId") or data.get("from") or ""
 
 
-def _authorize(home_getter: Callable[[], Any]):
-    return lambda *ids: can_reply(load_policy(home_getter()), *ids)
+def _authorize(home_getter: Callable[[], Any], platform: str | None = None):
+    return lambda *ids: can_reply(load_policy(home_getter()), *ids, platform=platform)
 
 
 def _blocked(method: str):
@@ -46,19 +46,19 @@ def _target(method: str, args: tuple, kwargs: dict) -> Any:
     return target_from_call(args, kwargs, resolver)
 
 
-def _make_async_guard(name, original, home_getter):
-    return make_guard(name, original, _authorize(home_getter), _blocked, _target)
+def _make_async_guard(name, original, home_getter, platform=None):
+    return make_guard(name, original, _authorize(home_getter, platform), _blocked, _target)
 
 
-def _make_sync_guard(name, original, home_getter):
-    return make_guard(name, original, _authorize(home_getter), _blocked, _target)
+def _make_sync_guard(name, original, home_getter, platform=None):
+    return make_guard(name, original, _authorize(home_getter, platform), _blocked, _target)
 
 
-def _guard_interactive_auth(adapter: Any, home_getter: Callable[[], Any]) -> None:
+def _guard_interactive_auth(adapter: Any, home_getter: Callable[[], Any], platform=None) -> None:
     guard_interactive(
         adapter,
         INTERACTIVE_AUTH_METHOD,
-        _authorize(home_getter),
+        _authorize(home_getter, platform),
         lambda args, kwargs: (args[0] if args else kwargs.get("sender_id", ""),),
     )
 

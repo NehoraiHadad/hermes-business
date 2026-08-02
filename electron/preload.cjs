@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
   getGoogleStatus: () => ipcRenderer.invoke('hermes:google:status'),
   ensureGateway: () => ipcRenderer.invoke('hermes:gateway:ensure'),
   getWhatsappPolicy: () => ipcRenderer.invoke('hermes:whatsapp-policy:get'),
+  getWhatsappDirectory: () => ipcRenderer.invoke('hermes:whatsapp-directory:get'),
   setWhatsappPolicy: policy => ipcRenderer.invoke('hermes:whatsapp-policy:set', policy),
   ensureWhatsappPolicy: () => ipcRenderer.invoke('hermes:whatsapp-policy:ensure'),
   getWhatsappGuard: () => ipcRenderer.invoke('hermes:whatsapp-policy:guard-status'),
