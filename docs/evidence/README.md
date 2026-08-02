@@ -26,11 +26,11 @@ emails) and `redactPaths` (home/temp/drive paths) as a backstop.
   companion boots against an isolated, harness-owned temp `HERMES_HOME`, the
   isolated session count is 0, the live profile is unchanged, and teardown leaves
   no residual. Produced by `e2e-installed-isolated.mjs`.
-- `telegram.json` — **blocked**, pending a fresh redacted live Telegram recapture.
-  It predates the subject-fingerprint contract and its attested hermes-plugin
-  subjects have drifted. When re-captured, the `telegram` pass-proof rule in
-  `scripts/lib/evidence-gates.mjs` enforces the sole-owner / no-webhook /
-  no-mutation / single-send invariants over the redacted scalar reduction.
+- `telegram.json` — **passed** from a redacted live native-Hermes round trip.
+  It proves a valid bot, polling with no competing webhook, inbound delivery to
+  Hermes and an outbound agent reply. The wrapper owns no Telegram policy or
+  transport. The pass-proof rule enforces the no-conflict / no-mutation /
+  single-chat invariants over the scalar-only reduction.
 
 ## Real-loader proof (opt-in, passing — no committed envelope)
 

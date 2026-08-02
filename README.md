@@ -159,11 +159,9 @@ electron/          runtime, IPC, חלונות, אבחון, Google ו־plugin ins
 - האפליקציה המותקנת עברה E2E מול Hermes חי ללא console/page errors.
 - מסך WhatsApp המותקן עבר E2E: ברירת מחדל read-only, מעבר לצ׳אטים נבחרים,
   סנכרון להגדרות Hermes, חזרה ל־read-only ויצירת QR אמיתי.
-- כרטיס ה־Telegram אומת אוטומטית מול `/api/messaging/platforms` ודיאלוג החיבור
-  נפתח ונסגר. ראיה מכונתית (`docs/evidence/telegram.json`) מתעדת polling תקין,
-  bot token תקף ומאזין יחיד ללא webhook; הודעה נכנסת היסטורית הגיעה ל־Hermes
-  ונחסמה בהיעדר הרשאה, וה־allowlist הנוכחי מאשר את השולח; הודעת בדיקת־חיבור אחת
-  בלבד נשלחה ואומתה דרך שליחת Hermes הרשמית. סבב טרי מלא לאחר ההרשאה נותר צעד ידני.
+- כרטיס ה־Telegram אומת מול `/api/messaging/platforms`; ראיה מכונתית מצומצמת
+  (`docs/evidence/telegram.json`) מתעדת Bot תקף, polling ללא webhook מתחרה ושני
+  סבבים חיים של הודעה נכנסת → סוכן → תשובה דרך Hermes בלבד.
 - שאלה מובנית של הסוכן הוצגה ונענתה דרך RPC הרשמי.
 - `session.resume` החזיר את אותו transcript; `tool.start/tool.complete` התקבלו עם
   אותו tool id, ו־`session.interrupt` עצר תשובת Streaming פעילה.

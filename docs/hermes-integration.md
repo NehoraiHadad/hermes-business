@@ -754,12 +754,9 @@ reducer אירועי הצ׳אט, חוזה התאימות, אימות הגיבו�
   של Hermes: לוג ה־gateway הראה `business_whatsapp_read_only`; מסד הנתונים הראה
   0 tokens, ‏0 API/Tool Calls ו־0 delivery obligations, ולכן המופע הזה לא שלח תשובה.
   אין לכך בדיקה אוטומטית עצמאית — הכיסוי האוטומטי הוא מדיניות וonboarding UI.
-- Telegram: הכיסוי האוטומטי מאמת את הכרטיס מול `/api/messaging/platforms` ואת
-  דיאלוג החיבור, וראיה מכונתית (`docs/evidence/telegram.json`, ב־verify:evidence)
-  מתעדת polling תקין, bot token תקף ומאזין יחיד ללא webhook; הודעה נכנסת היסטורית
-  הגיעה ל־Hermes ונחסמה בהיעדר הרשאה, וה־allowlist הנוכחי מאשר את השולח; הודעת
-  בדיקת־חיבור אחת בלבד נשלחה ואומתה דרך שליחת Hermes הרשמית. סבב טרי ומלא של
-  הודעה מהמשתמש → סוכן → תשובה לאחר ההרשאה נותר הצעד הידני האחרון, לא בדיקה אוטומטית.
+- Telegram: הכיסוי מאמת את הכרטיס מול `/api/messaging/platforms`, וראיה מכונתית
+  (`docs/evidence/telegram.json`, ב־verify:evidence) מתעדת Bot תקף, polling ללא
+  webhook מתחרה ושני סבבים חיים של הודעה נכנסת → סוכן → תשובה דרך Hermes בלבד.
 - Skill ו־Scheduled Task עברו מול APIs הרשמיים. פער ה־paused של `cron.manage`
   הפעיל־בלבד נסגר דרך ה־plugin backend הקריא־בלבד (`plugin_api.py` →
   `list_jobs(include_disabled=True)`), והוכח cross-door מול Hermes חי ב־home מבודד.
@@ -806,9 +803,8 @@ provider `openai-codex`, ו־inference + Streaming עברו — הפעלה ו־i
 Google נבדק גם במסלול כשל בטוח, וזהו המסלול המכוסה אוטומטית
 (`scripts/lib/probes/installed/connections.mjs`): קובץ client secret חסר נדחה,
 וסטטוס האימות נשאר ללא שינוי. השלמת consent אמיתי עדיין דורשת קובץ Google של
-המשתמש. אבחון ה־Telegram החי מתועד כעת גם בראיה מכונתית מעורפלת
-(`docs/evidence/telegram.json`, נאכפת ב־verify:evidence); הסבב הטרי המלא לאחר
-ההרשאה נותר תצפית ידנית.
+המשתמש. אבחון Telegram והסבב החי המלא מתועדים בראיה מכונתית מעורפלת
+(`docs/evidence/telegram.json`, נאכפת ב־verify:evidence).
 
 ## מטריצת קבלה
 
