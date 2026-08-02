@@ -4,11 +4,11 @@
   "status": "passed",
   "app_version": "0.4.0-alpha.1",
   "hermes_range": ">=0.19.0 <0.20.0",
-  "git_head": "962759c95f20a9b9495e38ac602bcbb864ab5e48",
+  "git_head": "ac8f015fca984b6c888784645aa4b2db262cefac",
   "git_state": "committed",
   "subject_scheme": 3,
   "subject_fingerprint": "5d3976521da24df22ae59c325af264f47402fdb5c0c5ef033e30a8a16caa1ea5",
-  "captured_at": "2026-08-02T03:55:44.765Z",
+  "captured_at": "2026-08-02T04:08:06.374Z",
   "tool": "manual-live-probe:hermes-native-gateway (redacted reduction)",
   "redacted": true,
   "summary": {
