@@ -1,10 +1,12 @@
-import {Sparkles} from 'lucide-react';
 import {colors} from '../theme';
+import brandLogo from '../assets/tahlas-logo.png';
 
 export const BrandMark = ({size = 70}: {size?: number}) => (
-  <div style={{width: size, height: size, borderRadius: size * 0.3, display: 'grid', placeItems: 'center', background: `linear-gradient(145deg, ${colors.purple}, ${colors.purpleDark})`, color: 'white', boxShadow: '0 16px 36px #655bd14d'}}>
-    <Sparkles size={size * 0.5} strokeWidth={2.3} />
-  </div>
+  <img
+    src={brandLogo}
+    alt=""
+    style={{width: size, height: size, objectFit: 'contain', filter: 'drop-shadow(0 16px 18px #655bd14d)'}}
+  />
 );
 
 export const Wordmark = ({compact = false}: {compact?: boolean}) => (

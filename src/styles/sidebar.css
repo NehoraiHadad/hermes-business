@@ -37,51 +37,22 @@
 }
 
 .logo {
-  position: relative;
   width: 38px;
   height: 38px;
   flex: 0 0 38px;
 }
 
-.logo__wing,
-.logo__core {
-  position: absolute;
+.logo img {
   display: block;
-}
-
-.logo__wing {
-  top: 6px;
-  width: 18px;
-  height: 27px;
-  background: linear-gradient(150deg, #7775bf, #454481);
-  border-radius: 70% 18% 68% 20%;
-  transform: rotate(27deg);
-}
-
-.logo__wing--a {
-  right: 3px;
-}
-
-.logo__wing--b {
-  left: 3px;
-  transform: scaleX(-1) rotate(27deg);
-}
-
-.logo__core {
-  top: 13px;
-  right: 15px;
-  width: 8px;
-  height: 14px;
-  background: #f4d58a;
-  border-radius: 50% 50% 30% 30%;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .logo--small {
   width: 26px;
   height: 26px;
   flex-basis: 26px;
-  transform: scale(0.72);
-  transform-origin: center;
 }
 
 .sidebar--simple {
