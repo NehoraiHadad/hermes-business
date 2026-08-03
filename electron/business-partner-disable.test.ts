@@ -61,14 +61,14 @@ let home: string
 let previousHome: string | undefined
 
 beforeEach(() => {
-  previousHome = process.env.HERMES_HOME
+  previousHome = process.env.HERMES_BUSINESS_HOME
   home = fs.mkdtempSync(path.join(os.tmpdir(), 'hermes-partner-disable-'))
-  process.env.HERMES_HOME = home
+  process.env.HERMES_BUSINESS_HOME = home
 })
 
 afterEach(() => {
-  if (previousHome === undefined) delete process.env.HERMES_HOME
-  else process.env.HERMES_HOME = previousHome
+  if (previousHome === undefined) delete process.env.HERMES_BUSINESS_HOME
+  else process.env.HERMES_BUSINESS_HOME = previousHome
   fs.rmSync(home, { recursive: true, force: true })
 })
 

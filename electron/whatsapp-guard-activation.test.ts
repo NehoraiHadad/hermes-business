@@ -91,12 +91,12 @@ describe('activateWhatsappGuard', () => {
   let prevHome: string | undefined
   beforeEach(() => {
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'hermes-guard-act-'))
-    prevHome = process.env.HERMES_HOME
-    process.env.HERMES_HOME = tmp
+    prevHome = process.env.HERMES_BUSINESS_HOME
+    process.env.HERMES_BUSINESS_HOME = tmp
   })
   afterEach(() => {
-    if (prevHome === undefined) delete process.env.HERMES_HOME
-    else process.env.HERMES_HOME = prevHome
+    if (prevHome === undefined) delete process.env.HERMES_BUSINESS_HOME
+    else process.env.HERMES_BUSINESS_HOME = prevHome
     fs.rmSync(tmp, { recursive: true, force: true })
     vi.restoreAllMocks()
   })
@@ -299,12 +299,12 @@ describe('recoverGuardActivation — finishes a crash-interrupted restart BEFORE
   let prevHome: string | undefined
   beforeEach(() => {
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'hermes-guard-rec-'))
-    prevHome = process.env.HERMES_HOME
-    process.env.HERMES_HOME = tmp
+    prevHome = process.env.HERMES_BUSINESS_HOME
+    process.env.HERMES_BUSINESS_HOME = tmp
   })
   afterEach(() => {
-    if (prevHome === undefined) delete process.env.HERMES_HOME
-    else process.env.HERMES_HOME = prevHome
+    if (prevHome === undefined) delete process.env.HERMES_BUSINESS_HOME
+    else process.env.HERMES_BUSINESS_HOME = prevHome
     fs.rmSync(tmp, { recursive: true, force: true })
   })
 

@@ -70,6 +70,7 @@ function buildManifest({ versions, health, status, runtimeState, createdAt, plat
       running: runtimeState.running,
       starting: runtimeState.starting,
       mode: runtimeState.mode,
+      isolated: Boolean(runtimeState.isolated),
       error_present: Boolean(runtimeState.error)
     },
     health: safeHealth,

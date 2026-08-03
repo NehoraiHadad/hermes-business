@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module'
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -15,6 +15,23 @@ type PathsModule = {
   WHATSAPP_POLICY_PLUGIN_ID: string
   WHATSAPP_POLICY_PLUGIN_FILES: string[]
   WHATSAPP_POLICY_PLUGIN_OBSOLETE_FILES: string[]
+  desktopBackendSourceDir: () => string
+  DESKTOP_BACKEND_FILES: string[]
+}
+
+// Runtime payload files sitting directly in a plugin source directory: real
+// modules (.py) and the manifest (plugin.yaml / manifest.json), never the
+// pytest sidecars (test_*.py), fixture dirs (tests/), caches (__pycache__,
+// .pytest_cache), or docs (README.md). Used to catch a NEW module added on
+// disk but never added to the electron/paths.cjs manifest — the forward
+// checks below only catch a manifest entry that's missing from disk, not
+// the reverse.
+function runtimePayloadFilesOnDisk(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true })
+    .filter(entry => entry.isFile())
+    .map(entry => entry.name)
+    .filter(name => name !== 'README.md' && !name.startsWith('test_'))
+    .sort()
 }
 
 const install = require('../../electron/whatsapp-plugin-install.cjs') as InstallModule
@@ -36,6 +53,26 @@ describe('WhatsApp policy plugin payload', () => {
     }
     // plugin.yaml must declare the enforcement hook.
     expect(readFileSync(path.join(source, 'plugin.yaml'), 'utf8')).toContain('pre_gateway_dispatch')
+  })
+
+  // Reverse direction: a new runtime module dropped on disk but never added
+  // to WHATSAPP_POLICY_PLUGIN_FILES would silently miss all 6 shipping
+  // lists (package.json, NSI, BusinessInstall.ps1, both E2E bootstrap
+  // scripts) and fail to import at runtime, so the safety plugin never
+  // activates and WhatsApp ships unguarded (fail-open). The forward check
+  // above cannot catch this since it only iterates the manifest.
+  it('has no runtime file on disk that is missing from WHATSAPP_POLICY_PLUGIN_FILES', () => {
+    const onDisk = runtimePayloadFilesOnDisk(paths.whatsappPolicyPluginSource())
+    const manifest = [...paths.WHATSAPP_POLICY_PLUGIN_FILES].sort()
+    expect(onDisk, 'a new .py/plugin.yaml file exists that electron/paths.cjs does not list').toEqual(manifest)
+  })
+
+  it('has no desktop backend runtime file on disk that is missing from DESKTOP_BACKEND_FILES', () => {
+    const onDisk = runtimePayloadFilesOnDisk(paths.desktopBackendSourceDir())
+    const manifest = [...paths.DESKTOP_BACKEND_FILES].sort()
+    expect(onDisk, 'a new dashboard file exists that electron/paths.cjs DESKTOP_BACKEND_FILES does not list').toEqual(
+      manifest
+    )
   })
 })
 
@@ -142,7 +179,28 @@ describe('installer packaging references the policy plugin', () => {
     const nsi = readFileSync(path.join(repoRoot, 'installer', 'business-bootstrap.nsi'), 'utf8')
     expect(nsi).toContain('whatsapp-policy')
     for (const file of paths.WHATSAPP_POLICY_PLUGIN_FILES) {
-      expect(nsi).toContain(file)
+      // Anchor on the trailing `\<file>"` of the `File "...\<file>"` directive
+      // rather than a bare substring match: an unanchored .toContain('contract.py')
+      // is satisfied by 'tool_contract.py', and .toContain('transport.py') by
+      // 'tool_transport.py', so deleting the real File line would go undetected.
+      expect(nsi, `NSI installer missing File directive for ${file}`).toContain(`\\${file}"`)
+    }
+  })
+
+  it('e2e-bootstrap-clean.ps1 stages every runtime payload file', () => {
+    const script = readFileSync(path.join(repoRoot, 'scripts', 'e2e-bootstrap-clean.ps1'), 'utf8')
+    for (const file of paths.WHATSAPP_POLICY_PLUGIN_FILES) {
+      expect(script, `e2e-bootstrap-clean.ps1 missing ${file}`).toContain(`'${file}'`)
+    }
+    for (const file of paths.DESKTOP_BACKEND_FILES) {
+      expect(script, `e2e-bootstrap-clean.ps1 missing backend file ${file}`).toContain(`'${file}'`)
+    }
+  })
+
+  it('e2e-companion-bootstrap.ps1 stages every runtime payload file', () => {
+    const script = readFileSync(path.join(repoRoot, 'scripts', 'e2e-companion-bootstrap.ps1'), 'utf8')
+    for (const file of paths.WHATSAPP_POLICY_PLUGIN_FILES) {
+      expect(script, `e2e-companion-bootstrap.ps1 missing ${file}`).toContain(`'${file}'`)
     }
   })
 })

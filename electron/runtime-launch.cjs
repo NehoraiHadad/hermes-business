@@ -4,11 +4,10 @@ const { findHermes, getHermesVersion } = require('./paths.cjs')
 const { chooseRuntimePort, waitForHealth } = require('./runtime-network.cjs')
 const { isVersionSupported } = require('./hermes-compat.cjs')
 const { reapProcessTree } = require('./process-util.cjs')
-const { getQaRuntimeOverride } = require('./qa-runtime.cjs')
 const { buildChildEnv } = require('./runtime-env.cjs')
 const { buildQaDiagnostics } = require('./runtime-qa.cjs')
+const { getRuntimeMode } = require('./runtime-mode.cjs')
 const {
-  PREFERRED_PORT,
   SESSION_TOKEN,
   baseUrl,
   wsUrl,
@@ -25,6 +24,7 @@ const {
 // and lifecycle facade live in runtime.cjs.
 
 function refreshRuntimeInstalled() {
+  const runtimeConfig = getRuntimeMode()
   const command = findHermes()
   const version = getHermesVersion(command)
   // Startup compatibility surfacing: an unsupported runtime is flagged (never
@@ -32,6 +32,9 @@ function refreshRuntimeInstalled() {
   return patchRuntimeState({
     installed: Boolean(command),
     version,
+    mode: runtimeConfig.mode,
+    isolated: runtimeConfig.isolated,
+    hermesHome: runtimeConfig.hermesHome,
     compatible: command ? isVersionSupported(version) : true
   })
 }
@@ -46,20 +49,16 @@ async function startHermes() {
     }
     return getRuntimeState()
   }
-  // Automated-QA isolation contract (main-process only, fail-closed). Absent in
-  // production: `override.enabled` is false and everything below is the exact
-  // one-live-home behavior. When present, the runtime binds an isolated loopback
-  // port and points the child gateway's HERMES_HOME at a throwaway temp dir.
-  let override
+  // One process-owned mode contract chooses home, binary, namespace and port.
+  // Invalid dev/QA requests fail closed instead of falling back to production.
+  let runtimeConfig
   try {
-    override = getQaRuntimeOverride()
+    runtimeConfig = getRuntimeMode()
   } catch (error) {
-    // A QA run was requested but the override is invalid. NEVER fall back to the
-    // live profile — refuse to start and surface the reason.
     return patchRuntimeState({
       starting: false,
       running: false,
-      error: `QA runtime override rejected: ${error.message || error}`
+      error: `Runtime mode rejected: ${error.message || error}`
     })
   }
 
@@ -68,34 +67,31 @@ async function startHermes() {
     installed: Boolean(command),
     version: getHermesVersion(command),
     starting: Boolean(command),
-    mode: override.enabled ? 'qa-isolated' : 'live',
-    hermesHome: override.enabled ? override.hermesHome : null,
-    qa: override.enabled ? buildQaDiagnostics() : null,
+    mode: runtimeConfig.mode,
+    isolated: runtimeConfig.isolated,
+    hermesHome: runtimeConfig.hermesHome,
+    qa: runtimeConfig.mode === 'qa-isolated' ? buildQaDiagnostics() : null,
     error: null
   })
   if (!command) return getRuntimeState()
 
-  const host = override.enabled ? override.host : '127.0.0.1'
+  const host = runtimeConfig.host
   let port
   try {
-    // QA: bind the EXACT isolated port (range 1 = no drift), so the harness can
-    // prove which loopback port was used and that it is freed afterwards.
-    port = override.enabled
-      ? await chooseRuntimePort(override.port, 1)
-      : await chooseRuntimePort(PREFERRED_PORT)
+    port = await chooseRuntimePort(runtimeConfig.preferredPort, runtimeConfig.portRange)
   } catch (error) {
     return patchRuntimeState({
       starting: false,
       running: false,
-      error: override.enabled
-        ? `Isolated QA port ${override.port} is unavailable`
+      error: runtimeConfig.isolated
+        ? `Isolated ${runtimeConfig.mode} port ${runtimeConfig.preferredPort} is unavailable`
         : String(error.message || error)
     })
   }
   setRuntimePort(port)
   patchRuntimeState({ wsUrl: wsUrl() })
 
-  const env = buildChildEnv({ sessionToken: SESSION_TOKEN, override })
+  const env = buildChildEnv({ sessionToken: SESSION_TOKEN, runtimeConfig })
   // `hermes serve` is headless by definition. Current Hermes versions do not
   // expose a `--no-open` flag, so passing it makes the managed runtime exit
   // before the health check can ever succeed.

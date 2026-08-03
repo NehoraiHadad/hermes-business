@@ -5,17 +5,17 @@ import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 const require = createRequire(import.meta.url)
-const originalHome = process.env.HERMES_HOME
+const originalHome = process.env.HERMES_BUSINESS_HOME
 let home = ''
 
 beforeEach(() => {
   home = mkdtempSync(path.join(tmpdir(), 'hermes-policy-'))
-  process.env.HERMES_HOME = home
+  process.env.HERMES_BUSINESS_HOME = home
 })
 
 afterEach(() => {
-  if (originalHome === undefined) delete process.env.HERMES_HOME
-  else process.env.HERMES_HOME = originalHome
+  if (originalHome === undefined) delete process.env.HERMES_BUSINESS_HOME
+  else process.env.HERMES_BUSINESS_HOME = originalHome
   if (home) rmSync(home, { recursive: true, force: true })
 })
 

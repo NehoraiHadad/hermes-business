@@ -14,8 +14,7 @@ const { ensureGatewayBackground } = require('./google-setup.cjs')
 const { recoverIncompleteUpdate } = require('./hermes-update-recovery.cjs')
 const { reconcilePartnerCheckinsOnStartup } = require('./business-partner.cjs')
 const { registerIpc } = require('./ipc.cjs')
-const { getQaRuntimeOverride, SENTINEL_ENV, SENTINEL_VALUE } = require('./qa-runtime.cjs')
-const { qaElectronNamespace } = require('./qa-electron-namespace.cjs')
+const { getRuntimeMode } = require('./runtime-mode.cjs')
 const { recordQaNamespaceApplied } = require('./qa-diagnostics.cjs')
 
 // Application entry point. Owns only process lifecycle; every feature lives in a
@@ -29,50 +28,50 @@ const { recordQaNamespaceApplied } = require('./qa-diagnostics.cjs')
 // running LIVE companion (which holds the default-userData single-instance lock)
 // can never intercept/forward the QA launch to itself — the exact collision that
 // let a QA approval run reach the live gateway. Production is untouched: with no
-// sentinel, qaOverride.enabled is false, the default userData/lock is used, and
-// every path below is the original behaviour.
-let qaOverride = { enabled: false }
-let qaFailClosed = false
-if (process.env[SENTINEL_ENV] === SENTINEL_VALUE) {
-  try {
-    qaOverride = getQaRuntimeOverride()
-  } catch (error) {
-    // A QA run was REQUESTED but the isolation contract is invalid. NEVER fall
-    // back to the live profile/lock — refuse to launch at all.
-    qaFailClosed = true
-    rememberLog(`QA isolation invalid; refusing to launch: ${error.message || error}`)
-  }
-  const ns = qaElectronNamespace(qaOverride)
-  if (ns.isolated) {
+// sentinel, production keeps the default userData/lock. Development and QA use
+// separate namespaces before the lock is requested.
+let runtimeConfig = null
+let runtimeFailClosed = false
+try {
+  runtimeConfig = getRuntimeMode()
+} catch (error) {
+  runtimeFailClosed = true
+  rememberLog(`Runtime mode invalid; refusing to launch: ${error.message || error}`)
+}
+if (runtimeConfig?.electronUserData) {
+  const userData = runtimeConfig.electronUserData
+  if (runtimeConfig.isolated) {
     try {
-      fs.mkdirSync(ns.userData, { recursive: true })
+      fs.mkdirSync(userData, { recursive: true })
     } catch {
       /* Electron surfaces a userData failure on ready; we still isolate the path */
     }
     // Repartition the userData path (which KEYS the single-instance lock) before
     // any lock request, so the QA instance shares no namespace with the live
     // companion. sessionData follows userData to keep caches isolated too.
-    app.setPath('userData', ns.userData)
-    app.setPath('sessionData', ns.userData)
+    app.setPath('userData', userData)
+    app.setPath('sessionData', userData)
     // Record — synchronously, BEFORE the lock request below — that the QA
     // namespace was applied in THIS binary. The isolated E2E reads this back from
     // the running app (runtimeState.qa) as executable proof the fix is present,
     // rather than trusting a source inspection of a possibly-stale build.
-    recordQaNamespaceApplied({
-      namespaceApplied: true,
-      appliedBeforeLock: true,
-      isolated: true,
-      userDataLeaf: ns.userData
-    })
+    if (runtimeConfig.mode === 'qa-isolated') {
+      recordQaNamespaceApplied({
+        namespaceApplied: true,
+        appliedBeforeLock: true,
+        isolated: true,
+        userDataLeaf: userData
+      })
+    }
   }
 }
 
-const singleInstance = qaFailClosed
+const singleInstance = runtimeFailClosed
   ? false
-  : app.requestSingleInstanceLock({ qa: Boolean(qaOverride.enabled) })
-if (qaFailClosed || !singleInstance) {
+  : app.requestSingleInstanceLock({ runtimeMode: runtimeConfig?.mode || 'invalid' })
+if (runtimeFailClosed || !singleInstance) {
   app.quit()
-} else if (!qaOverride.enabled) {
+} else if (!runtimeConfig?.isolated) {
   // Only the LIVE companion forwards a second launch to the running window. A QA
   // instance owns a private namespace and must never surface (or be surfaced by)
   // another instance.
@@ -82,7 +81,7 @@ if (qaFailClosed || !singleInstance) {
 }
 
 app.whenReady().then(async () => {
-  if (qaFailClosed || !singleInstance) return
+  if (runtimeFailClosed || !singleInstance) return
   loadWindowPreferences()
   registerIpc()
   installDesktopPlugin()
@@ -169,6 +168,15 @@ app.whenReady().then(async () => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
+}).catch(error => {
+  // A rejection here previously died as a silent unhandled rejection with no
+  // window. Record it durably and surface it to any UI that does come up.
+  rememberLog(`Startup failed: ${error && (error.stack || error.message) || error}`)
+  try {
+    patchRuntimeState({ error: `Startup failed: ${error.message || error}` })
+  } catch {
+    /* runtime state unavailable; the log line above is the durable record */
+  }
 })
 
 app.on('window-all-closed', () => {

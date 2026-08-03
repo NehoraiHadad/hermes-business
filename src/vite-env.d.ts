@@ -13,6 +13,8 @@ declare global {
     running: boolean
     starting: boolean
     mode: string
+    isolated?: boolean
+    hermesHome?: string | null
     version: string | null
     compatible?: boolean
     compatRange?: string

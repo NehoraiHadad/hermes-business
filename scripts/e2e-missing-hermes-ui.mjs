@@ -9,6 +9,7 @@ if (!existsSync(executable)) throw new Error(`Packaged executable is missing: ${
 
 const suffix = `${process.pid}-${Date.now()}`
 const hermesHome = path.join(os.tmpdir(), `hb-missing-hermes-${suffix}`)
+const missingBinary = path.join(hermesHome, 'missing-hermes.exe')
 const userData = path.join(os.tmpdir(), `hb-missing-ui-${suffix}`)
 const screenshot = path.join(root, 'release', 'e2e-missing-hermes-ui.png')
 mkdirSync(hermesHome, { recursive: true })
@@ -16,7 +17,12 @@ mkdirSync(hermesHome, { recursive: true })
 const app = await electron.launch({
   executablePath: executable,
   args: [`--user-data-dir=${userData}`],
-  env: { ...process.env, HERMES_HOME: hermesHome },
+  env: {
+    ...process.env,
+    HERMES_HOME: '',
+    HERMES_BUSINESS_HOME: hermesHome,
+    HERMES_BUSINESS_HERMES_EXE: missingBinary
+  },
   timeout: 120_000
 })
 

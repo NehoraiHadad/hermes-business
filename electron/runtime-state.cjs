@@ -24,14 +24,13 @@ let runtimeState = {
   running: false,
   starting: false,
   mode: 'live',
+  isolated: false,
   version: null,
   compatible: true,
   compatRange: HERMES_COMPAT_RANGE,
   error: null,
-  // Effective HERMES_HOME the runtime is bound to. Populated ONLY under the
-  // qa-isolated contract (the throwaway temp home) so the QA harness can assert
-  // the diagnostics home is the temp home before doing anything; left null in
-  // production so the live profile path is never exposed to the renderer.
+  // Effective HERMES_HOME. This is shown in the local support surface so a
+  // developer can tell live, development and QA sessions apart immediately.
   hermesHome: null,
   // Executable QA proof surface. Populated ONLY under the qa-isolated contract:
   // { namespaceApplied, attestation:{ nonce, fingerprintPrefix, headShort,

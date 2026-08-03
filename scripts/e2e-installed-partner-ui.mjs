@@ -2,6 +2,9 @@ import { existsSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { _electron as electron } from 'playwright-core'
+import { assertSafeInstalledE2E } from './lib/e2e-safety.mjs'
+
+assertSafeInstalledE2E()
 
 // Safe installed/runtime probe for Business Partner mode + the Hermes-native
 // sandbox. It NEVER starts Docker and never leaves a container behind: it only

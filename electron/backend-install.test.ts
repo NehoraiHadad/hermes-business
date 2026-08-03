@@ -18,17 +18,17 @@ const repoRoot = resolve(__dirname, '..')
 const MALFORMED = 'plugins:\n  enabled: [business-shell\nunbalanced: "\n'
 const NON_MAPPING = '- business-shell\n- other\n'
 let home: string
-const originalHome = process.env.HERMES_HOME
+const originalHome = process.env.HERMES_BUSINESS_HOME
 const originalProfile = process.env.HERMES_PROFILE
 
 beforeEach(() => {
   home = mkdtempSync(join(tmpdir(), 'hbp-cfg-'))
-  process.env.HERMES_HOME = home
+  process.env.HERMES_BUSINESS_HOME = home
   delete process.env.HERMES_PROFILE
 })
 afterEach(() => {
-  if (originalHome === undefined) delete process.env.HERMES_HOME
-  else process.env.HERMES_HOME = originalHome
+  if (originalHome === undefined) delete process.env.HERMES_BUSINESS_HOME
+  else process.env.HERMES_BUSINESS_HOME = originalHome
   if (originalProfile === undefined) delete process.env.HERMES_PROFILE
   else process.env.HERMES_PROFILE = originalProfile
   rmSync(home, { recursive: true, force: true })

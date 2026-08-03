@@ -14,6 +14,21 @@ import type { HealthComponent, HealthReport, LoadErrors } from './health'
 // they render from one place.
 export type { HealthComponent, HealthReport, LoadErrors }
 
+function runtimeModeRow(runtime: HermesRuntime | null): HealthComponent {
+  const labels: Record<string, string> = {
+    live: 'ייצור',
+    development: 'פיתוח מבודד',
+    'qa-isolated': 'בדיקה מבודדת'
+  }
+  const mode = runtime?.mode || 'live'
+  return {
+    id: 'runtime-mode',
+    label: 'סביבת עבודה',
+    value: labels[mode] || mode,
+    state: mode === 'live' || runtime?.isolated ? 'ok' : 'warning'
+  }
+}
+
 // The provider row. A configured key is NOT proof of usability, so we distinguish
 // verified/usable (ok) from merely-configured-but-unverified (error — product needs a
 // working provider) from absent (error). Provider is REQUIRED, so a not-usable provider
@@ -58,6 +73,7 @@ export function buildSystemHealth(input: {
   const qrConnected = connected('whatsapp')
   const components: HealthComponent[] = [
     { id: 'runtime', label: 'Hermes Runtime', value: input.runtime?.running ? 'פועל' : 'לא פועל', state: input.runtime?.running ? 'ok' : 'error' },
+    runtimeModeRow(input.runtime),
     providerRow(input.provider),
     connectorRow('google', 'Google Workspace', connected('google')),
     connectorRow('telegram', 'Telegram', connected('telegram')),

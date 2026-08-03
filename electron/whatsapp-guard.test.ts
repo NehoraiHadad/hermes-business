@@ -82,12 +82,12 @@ describe('getWhatsappGuardStatus — reads + liveness-verifies the gateway heart
   let prevHome: string | undefined
   beforeEach(() => {
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'hermes-guard-'))
-    prevHome = process.env.HERMES_HOME
-    process.env.HERMES_HOME = tmp
+    prevHome = process.env.HERMES_BUSINESS_HOME
+    process.env.HERMES_BUSINESS_HOME = tmp
   })
   afterEach(() => {
-    if (prevHome === undefined) delete process.env.HERMES_HOME
-    else process.env.HERMES_HOME = prevHome
+    if (prevHome === undefined) delete process.env.HERMES_BUSINESS_HOME
+    else process.env.HERMES_BUSINESS_HOME = prevHome
     fs.rmSync(tmp, { recursive: true, force: true })
     vi.restoreAllMocks()
   })

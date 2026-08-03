@@ -12,7 +12,7 @@ import { installCompanionBackend } from './backend-install.cjs'
 // commit's mkdirSync throw ENOTDIR), so no fs mocking and no real Hermes.
 
 let home: string
-const originalHome = process.env.HERMES_HOME
+const originalHome = process.env.HERMES_BUSINESS_HOME
 const originalProfile = process.env.HERMES_PROFILE
 const configPath = () => join(home, 'config.yaml')
 const pluginDir = () => join(home, 'plugins', 'business-shell')
@@ -27,12 +27,12 @@ const blockCommit = () => {
 
 beforeEach(() => {
   home = mkdtempSync(join(tmpdir(), 'hbp-rollback-'))
-  process.env.HERMES_HOME = home
+  process.env.HERMES_BUSINESS_HOME = home
   delete process.env.HERMES_PROFILE
 })
 afterEach(() => {
-  if (originalHome === undefined) delete process.env.HERMES_HOME
-  else process.env.HERMES_HOME = originalHome
+  if (originalHome === undefined) delete process.env.HERMES_BUSINESS_HOME
+  else process.env.HERMES_BUSINESS_HOME = originalHome
   if (originalProfile === undefined) delete process.env.HERMES_PROFILE
   else process.env.HERMES_PROFILE = originalProfile
   rmSync(home, { recursive: true, force: true })

@@ -1,60 +1,22 @@
 const { spawnSync } = require('node:child_process')
 const fs = require('node:fs')
-const os = require('node:os')
 const path = require('node:path')
-const { getQaRuntimeOverride } = require('./qa-runtime.cjs')
+const { getRuntimeMode, resolveHermesBinary } = require('./runtime-mode.cjs')
 
 // Filesystem discovery for the Hermes install and the bundled plugin payloads.
 // Pure lookups with no runtime state, so every other module can depend on it.
 
 function hermesHome() {
-  // Automated-QA isolation: when the main-process-only override is active, every
-  // home-derived read/write in this process targets the throwaway temp home, so
-  // the packaged E2E never mutates the live profile. getQaRuntimeOverride throws
-  // (fail-closed) if a QA run was requested with an invalid home. The binary
-  // lookup in findHermes() is intentionally NOT redirected here — it still finds
-  // the real installed Hermes because the QA contract uses its own env vars, not
-  // HERMES_HOME.
-  const qa = getQaRuntimeOverride()
-  if (qa.enabled) return qa.hermesHome
-  if (process.env.HERMES_HOME) return process.env.HERMES_HOME
-  if (process.platform === 'win32' && process.env.LOCALAPPDATA) {
-    return path.join(process.env.LOCALAPPDATA, 'hermes')
-  }
-  return path.join(os.homedir(), '.hermes')
+  // Product-owned runtime selection. A generic ambient HERMES_HOME is
+  // intentionally NOT authoritative here: an installer/E2E process can leave
+  // one in Explorer's environment and silently redirect a production launch.
+  return getRuntimeMode().hermesHome
 }
 
 function findHermes() {
-  const explicitHome = Boolean(process.env.HERMES_HOME)
-  if (explicitHome) {
-    const explicitCandidates = process.platform === 'win32'
-      ? [
-          path.join(hermesHome(), 'hermes-agent', 'venv', 'Scripts', 'hermes.exe'),
-          path.join(hermesHome(), 'bin', 'hermes.exe')
-        ]
-      : [path.join(hermesHome(), 'hermes-agent', 'venv', 'bin', 'hermes')]
-    return explicitCandidates.find(candidate => fs.existsSync(candidate)) || null
-  }
-
-  const probe = spawnSync(process.platform === 'win32' ? 'where.exe' : 'which', ['hermes'], {
-    encoding: 'utf8',
-    windowsHide: true
-  })
-  if (probe.status === 0) {
-    const first = probe.stdout.split(/\r?\n/).find(Boolean)
-    if (first) return first.trim()
-  }
-
-  const candidates = process.platform === 'win32'
-    ? [
-        path.join(process.env.LOCALAPPDATA || '', 'hermes', 'hermes-agent', 'venv', 'Scripts', 'hermes.exe'),
-        path.join(process.env.LOCALAPPDATA || '', 'hermes', 'bin', 'hermes.exe'),
-        path.join(os.homedir(), '.local', 'bin', 'hermes.exe'),
-        path.join(os.homedir(), '.local', 'bin', 'hermes.cmd')
-      ]
-    : [path.join(os.homedir(), '.local', 'bin', 'hermes')]
-
-  return candidates.find(candidate => candidate && fs.existsSync(candidate)) || null
+  // Never select a runtime from PATH. Binary provenance and data-home routing
+  // are separate contracts, so stale E2E PATH entries cannot win production.
+  return resolveHermesBinary(getRuntimeMode())
 }
 
 function getHermesVersion(command) {

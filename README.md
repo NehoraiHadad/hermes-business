@@ -116,7 +116,13 @@ promo-video/out/hermes-business-promo.mp4
 
 ```powershell
 npm install
+npm run doctor:environment
+npm run dev:desktop        # isolated development home + Electron profile
 npm test
+npm run test:contract
+npm run test:evidence       # committed release evidence; part of verify:release
+npm run test:integration:isolated
+npm run test:e2e:app       # packaged app, strict throwaway QA home
 npm run test:plugin:policy
 npm run verify:plugin
 npm run verify:bootstrap
@@ -129,6 +135,13 @@ npm run test:e2e:installed-ui
 npm run package:win
 npm run package:bootstrap
 ```
+
+`npm run dev:desktop` is the normal desktop development entry point. It uses the
+installed live Hermes executable, but stores development sessions and Electron
+state under `%LOCALAPPDATA%\hermes-business-dev`; it never inherits a generic
+`HERMES_HOME` or stale E2E `PATH` entry. Installed-app suites that are not wired
+to the strict isolated QA runtime are blocked on a normal workstation and require
+`HERMES_BUSINESS_DISPOSABLE_WINDOWS=1` inside a disposable Windows VM.
 
 ה־Plugin נכתב כמקור מודולרי תחת:
 

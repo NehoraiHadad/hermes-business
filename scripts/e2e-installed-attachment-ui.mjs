@@ -6,6 +6,9 @@ import { existsSync, writeFileSync, rmSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { _electron as electron } from 'playwright-core'
+import { assertSafeInstalledE2E } from './lib/e2e-safety.mjs'
+
+assertSafeInstalledE2E()
 
 const executablePath =
   process.env.HERMES_BUSINESS_EXE ||

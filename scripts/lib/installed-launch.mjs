@@ -5,6 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { _electron as electron } from 'playwright-core'
 import { sanitize } from './e2e-harness.mjs'
+import { assertSafeInstalledE2E } from './e2e-safety.mjs'
 
 /** A fresh, unique user-data dir under the OS temp folder. */
 export function tempUserDataDir(prefix = 'hermes-business-e2e') {
@@ -15,6 +16,7 @@ export function tempUserDataDir(prefix = 'hermes-business-e2e') {
  * optional `env` fully replaces the child environment (Playwright semantics), so
  * callers that need overrides must spread process.env themselves. */
 export function launchInstalledApp({ executablePath, appDirectory = '', userDataDir, timeout = 120_000, env }) {
+  assertSafeInstalledE2E(env || process.env)
   return electron.launch({
     executablePath,
     args: [...(appDirectory ? [appDirectory] : []), `--user-data-dir=${userDataDir}`],
