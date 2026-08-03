@@ -4,17 +4,17 @@
   "status": "passed",
   "app_version": "0.4.0-alpha.1",
   "hermes_range": ">=0.19.0 <0.20.0",
-  "git_head": "d32111814fd0877c4692e0be4619e6cce75198b3",
+  "git_head": "0a4ef6808b69666a11a38b0134cf08f091497200",
   "git_state": "working-tree",
   "subject_scheme": 3,
-  "subject_fingerprint": "40283df47046fd8cb375d79a0a4eb434c4eb5121ed96f874b9d7e42c1f96f450",
-  "captured_at": "2026-08-03T18:39:33.239Z",
+  "subject_fingerprint": "f5477eeb718932e24d96f7f3e33c1ec874b132aed67cee1c399dd15e5bb5c0f0",
+  "captured_at": "2026-08-03T19:42:44.249Z",
   "tool": "e2e-installed-isolated.mjs",
   "redacted": true,
   "summary": {
-    "build_nonce": "e299c74973bb41cfcfe2161bfb10b5c9",
-    "release_binding_digest": "1b1ac0c8f9026fc185cb826a6c9259f0111f15cbbc3b343d196add7a5f9b32c7",
-    "installer_sha256": "d28dcfaea8d277be00802539830e4a016e07c781e6b8d8cc567b232eaaeb0ef7",
+    "build_nonce": "7902365442fc98f8c7c004dd9f287f6b",
+    "release_binding_digest": "c980099a93a4b021c7a69795423aa099f83b4f445c01e901fe496b63d5f72586",
+    "installer_sha256": "5d67e1169257b4fb42dbe7c4e4a15140b4dcf0bc2ad82d4232a6101865ca12e8",
     "capture_method": "machine",
     "capture_ok": true,
     "ran": true,
@@ -34,6 +34,7 @@
     "live_volatile_runtime_changes": 0,
     "temp_home_removed": true,
     "isolated_port_free": true,
+    "owned_tree_dead": true,
     "no_residual": true
   }
 }

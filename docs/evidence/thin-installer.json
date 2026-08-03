@@ -4,11 +4,11 @@
   "status": "passed",
   "app_version": "0.4.0-alpha.1",
   "hermes_range": ">=0.19.0 <0.20.0",
-  "git_head": "d32111814fd0877c4692e0be4619e6cce75198b3",
+  "git_head": "0a4ef6808b69666a11a38b0134cf08f091497200",
   "git_state": "working-tree",
   "subject_scheme": 3,
   "subject_fingerprint": "8bd56bfd80512baf2d7c889f630bb6deb19a21ea2d371eea8df7b1e787ad116d",
-  "captured_at": "2026-08-03T18:02:14.756Z",
+  "captured_at": "2026-08-03T19:24:10.236Z",
   "tool": "e2e-thin-network-installer.ps1",
   "redacted": true,
   "summary": {
