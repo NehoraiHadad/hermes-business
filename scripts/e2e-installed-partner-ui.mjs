@@ -1,88 +1,78 @@
-import { existsSync } from 'node:fs'
-import os from 'node:os'
-import path from 'node:path'
-import { _electron as electron } from 'playwright-core'
-import { assertSafeInstalledE2E } from './lib/e2e-safety.mjs'
-
-assertSafeInstalledE2E()
-
 // Safe installed/runtime probe for Business Partner mode + the Hermes-native
 // sandbox. It NEVER starts Docker and never leaves a container behind: it only
 // requests the Docker tier and asserts the honest fail-closed-to-guard result
-// while Docker is stopped. Original partner settings are restored on exit.
+// while Docker is stopped.
+//
+// Partner settings are LIVE user state, so they are journalled to disk before the
+// first mutation (./lib/live-restore-journal.mjs). A crash mid-probe no longer
+// leaves the profile in partner/docker mode: the next run restores the journalled
+// settings before it touches anything, and a restore that fails or does not read
+// back equal is a loud, non-zero-exit failure.
 
-const executablePath =
-  process.env.HERMES_BUSINESS_EXE ||
-  path.join(process.env.LOCALAPPDATA || '', 'Programs', 'hermes-business', "תכל'ס.exe")
+import { withLiveRestore } from './lib/live-restore-journal.mjs'
+import { withProbeApp } from './lib/probe-app.mjs'
+import { assertSafeInstalledE2E } from './lib/e2e-safety.mjs'
 
-if (!existsSync(executablePath)) {
-  throw new Error(`Installed companion was not found: ${executablePath}`)
-}
+const safety = assertSafeInstalledE2E()
+// A journal belongs to the profile it was captured from: an isolated QA home, or
+// the operator's live profile under the disposable-host hatch.
+const scope = safety.home || 'live-profile'
 
-const userData = path.join(os.tmpdir(), `hermes-business-partner-ui-${Date.now()}`)
-const app = await electron.launch({ executablePath, args: [`--user-data-dir=${userData}`], timeout: 120_000 })
+const PARTNER_FIELDS = ['mode', 'sandbox', 'network', 'checkins', 'checkinCadence', 'roots']
 
-let page
-let original
-try {
-  page = await app.firstWindow({ timeout: 60_000 })
-  await page.waitForLoadState('domcontentloaded')
-  await page.evaluate(() => localStorage.setItem('hermes-business-onboarding-v1', 'complete'))
-  await page.reload({ waitUntil: 'domcontentloaded' })
-  await page.locator('.app-shell').waitFor({ state: 'visible', timeout: 90_000 })
+await withProbeApp({ prefix: 'hermes-business-partner-ui' }, async ({ page }) => {
+  const summary = await withLiveRestore(
+    {
+      key: 'partner-settings',
+      label: 'the live Business Partner settings',
+      scope,
+      capture: async () => {
+        const state = await page.evaluate(() => window.hermesDesktop.getPartnerState())
+        return Object.fromEntries(PARTNER_FIELDS.map(field => [field, state[field]]))
+      },
+      restore: settings => page.evaluate(value => window.hermesDesktop.applyPartnerMode(value), settings)
+    },
+    async () => {
+      await page.locator('.main-nav__item').filter({ hasText: 'תמיכה' }).click()
+      const panel = page.locator('.partner-panel')
+      await panel.getByRole('heading', { name: /שותף עסקי וארגז חול/ }).waitFor({ state: 'visible', timeout: 30_000 })
 
-  original = await page.evaluate(() => window.hermesDesktop.getPartnerState())
+      // Turn on partner mode and confirm the native personality actually flipped.
+      await panel.getByRole('radio', { name: /שותף עסקי/ }).click()
+      await page.waitForFunction(async () => (await window.hermesDesktop.getPartnerState()).mode === 'partner', {
+        timeout: 30_000
+      })
+      const partnerState = await page.evaluate(() => window.hermesDesktop.getPartnerState())
+      if (!partnerState.personalityActive) throw new Error('Partner personality did not activate')
 
-  await page.locator('.main-nav__item').filter({ hasText: 'תמיכה' }).click()
-  const panel = page.locator('.partner-panel')
-  await panel.getByRole('heading', { name: /שותף עסקי וארגז חול/ }).waitFor({ state: 'visible', timeout: 30_000 })
+      // Request Docker while it is stopped: must fail closed to local guard, never
+      // pretend isolation, and never start Docker.
+      await panel.getByRole('radio', { name: /בידוד Docker/ }).click()
+      await page.waitForFunction(async () => (await window.hermesDesktop.getPartnerState()).sandbox === 'docker', {
+        timeout: 30_000
+      })
+      const dockerRequested = await page.evaluate(() => window.hermesDesktop.getPartnerState())
+      const plan = dockerRequested.plan
+      if (plan.effective !== 'guard' || !plan.degraded || plan.isolation || dockerRequested.backend === 'docker') {
+        throw new Error(`Docker was not fail-closed: ${JSON.stringify(plan)}`)
+      }
 
-  // Turn on partner mode and confirm the native personality actually flipped.
-  await panel.getByRole('radio', { name: /שותף עסקי/ }).click()
-  await page.waitForFunction(async () => (await window.hermesDesktop.getPartnerState()).mode === 'partner', {
-    timeout: 30_000
-  })
-  const partnerState = await page.evaluate(() => window.hermesDesktop.getPartnerState())
-  if (!partnerState.personalityActive) throw new Error('Partner personality did not activate')
-
-  // Request Docker while it is stopped: must fail closed to local guard, never
-  // pretend isolation, and never start Docker.
-  await panel.getByRole('radio', { name: /בידוד Docker/ }).click()
-  await page.waitForFunction(async () => (await window.hermesDesktop.getPartnerState()).sandbox === 'docker', {
-    timeout: 30_000
-  })
-  const dockerRequested = await page.evaluate(() => window.hermesDesktop.getPartnerState())
-  const plan = dockerRequested.plan
-  if (plan.effective !== 'guard' || !plan.degraded || plan.isolation || dockerRequested.backend === 'docker') {
-    throw new Error(`Docker was not fail-closed: ${JSON.stringify(plan)}`)
-  }
+      return {
+        partnerActivated: partnerState.personalityActive,
+        dockerFailedClosed: plan.effective === 'guard' && plan.degraded === true,
+        backend: dockerRequested.backend,
+        dockerStatus: dockerRequested.docker.status,
+        approvalSemantics: plan.approvalSemantics
+      }
+    }
+  )
 
   console.log(
     JSON.stringify({
       ok: true,
-      partnerActivated: partnerState.personalityActive,
-      dockerFailedClosed: plan.effective === 'guard' && plan.degraded === true,
-      backend: dockerRequested.backend,
-      dockerStatus: dockerRequested.docker.status,
-      approvalSemantics: plan.approvalSemantics
+      ...summary.result,
+      livePartnerSettingsRestored: true,
+      recoveredCrashedRestore: summary.recovered
     })
   )
-} finally {
-  if (page && original) {
-    await page
-      .evaluate(
-        settings =>
-          window.hermesDesktop.applyPartnerMode({
-            mode: settings.mode,
-            sandbox: settings.sandbox,
-            network: settings.network,
-            checkins: settings.checkins,
-            checkinCadence: settings.checkinCadence,
-            roots: settings.roots
-          }),
-        original
-      )
-      .catch(() => undefined)
-  }
-  await app.close()
-}
+})

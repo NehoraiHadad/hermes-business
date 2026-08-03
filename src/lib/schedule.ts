@@ -7,21 +7,34 @@
 // The UI never shows raw cron for the common cases; it edits this friendly model,
 // compiles it here, and displays describeSchedule() text. We do NOT reimplement a
 // scheduler — we only translate to/from Hermes' own forms.
+//
+// This file owns FORM COMPILATION ONLY (friendly picker state ⇄ cron/once string).
+// The cron/once → Hebrew DISPLAY core (day-list compression/expansion, the human
+// wording) lives in ../../shared/schedule-display.js so the Rollup-bundled Hermes
+// Desktop plugin (hermes-plugin/business-shell/src/helpers.js) can render the exact
+// same fidelity from a raw stored schedule string, without needing this friendly
+// model at all. describeSchedule() below round-trips a valid model through
+// compileSchedule() and the shared humanizer, so display and compilation can never
+// drift apart — see the comment on describeSchedule for the one deliberate
+// exception (live-typing preview of an incomplete value).
+import {
+  DAY_LABELS,
+  ISRAELI_WORK_WEEK,
+  SIMPLE_ONCE_PATTERN,
+  compressDays,
+  describeDays,
+  expandDays,
+  humanizeSchedule as humanizeScheduleString,
+  pad
+} from '../../shared/schedule-display.js'
+
+export { DAY_LABELS, ISRAELI_WORK_WEEK }
 
 export type FriendlySchedule =
   | { mode: 'daily'; time: string }
   | { mode: 'weekly'; days: number[]; time: string }
   | { mode: 'once'; date: string; time: string }
   | { mode: 'advanced'; expr: string }
-
-// 0=Sunday … 6=Saturday, matching cron's day-of-week numbering (0=Sun).
-export const DAY_LABELS = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳']
-// The Israeli work week is Sunday–Thursday.
-export const ISRAELI_WORK_WEEK = [0, 1, 2, 3, 4]
-
-function pad(value: string | number): string {
-  return String(value).padStart(2, '0')
-}
 
 // A wall-clock time is valid only as HH:MM in range — so daily/weekly can never
 // compile a NaN cron field (e.g. from a blank or malformed time input).
@@ -32,45 +45,6 @@ function isValidTime(time: string): boolean {
 
 function isValidDate(date: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(date || '')
-}
-
-// A one-shot is "simple" only when it is a bare local wall-clock with NO seconds and
-// NO offset/Z. Anything carrying seconds or an offset is a precise instant we must
-// NOT reinterpret as local, so it stays in the advanced escape hatch verbatim.
-const SIMPLE_ONCE_RE = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})$/
-
-// Collapse a sorted day list into a compact cron field: contiguous runs become
-// ranges (0,1,2,3,4 → "0-4"), the rest stay comma-separated (0,3 → "0,3").
-function compressDays(days: number[]): string {
-  const sorted = [...new Set(days)].sort((a, b) => a - b)
-  const parts: string[] = []
-  let start = sorted[0]
-  let prev = sorted[0]
-  for (let i = 1; i <= sorted.length; i += 1) {
-    if (sorted[i] === prev + 1) {
-      prev = sorted[i]
-      continue
-    }
-    parts.push(start === prev ? `${start}` : start + 1 === prev ? `${start},${prev}` : `${start}-${prev}`)
-    start = sorted[i]
-    prev = sorted[i]
-  }
-  return parts.join(',')
-}
-
-function expandDays(field: string): number[] {
-  const out: number[] = []
-  for (const chunk of field.split(',')) {
-    const range = chunk.match(/^(\d)-(\d)$/)
-    if (range) {
-      for (let d = Number(range[1]); d <= Number(range[2]); d += 1) out.push(d % 7)
-    } else if (/^\d$/.test(chunk)) {
-      out.push(Number(chunk) % 7)
-    } else {
-      return []
-    }
-  }
-  return [...new Set(out)].sort((a, b) => a - b)
 }
 
 // Compile the friendly model to a Hermes schedule string. This is the single place
@@ -95,7 +69,7 @@ export function parseSchedule(schedule: string): FriendlySchedule {
   // Only a bare local wall-clock round-trips to the friendly one-shot. A value with
   // seconds or an offset/Z is preserved VERBATIM as advanced so we never drop the
   // seconds/offset or silently shift the instant.
-  const simpleOnce = value.match(SIMPLE_ONCE_RE)
+  const simpleOnce = value.match(SIMPLE_ONCE_PATTERN)
   if (simpleOnce) return { mode: 'once', date: simpleOnce[1], time: simpleOnce[2] }
   if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(value)) return { mode: 'advanced', expr: value }
   const parts = value.split(/\s+/)
@@ -111,28 +85,32 @@ export function parseSchedule(schedule: string): FriendlySchedule {
   return { mode: 'advanced', expr: value }
 }
 
-function describeDays(days: number[]): string {
-  const sorted = [...new Set(days)].sort((a, b) => a - b)
-  if (sorted.join(',') === ISRAELI_WORK_WEEK.join(',')) return 'ימים א׳–ה׳'
-  if (sorted.join(',') === '0,1,2,3,4,5,6') return 'כל יום'
-  return `ימים ${sorted.map(day => DAY_LABELS[day]).join(', ')}`
-}
-
 // Human, nontechnical Hebrew description of a friendly model — the only schedule
-// text the simple UI ever shows.
+// text the simple UI ever shows. For 'advanced' we always echo the raw expression
+// back verbatim (the escape hatch shows exactly what the user typed, never a
+// reinterpretation). For every other mode we ROUND-TRIP through compileSchedule()
+// and the shared cron→Hebrew humanizer — the exact same core the plugin uses — so
+// display can never silently drift from what actually gets saved. The one
+// deliberate exception: while the user is mid-typing an incomplete time/date,
+// compileSchedule() correctly refuses to emit a NaN cron, so we fall back to a
+// best-effort direct rendering (still built from the shared describeDays()) rather
+// than going blank.
 export function describeSchedule(model: FriendlySchedule): string {
-  if (model.mode === 'daily') return `כל יום בשעה ${model.time}`
-  if (model.mode === 'weekly') return `${describeDays(model.days)} בשעה ${model.time}`
+  if (model.mode === 'advanced') return model.expr
+  const compiled = compileSchedule(model)
+  if (compiled) return humanizeScheduleString(compiled)
   if (model.mode === 'once') {
     const [y, m, d] = model.date.split('-')
     return `פעם אחת ב־${d}/${m}/${y} בשעה ${model.time}`
   }
-  return model.expr
+  if (model.mode === 'weekly') return `${describeDays(model.days)} בשעה ${model.time}`
+  return `כל יום בשעה ${model.time}`
 }
 
-// Convenience for callers that only hold a raw schedule string (e.g. task rows).
+// Convenience for callers that only hold a raw schedule string (e.g. task rows) —
+// a thin pass-through to the shared display core.
 export function humanizeSchedule(schedule: string): string {
-  return describeSchedule(parseSchedule(schedule))
+  return humanizeScheduleString(schedule)
 }
 
 // The model the picker resets to when the user switches mode, preserving the time

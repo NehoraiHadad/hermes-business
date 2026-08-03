@@ -10,6 +10,14 @@ function policyPath() {
   return path.join(hermesHome(), 'business', 'whatsapp-policy.json')
 }
 
+// The ONE WhatsApp/WhatsApp-Cloud principal (DM chat id) normalizer. Strips the
+// platform prefix, a leading '+', and the JID suffix, lower-cases, and — when
+// what remains looks like a phone number — collapses it to digits only. This
+// feeds the plugin allow-list (this file), the native platform env
+// (whatsapp-policy-sync.cjs), and channel overrides (whatsapp-monitoring-config.cjs);
+// those three MUST agree on a representative principal, or the effective
+// permission boundary silently diverges across stores. See
+// whatsapp-policy.test.ts for the cross-consumer agreement test.
 function normalizeChat(value) {
   const normalized = String(value || '')
     .trim()
@@ -79,4 +87,4 @@ function setWhatsappPolicy(candidate) {
   return policy
 }
 
-module.exports = { getWhatsappPolicy, normalizePolicy, setWhatsappPolicy }
+module.exports = { getWhatsappPolicy, normalizePolicy, setWhatsappPolicy, normalizeChat }

@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import { humanizeSchedule } from '../../../shared/schedule-display.js'
+import { describeTool } from '../../../shared/tool-copy.js'
 
 // Pure helpers and small hooks shared by the business shell screens. No JSX and
 // no side effects at module load — safe for the contract test that evaluates the
@@ -8,6 +10,11 @@ import { useEffect, useState } from 'react'
 // store is never trusted again — see purgeLegacyPausedCache below.
 export const LEGACY_PAUSED_CACHE_KEY = 'pausedCronJobs'
 
+// A short in-progress ellipsis for tool names this shell has its own tighter copy
+// for. Anything not listed here falls through to the shared tool-copy classifier
+// (../../../shared/tool-copy.js) — the same ~50-rule table src/lib/presentation.ts
+// uses — so this went from 8 recognised substrings to full category coverage
+// without duplicating a single rule.
 const TOOL_COPY = {
   google_calendar: 'בודק את היומן…',
   google_drive: 'מחפש ב־Drive…',
@@ -22,7 +29,11 @@ const TOOL_COPY = {
 export function friendlyToolName(raw) {
   const name = String(raw || '').toLowerCase()
   const key = Object.keys(TOOL_COPY).find(candidate => name.includes(candidate))
-  return key ? TOOL_COPY[key] : 'מבצע פעולה…'
+  if (key) return TOOL_COPY[key]
+  // The activity strip only ever has a bare tool name (no action/command), so this
+  // resolves to the shared classifier's category default text.
+  const described = describeTool(name)
+  return described || 'מבצע פעולה…'
 }
 
 export function humanSchedule(raw) {
@@ -34,12 +45,12 @@ export function humanSchedule(raw) {
     raw && typeof raw === 'object'
       ? String(raw.schedule_display || raw.display || raw.expr || raw.cron || raw.value || '')
       : String(raw || '')
-  const known = {
-    '0 8 * * 0-4': 'ימים א׳–ה׳ בשעה 08:00',
-    '0 9 * * *': 'כל יום בשעה 09:00',
-    '0 9 * * 0': 'כל יום ראשון בשעה 09:00'
-  }
-  return known[schedule] || schedule || 'לפי לוח הזמנים של Hermes'
+  if (!schedule) return 'לפי לוח הזמנים של Hermes'
+  // Full cron→Hebrew fidelity (day-range compression, single/arbitrary weekdays,
+  // once-schedules) from the same core src/lib/schedule.ts uses — not just the
+  // three cron strings the quick-create presets happen to offer. An already-human
+  // string, or anything genuinely unrecognised, round-trips through unchanged.
+  return humanizeSchedule(schedule)
 }
 
 // A job is paused when the OFFICIAL record says so — never a local flag. The

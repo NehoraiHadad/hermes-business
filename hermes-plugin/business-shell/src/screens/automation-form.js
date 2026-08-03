@@ -1,14 +1,22 @@
 import { useState } from 'react'
 import { Button, host } from '@hermes/plugin-sdk'
+import { SCHEDULE_PRESET_VALUES, humanizeSchedule } from '../../../../shared/schedule-display.js'
 import { h } from '../dom.js'
 import { Card, Field } from '../ui.js'
+
+// Presets shown in the "when" <select> below, one single source
+// (../../../../shared/schedule-display.js) shared with the React app's schedule
+// picker. Labels are DERIVED via humanizeSchedule(), never hand-duplicated, so
+// adding a fourth preset there is the only change needed — it can no longer
+// silently fall back to raw cron on one side while the other renders it fine.
+const SCHEDULE_PRESETS = SCHEDULE_PRESET_VALUES.map(value => ({ value, label: humanizeSchedule(value) }))
 
 // The "new scheduled task" composer. It offers human-friendly presets but persists
 // everything through the official Hermes cron.manage door, then asks the parent to
 // refresh its list via onCreated.
 export function NewTaskForm({ onCreated }) {
   const [name, setName] = useState('')
-  const [schedule, setSchedule] = useState('0 8 * * 0-4')
+  const [schedule, setSchedule] = useState(SCHEDULE_PRESET_VALUES[0])
   const [prompt, setPrompt] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -48,9 +56,7 @@ export function NewTaskForm({ onCreated }) {
             className:
               'h-8 rounded-[4px] border border-(--ui-stroke-secondary) bg-(--ui-bg-primary) px-2 text-xs text-(--ui-text-primary)'
           },
-          h('option', { value: '0 8 * * 0-4' }, 'ימים א׳–ה׳ בשעה 08:00'),
-          h('option', { value: '0 9 * * *' }, 'כל יום בשעה 09:00'),
-          h('option', { value: '0 9 * * 0' }, 'כל יום ראשון בשעה 09:00')
+          ...SCHEDULE_PRESETS.map(preset => h('option', { key: preset.value, value: preset.value }, preset.label))
         )
       ),
       h(Field, {

@@ -14,9 +14,16 @@ export function tempUserDataDir(prefix = 'hermes-business-e2e') {
 
 /** Launch the installed companion under Playwright's Electron driver. An
  * optional `env` fully replaces the child environment (Playwright semantics), so
- * callers that need overrides must spread process.env themselves. */
-export function launchInstalledApp({ executablePath, appDirectory = '', userDataDir, timeout = 120_000, env }) {
-  assertSafeInstalledE2E(env || process.env)
+ * callers that need overrides must spread process.env themselves.
+ *
+ * `safetyEnv` is the environment the isolation gate is asserted against. It
+ * defaults to the child env, which is what the isolated suite wants. A probe that
+ * deliberately STRIPS the QA variables from the child (e.g. the missing-Hermes
+ * probe, which must reach the production runtime path with its own
+ * HERMES_BUSINESS_HOME) passes `safetyEnv: process.env` so the operator-level
+ * proof of isolation is still enforced. */
+export function launchInstalledApp({ executablePath, appDirectory = '', userDataDir, timeout = 120_000, env, safetyEnv }) {
+  assertSafeInstalledE2E(safetyEnv || env || process.env)
   return electron.launch({
     executablePath,
     args: [...(appDirectory ? [appDirectory] : []), `--user-data-dir=${userDataDir}`],

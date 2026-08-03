@@ -11,6 +11,7 @@ const {
   clearGuardActivationJournal,
   readGuardActivationJournal
 } = require('./whatsapp-guard-journal.cjs')
+const { rememberLog } = require('./logs.cjs')
 
 // Activates the fail-closed messaging guard as one OBSERVABLE, RECOVERABLE transaction. The
 // restart decision keys off the OFFICIAL pre-install gateway process state (running/stopped/
@@ -64,9 +65,18 @@ function fail(reason, over = {}) {
 
 // Clear only a clean/absent/stale-active journal in the pending path. NEVER silently wipe an
 // in-flight or 'failed' journal — that record is owed to recoverGuardActivation and the UI.
+// The clear itself is now verifiable (throws if the file survives deletion); at this call
+// site it stays best-effort — a failed removal here does not change the fail-closed status
+// logic (that is keyed off a live heartbeat, not journal absence), so it is safe to log and
+// continue rather than let it interrupt the pending-activation result.
 function clearIfSafe() {
   const existing = readGuardActivationJournal()
-  if (!existing || !NON_CLEARABLE.has(existing.status)) clearGuardActivationJournal()
+  if (existing && NON_CLEARABLE.has(existing.status)) return
+  try {
+    clearGuardActivationJournal()
+  } catch (error) {
+    rememberLog(`Guard activation journal clear failed (non-fatal): ${error.message || error}`)
+  }
 }
 
 async function activateWhatsappGuard(options = {}) {

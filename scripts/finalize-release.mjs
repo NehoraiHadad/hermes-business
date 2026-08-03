@@ -21,9 +21,10 @@ import { gatherReleaseState, measureInstallers } from './lib/release/gather.mjs'
 import { preflightRelease } from './lib/release/preflight.mjs'
 import { computeReleaseBinding } from './lib/release/binding.mjs'
 import { makeStaging, stageSidecar, fingerprintCandidate, finalizeSidecars, recoverRelease } from './lib/release/staging.mjs'
+import { parseChannel } from './lib/parse-channel.mjs'
 
 const root = repoRoot()
-const channel = process.argv.includes('--channel') ? process.argv[process.argv.indexOf('--channel') + 1] : 'public'
+const channel = parseChannel()
 const releaseDir = path.join(root, 'release')
 if (!existsSync(releaseDir)) { console.error('No release/ directory; package first.'); process.exit(1) }
 

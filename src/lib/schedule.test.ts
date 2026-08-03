@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { SCHEDULE_DISPLAY_CASES } from '../../shared/schedule-display.js'
 import {
   compileSchedule,
   describeSchedule,
@@ -85,6 +86,17 @@ describe('describeSchedule / humanizeSchedule — human Hebrew display', () => {
   it('humanizes a raw stored cron string end-to-end', () => {
     expect(humanizeSchedule('0 8 * * 0-4')).toBe('ימים א׳–ה׳ בשעה 08:00')
     expect(humanizeSchedule('0 16 * * 4')).toBe('ימים ה׳ בשעה 16:00')
+  })
+})
+
+// Cross-runtime contract: shared/schedule-display.js's CASES table is pinned here
+// (React side) and independently in
+// hermes-plugin/business-shell/src/schedule-tool-copy.test.js (plugin side, run
+// against the real plugin source), so a drift on either side of the display core
+// fails a focused test instead of silently rendering raw cron.
+describe('humanizeSchedule — shared/schedule-display.js CASES contract', () => {
+  it.each(SCHEDULE_DISPLAY_CASES)('$label', ({ schedule, text }) => {
+    expect(humanizeSchedule(schedule)).toBe(text)
   })
 })
 

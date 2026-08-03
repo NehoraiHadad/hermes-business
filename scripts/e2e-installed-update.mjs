@@ -24,22 +24,13 @@
 // release/win-unpacked to test a freshly built artifact without touching the
 // installed copy).
 
-import os from 'node:os'
-import path from 'node:path'
-import { _electron as electron } from 'playwright-core'
-import { resolveInstalledExecutable, safeJson } from './lib/e2e-harness.mjs'
+import { safeJson } from './lib/e2e-harness.mjs'
+import { assertNoRendererErrors, withProbeApp } from './lib/probe-app.mjs'
 import { assertSafeInstalledE2E } from './lib/e2e-safety.mjs'
 
 assertSafeInstalledE2E()
 
 const DESTRUCTIVE = process.env.HERMES_BUSINESS_E2E_DESTRUCTIVE_UPDATE === '1'
-const { executablePath } = resolveInstalledExecutable()
-
-const app = await electron.launch({
-  executablePath,
-  args: [`--user-data-dir=${path.join(os.tmpdir(), `hermes-business-update-${process.pid}`)}`],
-  timeout: 120_000
-})
 
 async function snapshot(page) {
   return page.evaluate(async () => {
@@ -70,16 +61,8 @@ async function snapshot(page) {
   })
 }
 
-try {
-  const page = await app.firstWindow({ timeout: 60_000 })
-  const consoleErrors = []
-  const pageErrors = []
-  page.on('console', message => { if (message.type() === 'error') consoleErrors.push(message.text()) })
-  page.on('pageerror', error => pageErrors.push(String(error)))
-  await page.waitForLoadState('domcontentloaded')
-  await page.evaluate(() => localStorage.setItem('hermes-business-onboarding-v1', 'complete'))
-  await page.reload({ waitUntil: 'domcontentloaded' })
-  await page.locator('.app-shell').waitFor({ state: 'visible', timeout: 90_000 })
+await withProbeApp({ prefix: 'hermes-business-update', collectErrors: true }, async probe => {
+  const { page } = probe
 
   const before = await snapshot(page)
   await page.locator('.main-nav__item').filter({ hasText: 'תמיכה ותקינות' }).click()
@@ -121,9 +104,7 @@ try {
     destructiveApplied = true
   }
 
-  if (consoleErrors.length || pageErrors.length) {
-    throw new Error(`Renderer errors during update flow: ${JSON.stringify({ consoleErrors, pageErrors })}`)
-  }
+  assertNoRendererErrors(probe, 'the update flow')
 
   console.log(safeJson({
     ok: true,
@@ -136,6 +117,4 @@ try {
     before,
     after
   }))
-} finally {
-  await app.close()
-}
+})

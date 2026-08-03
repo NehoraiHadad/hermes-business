@@ -3,6 +3,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { hermesHome } = require('./paths.cjs')
 const { PARTNER_SKILL_ID, partnerSkillSource } = require('./partner-personality.cjs')
+const { safeWrite } = require('./atomic-write.cjs')
 
 // Installs the packaged `business-partner` native Hermes Skill into the shared
 // skills tree so it is visible and usable inside full Hermes. Idempotent: an
@@ -36,13 +37,10 @@ function installPartnerSkill(options = {}) {
 
   fs.mkdirSync(targetDir, { recursive: true })
   fs.writeFileSync(target, content, { mode: 0o600 })
-  const temporary = `${receiptPath}.${process.pid}.tmp`
-  fs.writeFileSync(
-    temporary,
-    `${JSON.stringify({ id: PARTNER_SKILL_ID, installedAt: new Date().toISOString(), integrity }, null, 2)}\n`,
-    { encoding: 'utf8', mode: 0o600 }
+  safeWrite(
+    receiptPath,
+    `${JSON.stringify({ id: PARTNER_SKILL_ID, installedAt: new Date().toISOString(), integrity }, null, 2)}\n`
   )
-  fs.renameSync(temporary, receiptPath)
   return { ok: true, target, integrity, unchanged: false }
 }
 

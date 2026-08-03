@@ -12,6 +12,270 @@ import React, { useState, useEffect, useMemo } from 'react'
 // React.createElement. `h` is the shared shorthand used across the shell modules.
 const h = React.createElement;
 
+// Canonical cron/once → Hebrew DISPLAY core, shared by the React app's friendly
+// schedule picker (src/lib/schedule.ts, which additionally owns FORM compilation —
+// UI state → cron string — that the plugin never needs) and the Rollup-bundled
+// Hermes Desktop plugin (hermes-plugin/business-shell/src/helpers.js), which only
+// ever holds a raw stored schedule string (job.schedule_display/schedule/cron).
+//
+// This module knows nothing about the daily/weekly/once/advanced picker UI state —
+// only how to turn a Hermes schedule STRING into Hebrew display text, and the small
+// day-list building blocks both sides need. schedule.ts wraps this for its friendly
+// model and round-trips describeSchedule() through compileSchedule() + this core so
+// the two can never drift apart again (see schedule.ts for that wiring). Before this
+// module existed, the plugin's own <select> presets and describeSchedule copy were a
+// hand-duplicated 3-entry lookup (hermes-plugin/business-shell/src/helpers.js) that
+// only coincidentally matched the React side and silently fell back to raw cron for
+// anything else (e.g. a 4th preset, or an arbitrary weekday combination).
+
+// 0=Sunday … 6=Saturday, matching cron's day-of-week numbering (0=Sun).
+const DAY_LABELS = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'];
+// The Israeli work week is Sunday–Thursday.
+const ISRAELI_WORK_WEEK = [0, 1, 2, 3, 4];
+
+// A bare local once-timestamp — NO seconds, NO offset/Z — is the only "simple" once
+// form the friendly picker understands. Anything carrying seconds or an offset is a
+// precise instant that must never be reinterpreted as local, so callers keep it
+// verbatim (see schedule.ts's parseSchedule for the friendly-model side of this).
+const SIMPLE_ONCE_PATTERN = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})$/;
+
+function pad(value) {
+  return String(value).padStart(2, '0')
+}
+
+// Collapse a sorted day list into a compact cron field: contiguous runs become
+// ranges (0,1,2,3,4 → "0-4"), the rest stay comma-separated (0,3 → "0,3").
+function compressDays(days) {
+  const sorted = [...new Set(days)].sort((a, b) => a - b);
+  const parts = [];
+  let start = sorted[0];
+  let prev = sorted[0];
+  for (let i = 1; i <= sorted.length; i += 1) {
+    if (sorted[i] === prev + 1) {
+      prev = sorted[i];
+      continue
+    }
+    parts.push(start === prev ? `${start}` : start + 1 === prev ? `${start},${prev}` : `${start}-${prev}`);
+    start = sorted[i];
+    prev = sorted[i];
+  }
+  return parts.join(',')
+}
+
+// Inverse of compressDays: expand a cron day-of-week field (possibly containing
+// ranges and/or a comma list) back into a sorted, deduped day-number array. Returns
+// [] for anything it cannot confidently parse, so callers fall back honestly.
+function expandDays(field) {
+  const out = [];
+  for (const chunk of field.split(',')) {
+    const range = chunk.match(/^(\d)-(\d)$/);
+    if (range) {
+      for (let d = Number(range[1]); d <= Number(range[2]); d += 1) out.push(d % 7);
+    } else if (/^\d$/.test(chunk)) {
+      out.push(Number(chunk) % 7);
+    } else {
+      return []
+    }
+  }
+  return [...new Set(out)].sort((a, b) => a - b)
+}
+
+// Human Hebrew phrasing for a day-number list, with the two common cases named
+// specially (the Israeli work week, and every day) and day-range compression for
+// everything else — e.g. [0,1,2,3,4] → "ימים א׳–ה׳", [0,3] → "ימים א׳, ד׳".
+function describeDays(days) {
+  const sorted = [...new Set(days)].sort((a, b) => a - b);
+  if (sorted.join(',') === ISRAELI_WORK_WEEK.join(',')) return 'ימים א׳–ה׳'
+  if (sorted.join(',') === '0,1,2,3,4,5,6') return 'כל יום'
+  return `ימים ${sorted.map(day => DAY_LABELS[day]).join(', ')}`
+}
+
+// Turn a raw Hermes schedule string (5-field cron, or a bare local once ISO
+// timestamp) into a Hebrew description. Anything not confidently recognised is
+// returned TRIMMED but otherwise VERBATIM — never dropped, never "[object
+// Object]" — so an already-human display string, an interval expression, an
+// offset/seconds-bearing once, or a genuinely unusual cron field all round-trip
+// safely instead of throwing away information. An empty/blank input returns ''; the
+// caller decides what "no schedule" copy to show (the plugin and the React side use
+// different fallback text there).
+function humanizeSchedule(schedule) {
+  const value = String(schedule || '').trim();
+  if (!value) return ''
+  const simpleOnce = value.match(SIMPLE_ONCE_PATTERN);
+  if (simpleOnce) {
+    const [, date, time] = simpleOnce;
+    const [y, m, d] = date.split('-');
+    return `פעם אחת ב־${d}/${m}/${y} בשעה ${time}`
+  }
+  const parts = value.split(/\s+/);
+  if (parts.length === 5 && /^\d{1,2}$/.test(parts[0]) && /^\d{1,2}$/.test(parts[1])) {
+    const [minute, hour, dom, month, dow] = parts;
+    const time = `${pad(hour)}:${pad(minute)}`;
+    if (dom === '*' && month === '*') {
+      if (dow === '*') return `כל יום בשעה ${time}`
+      const days = expandDays(dow);
+      if (days.length) return `${describeDays(days)} בשעה ${time}`
+    }
+  }
+  return value
+}
+
+// Common quick-create presets. One array — add a fourth preset here and BOTH the
+// plugin's <select> (hermes-plugin/business-shell/src/screens/automation-form.js)
+// and any future React quick-create surface render it correctly, with the label
+// always derived from humanizeSchedule() so it can never drift out of the
+// coincidental hand-matched sync that used to require touching two files.
+const SCHEDULE_PRESET_VALUES = ['0 8 * * 0-4', '0 9 * * *', '0 9 * * 0'];
+
+// Pinned cross-runtime contract cases. src/lib/schedule.test.ts and
+// hermes-plugin/business-shell/src/schedule-display.test.js both run every case
+// through their own call path down into this same humanizeSchedule(), so a drift on
+// either side fails a focused test instead of silently rendering raw cron.
+const SCHEDULE_DISPLAY_CASES = [
+  { label: 'Israeli work week', schedule: '0 8 * * 0-4', text: 'ימים א׳–ה׳ בשעה 08:00' },
+  { label: 'every day', schedule: '0 9 * * *', text: 'כל יום בשעה 09:00' },
+  { label: 'single weekday (Sunday)', schedule: '0 9 * * 0', text: 'ימים א׳ בשעה 09:00' },
+  { label: 'single weekday (Thursday)', schedule: '0 16 * * 4', text: 'ימים ה׳ בשעה 16:00' },
+  { label: 'arbitrary day list', schedule: '30 9 * * 0,3', text: 'ימים א׳, ד׳ בשעה 09:30' },
+  { label: 'contiguous but non-work-week range (no extra compression beyond the two named sets)', schedule: '0 9 * * 1-3', text: 'ימים ב׳, ג׳, ד׳ בשעה 09:00' },
+  { label: 'every day spelled out as 0-6', schedule: '0 7 * * 0-6', text: 'כל יום בשעה 07:00' },
+  { label: 'simple local once', schedule: '2026-08-05T09:00', text: 'פעם אחת ב־05/08/2026 בשעה 09:00' },
+  { label: 'offset-bearing once falls back verbatim', schedule: '2026-08-05T09:00:00+03:00', text: '2026-08-05T09:00:00+03:00' },
+  { label: 'seconds-bearing once falls back verbatim', schedule: '2026-08-05T09:00:30', text: '2026-08-05T09:00:30' },
+  { label: 'interval expression falls back verbatim', schedule: 'every 30m', text: 'every 30m' },
+  { label: 'already-human text round-trips', schedule: 'כל יום בשעה 09:00', text: 'כל יום בשעה 09:00' },
+  { label: 'empty string', schedule: '', text: '' }
+];
+
+// Canonical tool-name/action → Hebrew activity-label rules. src/lib/presentation.ts
+// (React app) receives rich agent tool-call payloads (name + action + a command
+// buried in various argument shapes) and extracts (name, action, command) itself —
+// see toolArguments()/humanizeTool() there — before calling describeTool() below.
+// The Rollup-bundled Hermes Desktop plugin's activity strip
+// (hermes-plugin/business-shell/src/screens/activity-strip.js) only ever has a bare
+// tool NAME off a socket event, so it calls the same describeTool() with no
+// action/command and gets the category's honest default text. One rule table either
+// way — this used to be TWO: presentation.ts's ~50 action-aware rules and
+// helpers.js's own 8-substring TOOL_COPY dict, with no shared code and no test tying
+// them together.
+//
+// describeTool() returns null when nothing matches; each caller supplies its own
+// final fallback copy (they differ on purpose — the plugin shows a lightweight
+// in-progress ellipsis, the React app shows a labeled generic-tool line).
+
+function terminalActivity(command) {
+  const text = String(command || '');
+  if (/\b(?:npm|pnpm|yarn|vitest|jest|pytest)\b[^\r\n]*(?:test|check)/i.test(text)) return 'מריץ בדיקות'
+  if (/\bgit\s+(?:status|diff|log|show)\b/i.test(text)) return 'בודק את שינויי הקוד'
+  if (/\bgit\s+(?:add|commit|push|pull|merge|rebase)\b/i.test(text)) return 'מעדכן את מאגר הקוד'
+  if (/\b(?:rg|grep|findstr|select-string)\b/i.test(text)) return 'מחפש בקבצי המחשב'
+  if (/\b(?:gmail|google|calendar|drive)\b/i.test(text)) return 'בודק נתוני Google דרך המחשב'
+  if (/\b(?:python|python3|py)\b/i.test(text)) return 'מריץ סקריפט Python'
+  if (/\b(?:powershell|pwsh)\b/i.test(text)) return 'מריץ פקודת PowerShell'
+  return 'מריץ פקודת מערכת'
+}
+
+// Ordered category rules. `test` matches the lower-cased tool name; `actions` is an
+// ordered list of { test, text } matched against the lower-cased action string
+// (first match wins); `fallback` is used when no action rule matches, or when the
+// caller has no action at all. The 'terminal' category is special-cased: its
+// activity depends on the shell COMMAND, not an action verb.
+const CATEGORY_RULES = [
+  {
+    category: 'calendar',
+    test: /google.*calendar|calendar/,
+    actions: [
+      { test: /create|add|schedule/, text: 'יוצר אירוע ביומן' },
+      { test: /update|edit|move|reschedule/, text: 'מעדכן אירוע ביומן' },
+      { test: /delete|remove|cancel/, text: 'מסיר אירוע מהיומן' }
+    ],
+    fallback: 'בודק אירועים ביומן'
+  },
+  {
+    category: 'gmail',
+    test: /gmail|email|mail/,
+    actions: [
+      { test: /send/, text: 'שולח אימייל' },
+      { test: /draft|compose|create/, text: 'מכין טיוטת אימייל' },
+      { test: /search|list|find|query/, text: 'מחפש הודעות ב־Gmail' },
+      { test: /read|get|open/, text: 'קורא הודעה ב־Gmail' }
+    ],
+    fallback: 'בודק את Gmail'
+  },
+  {
+    category: 'drive',
+    test: /drive|docs|sheets/,
+    actions: [
+      { test: /search|list|find/, text: 'מחפש מסמכים ב־Google Drive' },
+      { test: /write|create|update|edit/, text: 'מעדכן מסמך ב־Google Drive' }
+    ],
+    fallback: 'קורא מסמך מ־Google Drive'
+  },
+  { category: 'web_search', test: /web_search|search_web/, actions: [], fallback: 'מחפש מידע באינטרנט' },
+  { category: 'web_extract', test: /web_extract|fetch|scrape/, actions: [], fallback: 'קורא מקור מהאינטרנט' },
+  {
+    category: 'browser',
+    test: /browser|computer|screenshot|click|navigate/,
+    actions: [
+      { test: /screenshot|capture/, text: 'מצלם את המסך לבדיקה' },
+      { test: /click|press|select/, text: 'מפעיל פקד בממשק' },
+      { test: /type|fill|input/, text: 'ממלא פרטים בממשק' },
+      { test: /open|navigate|goto/, text: 'פותח עמוד בדפדפן' }
+    ],
+    fallback: 'בודק את הממשק בדפדפן'
+  },
+  { category: 'terminal', test: /terminal|shell|process|command/, actions: [], fallback: null },
+  { category: 'cron', test: /cron|schedule/, actions: [], fallback: 'מעדכן משימה מתוזמנת' },
+  { category: 'skill', test: /skill/, actions: [], fallback: 'מפעיל תהליך עבודה שמור' },
+  { category: 'memory', test: /memory/, actions: [], fallback: 'בודק פרטים מהזיכרון' },
+  { category: 'todo', test: /todo|task/, actions: [], fallback: 'מעדכן את רשימת המשימות' },
+  { category: 'file_read', test: /read.*file|file.*read/, actions: [], fallback: 'קורא קובץ מהמחשב' },
+  { category: 'file_write', test: /write.*file|edit.*file|file.*write/, actions: [], fallback: 'מעדכן קובץ במחשב' }
+];
+
+// name: the full tool name (any case). action/command are optional finer-grained
+// hints a richer caller can supply; omit them (the plugin's activity strip always
+// does — it only has a bare name) and you still get the category's honest default.
+// Returns null only when NO category matches at all — callers decide their own
+// final generic-tool fallback copy.
+function describeTool(name, action = '', command = '') {
+  const normalized = String(name || '').toLowerCase();
+  const actionText = String(action || '').toLowerCase();
+  for (const rule of CATEGORY_RULES) {
+    if (!rule.test.test(normalized)) continue
+    if (rule.category === 'terminal') return terminalActivity(command)
+    const matched = rule.actions.find(entry => entry.test.test(actionText));
+    return matched ? matched.text : rule.fallback
+  }
+  return null
+}
+
+// Pinned cross-runtime contract cases, exercised directly against describeTool()
+// (no action-defaulting trickery — every case passes an explicit action/command) by
+// both src/lib/presentation.test.ts and
+// hermes-plugin/business-shell/src/tool-copy.test.js.
+const TOOL_COPY_CASES = [
+  { label: 'calendar, no recognised action → category default', name: 'google_calendar.list_events', action: '', command: '', text: 'בודק אירועים ביומן' },
+  { label: 'calendar create', name: 'google_calendar', action: 'create', command: '', text: 'יוצר אירוע ביומן' },
+  { label: 'calendar delete', name: 'google_calendar', action: 'cancel', command: '', text: 'מסיר אירוע מהיומן' },
+  { label: 'gmail send', name: 'gmail.send_message', action: 'send', command: '', text: 'שולח אימייל' },
+  { label: 'gmail, no recognised action → category default', name: 'google_workspace.gmail_search', action: '', command: '', text: 'בודק את Gmail' },
+  { label: 'drive, no recognised action → category default', name: 'google_drive', action: '', command: '', text: 'קורא מסמך מ־Google Drive' },
+  { label: 'drive write', name: 'google_sheets', action: 'update', command: '', text: 'מעדכן מסמך ב־Google Drive' },
+  { label: 'web search', name: 'web_search', action: '', command: '', text: 'מחפש מידע באינטרנט' },
+  { label: 'web extract', name: 'web_extract', action: '', command: '', text: 'קורא מקור מהאינטרנט' },
+  { label: 'browser click', name: 'browser', action: 'click', command: '', text: 'מפעיל פקד בממשק' },
+  { label: 'terminal runs tests', name: 'terminal', action: '', command: 'npm test', text: 'מריץ בדיקות' },
+  { label: 'terminal git status', name: 'terminal', action: '', command: 'git status', text: 'בודק את שינויי הקוד' },
+  { label: 'cron', name: 'cronjob', action: '', command: '', text: 'מעדכן משימה מתוזמנת' },
+  { label: 'skill', name: 'skill_manage', action: '', command: '', text: 'מפעיל תהליך עבודה שמור' },
+  { label: 'memory', name: 'memory_get', action: '', command: '', text: 'בודק פרטים מהזיכרון' },
+  { label: 'todo', name: 'todo_list', action: '', command: '', text: 'מעדכן את רשימת המשימות' },
+  { label: 'file read', name: 'read_file', action: '', command: '', text: 'קורא קובץ מהמחשב' },
+  { label: 'file write', name: 'write_file', action: '', command: '', text: 'מעדכן קובץ במחשב' },
+  { label: 'unrecognised tool → null (caller supplies its own final fallback)', name: 'unknown_internal_tool', action: '', command: '', text: null }
+];
+
 // Pure helpers and small hooks shared by the business shell screens. No JSX and
 // no side effects at module load — safe for the contract test that evaluates the
 // bundled plugin in a bare VM.
@@ -20,6 +284,11 @@ const h = React.createElement;
 // store is never trusted again — see purgeLegacyPausedCache below.
 const LEGACY_PAUSED_CACHE_KEY = 'pausedCronJobs';
 
+// A short in-progress ellipsis for tool names this shell has its own tighter copy
+// for. Anything not listed here falls through to the shared tool-copy classifier
+// (../../../shared/tool-copy.js) — the same ~50-rule table src/lib/presentation.ts
+// uses — so this went from 8 recognised substrings to full category coverage
+// without duplicating a single rule.
 const TOOL_COPY = {
   google_calendar: 'בודק את היומן…',
   google_drive: 'מחפש ב־Drive…',
@@ -34,7 +303,11 @@ const TOOL_COPY = {
 function friendlyToolName(raw) {
   const name = String(raw || '').toLowerCase();
   const key = Object.keys(TOOL_COPY).find(candidate => name.includes(candidate));
-  return key ? TOOL_COPY[key] : 'מבצע פעולה…'
+  if (key) return TOOL_COPY[key]
+  // The activity strip only ever has a bare tool name (no action/command), so this
+  // resolves to the shared classifier's category default text.
+  const described = describeTool(name);
+  return described || 'מבצע פעולה…'
 }
 
 function humanSchedule(raw) {
@@ -46,12 +319,12 @@ function humanSchedule(raw) {
     raw && typeof raw === 'object'
       ? String(raw.schedule_display || raw.display || raw.expr || raw.cron || raw.value || '')
       : String(raw || '');
-  const known = {
-    '0 8 * * 0-4': 'ימים א׳–ה׳ בשעה 08:00',
-    '0 9 * * *': 'כל יום בשעה 09:00',
-    '0 9 * * 0': 'כל יום ראשון בשעה 09:00'
-  };
-  return known[schedule] || schedule || 'לפי לוח הזמנים של Hermes'
+  if (!schedule) return 'לפי לוח הזמנים של Hermes'
+  // Full cron→Hebrew fidelity (day-range compression, single/arbitrary weekdays,
+  // once-schedules) from the same core src/lib/schedule.ts uses — not just the
+  // three cron strings the quick-create presets happen to offer. An already-human
+  // string, or anything genuinely unrecognised, round-trips through unchanged.
+  return humanizeSchedule(schedule)
 }
 
 // A job is paused when the OFFICIAL record says so — never a local flag. The
@@ -795,6 +1068,9 @@ function Overview({ onOnboarding, storage }) {
   }, [sessionQuery, sessions.value]);
   // Active tasks straight from the official cron.manage door — no local cache.
   const { jobs } = summarizeCronJobs(cron.value);
+  // A failed sessions/cron read must not render as "0 שיחות · 0 משימות" — that is a
+  // confident, proven-empty answer, not the "we couldn't check" truth.
+  const activityError = Boolean(sessions.error || cron.error);
 
   return h(
     React.Fragment,
@@ -834,14 +1110,14 @@ function Overview({ onOnboarding, storage }) {
         }),
         h(Metric, {
           label: 'ספק AI',
-          value: providerReady ? model || runtime.value?.model || 'מחובר' : 'נדרשת הגדרה',
-          tone: providerReady ? 'good' : 'warn'
+          value: runtime.error ? 'לא הצלחנו לבדוק' : providerReady ? model || runtime.value?.model || 'מחובר' : 'נדרשת הגדרה',
+          tone: runtime.error ? 'bad' : providerReady ? 'good' : 'warn'
         }),
         h(Metric, { label: 'פרופיל פעיל', value: profile || 'default', tone: 'good' }),
         h(Metric, {
           label: 'פעילות',
-          value: `${sessionCount} שיחות אחרונות · ${jobs.length} משימות פעילות`,
-          tone: 'good'
+          value: activityError ? 'לא הצלחנו לבדוק — נסו לרענן' : `${sessionCount} שיחות אחרונות · ${jobs.length} משימות פעילות`,
+          tone: activityError ? 'bad' : 'good'
         })
       )
     ),
@@ -867,34 +1143,36 @@ function Overview({ onOnboarding, storage }) {
       ),
       sessions.loading
         ? h('div', { className: 'py-5 text-center text-xs text-(--ui-text-tertiary)' }, 'טוען שיחות…')
-        : visibleSessions.length
-          ? h(
-              'div',
-              { className: 'grid gap-2 sm:grid-cols-2' },
-              ...visibleSessions.map(session =>
-                h(
-                  'button',
-                  {
-                    key: session.id,
-                    type: 'button',
-                    onClick: () => host.navigate(`/${encodeURIComponent(session.id)}`),
-                    className:
-                      'rounded-[4px] border border-(--ui-stroke-secondary) bg-(--ui-bg-primary) px-3 py-2.5 text-right hover:bg-(--ui-bg-tertiary)'
-                  },
-                  h('div', { className: 'truncate text-xs font-medium text-(--ui-text-primary)' }, session.title || 'שיחה ללא כותרת'),
+        : sessions.error
+          ? h('div', { className: 'py-5 text-center text-xs text-(--ui-text-tertiary)' }, 'לא הצלחנו לבדוק שיחות אחרונות — נסו לרענן.')
+          : visibleSessions.length
+            ? h(
+                'div',
+                { className: 'grid gap-2 sm:grid-cols-2' },
+                ...visibleSessions.map(session =>
                   h(
-                    'div',
-                    { className: 'mt-1 line-clamp-2 text-[0.6875rem] leading-5 text-(--ui-text-tertiary)' },
-                    session.preview || 'פתח את השיחה לצפייה'
+                    'button',
+                    {
+                      key: session.id,
+                      type: 'button',
+                      onClick: () => host.navigate(`/${encodeURIComponent(session.id)}`),
+                      className:
+                        'rounded-[4px] border border-(--ui-stroke-secondary) bg-(--ui-bg-primary) px-3 py-2.5 text-right hover:bg-(--ui-bg-tertiary)'
+                    },
+                    h('div', { className: 'truncate text-xs font-medium text-(--ui-text-primary)' }, session.title || 'שיחה ללא כותרת'),
+                    h(
+                      'div',
+                      { className: 'mt-1 line-clamp-2 text-[0.6875rem] leading-5 text-(--ui-text-tertiary)' },
+                      session.preview || 'פתח את השיחה לצפייה'
+                    )
                   )
                 )
               )
-            )
-          : h(
-              'div',
-              { className: 'py-5 text-center text-xs text-(--ui-text-tertiary)' },
-              sessionQuery ? 'לא נמצאו שיחות מתאימות.' : 'עדיין אין שיחות. אפשר להתחיל שיחה חדשה.'
-            )
+            : h(
+                'div',
+                { className: 'py-5 text-center text-xs text-(--ui-text-tertiary)' },
+                sessionQuery ? 'לא נמצאו שיחות מתאימות.' : 'עדיין אין שיחות. אפשר להתחיל שיחה חדשה.'
+              )
     ),
     h(HomeQuickActions)
   )
@@ -1008,15 +1286,22 @@ function Connections() {
     {
       title: 'ספק AI',
       copy: 'OpenAI, Anthropic, Gemini, OpenRouter וספקים נוספים.',
-      status: provider.loading ? 'בודק…' : provider.value?.ready ? 'מוגדר' : 'נדרשת הגדרה',
+      // A failed readiness probe is NOT proof the provider isn't configured —
+      // show it as an explicit unknown, never as the same "נדרשת הגדרה" a
+      // genuinely-unconfigured provider would render.
+      status: provider.loading ? 'בודק…' : provider.error ? 'לא הצלחנו לבדוק — נסו לרענן' : provider.value?.ready ? 'מוגדר' : 'נדרשת הגדרה',
       connected: Boolean(provider.value?.ready),
+      error: Boolean(provider.error),
       action: () => host.navigate('/settings?tab=providers&pview=keys')
     },
     {
       title: 'Google Workspace',
       copy: 'Gmail, יומן, Drive, Docs ו־Sheets דרך ה־Skill הרשמי.',
-      status: hasGoogle ? 'יכולת החיבור זמינה' : 'התקנת Skill נדרשת',
+      // Same rule for the skills-list read: a failed probe must not read as the
+      // confident "התקנת Skill נדרשת" a real not-installed Skill would show.
+      status: skills.loading ? 'בודק…' : skills.error ? 'לא הצלחנו לבדוק — נסו לרענן' : hasGoogle ? 'יכולת החיבור זמינה' : 'התקנת Skill נדרשת',
       connected: false,
+      error: Boolean(skills.error),
       action: async () => {
         try {
           const created = await host.request('session.create', { title: 'חיבור Google Workspace', source: 'desktop' });
@@ -1034,8 +1319,11 @@ function Connections() {
     {
       title: 'Telegram',
       copy: 'דבר עם אותו Hermes גם מהטלפון באמצעות ה־gateway המובנה.',
-      status: telegramConnected ? 'מחובר' : system.loading ? 'בודק…' : 'לא מחובר',
+      // A failed status probe must not read as the confident "לא מחובר" a real
+      // disconnected channel would show.
+      status: telegramConnected ? 'מחובר' : system.loading ? 'בודק…' : system.error ? 'לא הצלחנו לבדוק — נסו לרענן' : 'לא מחובר',
       connected: telegramConnected,
+      error: Boolean(system.error),
       action: () => host.navigate('/messaging')
     }
   ];
@@ -1063,7 +1351,7 @@ function Connections() {
             h(
               'span',
               { className: 'flex items-center gap-1.5 text-[0.6875rem] text-(--ui-text-tertiary)' },
-              h(StatusDot, { tone: card.connected ? 'good' : 'muted' }),
+              h(StatusDot, { tone: card.error ? 'bad' : card.connected ? 'good' : 'muted' }),
               card.status
             ),
             h(Button, { variant: card.connected ? 'outline' : 'default', onClick: card.action }, card.connected ? 'ניהול' : 'חבר')
@@ -1093,12 +1381,19 @@ function Connections() {
   )
 }
 
+// Presets shown in the "when" <select> below, one single source
+// (../../../../shared/schedule-display.js) shared with the React app's schedule
+// picker. Labels are DERIVED via humanizeSchedule(), never hand-duplicated, so
+// adding a fourth preset there is the only change needed — it can no longer
+// silently fall back to raw cron on one side while the other renders it fine.
+const SCHEDULE_PRESETS = SCHEDULE_PRESET_VALUES.map(value => ({ value, label: humanizeSchedule(value) }));
+
 // The "new scheduled task" composer. It offers human-friendly presets but persists
 // everything through the official Hermes cron.manage door, then asks the parent to
 // refresh its list via onCreated.
 function NewTaskForm({ onCreated }) {
   const [name, setName] = useState('');
-  const [schedule, setSchedule] = useState('0 8 * * 0-4');
+  const [schedule, setSchedule] = useState(SCHEDULE_PRESET_VALUES[0]);
   const [prompt, setPrompt] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -1138,9 +1433,7 @@ function NewTaskForm({ onCreated }) {
             className:
               'h-8 rounded-[4px] border border-(--ui-stroke-secondary) bg-(--ui-bg-primary) px-2 text-xs text-(--ui-text-primary)'
           },
-          h('option', { value: '0 8 * * 0-4' }, 'ימים א׳–ה׳ בשעה 08:00'),
-          h('option', { value: '0 9 * * *' }, 'כל יום בשעה 09:00'),
-          h('option', { value: '0 9 * * 0' }, 'כל יום ראשון בשעה 09:00')
+          ...SCHEDULE_PRESETS.map(preset => h('option', { key: preset.value, value: preset.value }, preset.label))
         )
       ),
       h(Field, {
@@ -1206,41 +1499,53 @@ function Automations({ storage }) {
         null,
         result.loading
           ? h('div', { className: 'py-8 text-center text-xs text-(--ui-text-tertiary)' }, 'טוען משימות…')
-          : jobs.length
+          : // A failed read is NOT proof of "no scheduled tasks" — show it as an
+            // explicit problem, never as the same empty state a genuinely-empty
+            // list would render.
+            result.error
             ? h(
                 'div',
-                { className: 'grid gap-2' },
-                ...jobs.map((job, index) =>
-                  h(
-                    'div',
-                    {
-                      key: cronJobId(job) || index,
-                      className:
-                        'flex flex-wrap items-center justify-between gap-3 rounded-[4px] border border-(--ui-stroke-secondary) px-3 py-2.5'
-                    },
+                { className: 'flex flex-col items-center gap-2 py-8 text-center text-xs text-(--ui-text-tertiary)' },
+                h(StatusDot, { tone: 'bad' }),
+                'לא הצלחנו לבדוק משימות מתוזמנות — נסו לרענן.'
+              )
+            : jobs.length
+              ? h(
+                  'div',
+                  { className: 'grid gap-2' },
+                  ...jobs.map((job, index) =>
                     h(
                       'div',
-                      null,
-                      h('div', { className: 'text-xs font-medium text-(--ui-text-primary)' }, job.name || 'משימה'),
+                      {
+                        key: cronJobId(job) || index,
+                        className:
+                          'flex flex-wrap items-center justify-between gap-3 rounded-[4px] border border-(--ui-stroke-secondary) px-3 py-2.5'
+                      },
                       h(
                         'div',
-                        { className: 'mt-0.5 text-[0.6875rem] text-(--ui-text-tertiary)' },
-                        humanSchedule(job.schedule_display || job.schedule || job.cron)
+                        null,
+                        h('div', { className: 'text-xs font-medium text-(--ui-text-primary)' }, job.name || 'משימה'),
+                        h(
+                          'div',
+                          { className: 'mt-0.5 text-[0.6875rem] text-(--ui-text-tertiary)' },
+                          humanSchedule(job.schedule_display || job.schedule || job.cron)
+                        )
+                      ),
+                      h(
+                        'div',
+                        { className: 'flex items-center gap-2' },
+                        h(Badge, { variant: isJobPaused(job) ? 'muted' : 'default' }, isJobPaused(job) ? 'מושהית' : 'פעילה'),
+                        h(Button, { variant: 'outline', size: 'sm', onClick: () => toggle(job) }, isJobPaused(job) ? 'הפעל' : 'השהה')
                       )
-                    ),
-                    h(
-                      'div',
-                      { className: 'flex items-center gap-2' },
-                      h(Badge, { variant: isJobPaused(job) ? 'muted' : 'default' }, isJobPaused(job) ? 'מושהית' : 'פעילה'),
-                      h(Button, { variant: 'outline', size: 'sm', onClick: () => toggle(job) }, isJobPaused(job) ? 'הפעל' : 'השהה')
                     )
                   )
                 )
-              )
-            : h('div', { className: 'py-8 text-center text-xs text-(--ui-text-tertiary)' }, 'עדיין אין משימות מתוזמנות.'),
-        // Honest degrade: shown only when the paused-inclusive backend door is
-        // unavailable and we fell back to the active-only cron.manage RPC.
-        pausedListingSupported
+              : h('div', { className: 'py-8 text-center text-xs text-(--ui-text-tertiary)' }, 'עדיין אין משימות מתוזמנות.'),
+        // Honest degrade: shown only when the read succeeded but the paused-inclusive
+        // backend door is unavailable and we fell back to the active-only cron.manage
+        // RPC. A failed read already has its own message above — don't stack a second,
+        // unrelated notice on top of it.
+        pausedListingSupported || result.error
           ? null
           : h(
               'p',
@@ -1326,24 +1631,36 @@ function Support({ storage }) {
         h(Metric, { label: 'Hermes', value: gateway === 'open' ? 'פועל' : gateway, tone: gateway === 'open' ? 'good' : 'warn' }),
         h(Metric, {
           label: 'Provider',
-          value: runtime.loading ? 'בודק…' : runtime.value?.ready ? model || 'מוגדר' : 'לא מוכן',
-          tone: runtime.loading ? 'warn' : runtime.value?.ready ? 'good' : 'bad'
+          // A failed readiness probe is not proof the provider is unready — say so
+          // explicitly instead of reusing the same "לא מוכן" a real failure shows.
+          value: runtime.loading ? 'בודק…' : runtime.error ? 'לא הצלחנו לבדוק' : runtime.value?.ready ? model || 'מוגדר' : 'לא מוכן',
+          tone: runtime.loading ? 'warn' : runtime.error ? 'bad' : runtime.value?.ready ? 'good' : 'bad'
         }),
         h(Metric, {
           label: 'גרסת Hermes',
-          value: status.value?.version || status.value?.hermes_version || 'נבדקת…',
-          tone: 'good'
+          // status.error must not collapse into the same "נבדקת…" a still-loading
+          // read shows — the read already finished, and it failed.
+          value: status.error ? 'לא הצלחנו לבדוק' : status.value?.version || status.value?.hermes_version || 'נבדקת…',
+          tone: status.error ? 'bad' : 'good'
         }),
         h(Metric, { label: 'פרופיל', value: profile || 'default', tone: 'good' }),
         h(Metric, {
           label: 'חיבורים',
-          value: platformEntries.length ? `${connectedPlatforms} מתוך ${platformEntries.length} מחוברים` : 'אין חיבורים מוגדרים',
-          tone: connectedPlatforms ? 'good' : 'warn'
+          // A failed status read must not render as the confident "אין חיבורים
+          // מוגדרים" a genuinely-empty platform list would show.
+          value: status.error
+            ? 'לא הצלחנו לבדוק'
+            : platformEntries.length
+              ? `${connectedPlatforms} מתוך ${platformEntries.length} מחוברים`
+              : 'אין חיבורים מוגדרים',
+          tone: status.error ? 'bad' : connectedPlatforms ? 'good' : 'warn'
         }),
         h(Metric, {
           label: 'משימות פעילות',
-          value: `${activeJobs.length} פעילות`,
-          tone: activeJobs.length ? 'good' : 'warn'
+          // Same rule for a failed cron read: never render "0 פעילות" as if the
+          // list were proven empty.
+          value: cron.error ? 'לא הצלחנו לבדוק' : `${activeJobs.length} פעילות`,
+          tone: cron.error ? 'bad' : activeJobs.length ? 'good' : 'warn'
         })
       ),
       h(

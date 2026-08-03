@@ -10,6 +10,7 @@ const {
   WHATSAPP_POLICY_PLUGIN_FILES,
   WHATSAPP_POLICY_PLUGIN_OBSOLETE_FILES
 } = require('./paths.cjs')
+const { safeWrite } = require('./atomic-write.cjs')
 
 // Installs the fail-closed WhatsApp reply-policy plugin as a real Hermes user
 // plugin and activates it through the official `hermes plugins enable` command.
@@ -92,9 +93,7 @@ function installWhatsappPolicyPlugin(options = {}) {
     enabled: enableResult.enabled,
     enableReason: enableResult.reason || null
   }
-  const temporary = path.join(targetDir, `install-receipt.json.${process.pid}.tmp`)
-  fs.writeFileSync(temporary, `${JSON.stringify(receipt, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 })
-  fs.renameSync(temporary, path.join(targetDir, 'install-receipt.json'))
+  safeWrite(path.join(targetDir, 'install-receipt.json'), `${JSON.stringify(receipt, null, 2)}\n`)
 
   // `changed` = the bundled payload differs from what was last installed (a plugin
   // UPDATE). The caller uses it to trigger a gateway reload so the dispatch process

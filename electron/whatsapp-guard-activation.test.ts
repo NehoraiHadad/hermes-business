@@ -6,11 +6,8 @@ import { activateWhatsappGuard, waitForFreshHeartbeat } from './whatsapp-guard-a
 import { recoverGuardActivation } from './whatsapp-guard-recovery.cjs'
 import { verifyGuardHeartbeat } from './whatsapp-guard.cjs'
 import { officialGatewayState } from './gateway-status.cjs'
-import {
-  guardStatusWithActivation,
-  readGuardActivationJournal,
-  writeGuardActivationJournal
-} from './whatsapp-guard-journal.cjs'
+import { guardStatusWithActivation } from './whatsapp-guard-status.cjs'
+import { readGuardActivationJournal, writeGuardActivationJournal } from './whatsapp-guard-journal.cjs'
 
 const NOW = Date.parse('2026-08-01T12:00:00.000Z')
 

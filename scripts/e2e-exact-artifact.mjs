@@ -21,9 +21,10 @@ import { repoRoot } from './lib/source-fingerprint.mjs'
 import { readAttestation, unpackedDir } from './lib/build-attestation.mjs'
 import { measureCandidate, assessExactArtifactRun, selectVersionedInstaller } from './lib/release/exact-artifact.mjs'
 import { parseJsonInput } from './lib/json-input.mjs'
+import { parseChannel } from './lib/parse-channel.mjs'
 
 const root = repoRoot()
-const channel = process.argv.includes('--channel') ? process.argv[process.argv.indexOf('--channel') + 1] : 'public'
+const channel = parseChannel()
 const node = process.execPath
 
 function blockedAndExit(reason) {

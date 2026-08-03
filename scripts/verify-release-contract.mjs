@@ -17,15 +17,13 @@ import { repoRoot } from './lib/source-fingerprint.mjs'
 import { gatherReleaseState } from './lib/release/gather.mjs'
 import { preflightRelease } from './lib/release/preflight.mjs'
 import { computeReleaseBinding } from './lib/release/binding.mjs'
+import { parseChannel } from './lib/parse-channel.mjs'
 
 function parseArgs(argv) {
-  const out = { channel: 'public', probe: true }
-  for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === '--channel') out.channel = argv[++i]
-    else if (argv[i] === '--qa') out.channel = 'qa'
-    else if (argv[i] === '--no-probe') out.probe = false
+  return {
+    channel: parseChannel(argv, { allowShorthand: true }),
+    probe: !argv.includes('--no-probe')
   }
-  return out
 }
 
 export function runVerifier({ root = repoRoot(), channel = 'public', probe = true, log = console } = {}) {

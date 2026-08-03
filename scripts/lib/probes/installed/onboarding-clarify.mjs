@@ -2,6 +2,7 @@
 // the /business-bootstrap skill through one structured clarify question and
 // answers it via the official clarify RPC path.
 
+import { pollUntil } from '../../e2e-harness.mjs'
 import { composerLocator, stopButtonLocator } from '../../installed-app.mjs'
 
 /**
@@ -38,9 +39,16 @@ export async function runOnboardingClarify(ctx) {
   }
   await clarifyCard.getByLabel(/התשובה שלך|תשובה אחרת/).fill('בדיקת POC בלבד — עצור אחרי אימות התשובה.')
   await clarifyCard.getByRole('button', { name: 'שלח תשובה' }).click()
-  // Deliberate settle: give the turn a moment, then stop it if still streaming.
-  await page.waitForTimeout(1_000)
-  if (await stopButton.isVisible().catch(() => false)) await stopButton.click()
+  // Wait for the actual condition (the answer started a streaming turn) instead
+  // of sleeping a guessed second. If the turn already finished, the stop button
+  // never appears and there is nothing to stop — that is a normal outcome here,
+  // so the poll timing out is not an error.
+  const streaming = await pollUntil(() => stopButton.isVisible().catch(() => false), {
+    timeoutMs: 5_000,
+    intervalMs: 100,
+    message: 'the streaming stop button after the clarify answer'
+  }).catch(() => false)
+  if (streaming) await stopButton.click().catch(() => undefined)
 
   return {
     skill: 'business-bootstrap',

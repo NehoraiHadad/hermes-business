@@ -1,4 +1,13 @@
+import { describeTool } from '../../shared/tool-copy.js'
 import { humanizeSchedule } from './schedule'
+
+// Tool-name/action → Hebrew activity-label RULES now live in
+// ../../shared/tool-copy.js so the Rollup-bundled Hermes Desktop plugin
+// (hermes-plugin/business-shell/src/helpers.js) can render the same ~50-rule
+// fidelity from a bare tool name, instead of its own 8-substring lookup. This file
+// keeps the React-specific payload-shape extraction (toolArguments below — agent
+// tool-call payloads carry action/command in several different shapes) and the
+// final generic-tool fallback copy; only the classification table is shared.
 
 type ToolPayload = Record<string, unknown>
 
@@ -21,57 +30,15 @@ function readableToolName(name: string) {
   return /^[\p{L}\p{N} ]{1,48}$/u.test(readable) ? readable : ''
 }
 
-function terminalActivity(command: string) {
-  if (/\b(?:npm|pnpm|yarn|vitest|jest|pytest)\b[^\r\n]*(?:test|check)/i.test(command)) return 'מריץ בדיקות'
-  if (/\bgit\s+(?:status|diff|log|show)\b/i.test(command)) return 'בודק את שינויי הקוד'
-  if (/\bgit\s+(?:add|commit|push|pull|merge|rebase)\b/i.test(command)) return 'מעדכן את מאגר הקוד'
-  if (/\b(?:rg|grep|findstr|select-string)\b/i.test(command)) return 'מחפש בקבצי המחשב'
-  if (/\b(?:gmail|google|calendar|drive)\b/i.test(command)) return 'בודק נתוני Google דרך המחשב'
-  if (/\b(?:python|python3|py)\b/i.test(command)) return 'מריץ סקריפט Python'
-  if (/\b(?:powershell|pwsh)\b/i.test(command)) return 'מריץ פקודת PowerShell'
-  return 'מריץ פקודת מערכת'
-}
-
 export function humanizeTool(name: string, payload: ToolPayload = {}): string {
   const normalized = name.toLowerCase()
   const args = toolArguments(payload)
   const action = String(payload.action || args.action || normalized).toLowerCase()
   const command = String(payload.command || args.command || args.cmd || args.script || '')
 
-  if (/google.*calendar|calendar/.test(normalized)) {
-    if (/create|add|schedule/.test(action)) return 'יוצר אירוע ביומן'
-    if (/update|edit|move|reschedule/.test(action)) return 'מעדכן אירוע ביומן'
-    if (/delete|remove|cancel/.test(action)) return 'מסיר אירוע מהיומן'
-    return 'בודק אירועים ביומן'
-  }
-  if (/gmail|email|mail/.test(normalized)) {
-    if (/send/.test(action)) return 'שולח אימייל'
-    if (/draft|compose|create/.test(action)) return 'מכין טיוטת אימייל'
-    if (/search|list|find|query/.test(action)) return 'מחפש הודעות ב־Gmail'
-    if (/read|get|open/.test(action)) return 'קורא הודעה ב־Gmail'
-    return 'בודק את Gmail'
-  }
-  if (/drive|docs|sheets/.test(normalized)) {
-    if (/search|list|find/.test(action)) return 'מחפש מסמכים ב־Google Drive'
-    if (/write|create|update|edit/.test(action)) return 'מעדכן מסמך ב־Google Drive'
-    return 'קורא מסמך מ־Google Drive'
-  }
-  if (/web_search|search_web/.test(normalized)) return 'מחפש מידע באינטרנט'
-  if (/web_extract|fetch|scrape/.test(normalized)) return 'קורא מקור מהאינטרנט'
-  if (/browser|computer|screenshot|click|navigate/.test(normalized)) {
-    if (/screenshot|capture/.test(action)) return 'מצלם את המסך לבדיקה'
-    if (/click|press|select/.test(action)) return 'מפעיל פקד בממשק'
-    if (/type|fill|input/.test(action)) return 'ממלא פרטים בממשק'
-    if (/open|navigate|goto/.test(action)) return 'פותח עמוד בדפדפן'
-    return 'בודק את הממשק בדפדפן'
-  }
-  if (/terminal|shell|process|command/.test(normalized)) return terminalActivity(command)
-  if (/cron|schedule/.test(normalized)) return 'מעדכן משימה מתוזמנת'
-  if (/skill/.test(normalized)) return 'מפעיל תהליך עבודה שמור'
-  if (/memory/.test(normalized)) return 'בודק פרטים מהזיכרון'
-  if (/todo|task/.test(normalized)) return 'מעדכן את רשימת המשימות'
-  if (/read.*file|file.*read/.test(normalized)) return 'קורא קובץ מהמחשב'
-  if (/write.*file|edit.*file|file.*write/.test(normalized)) return 'מעדכן קובץ במחשב'
+  const described = describeTool(normalized, action, command)
+  if (described) return described
+
   const readable = readableToolName(name)
   return readable ? `מפעיל כלי: ${readable}` : 'מפעיל כלי עזר למשימה'
 }

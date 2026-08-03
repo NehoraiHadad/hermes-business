@@ -2,6 +2,7 @@
 // guided wrapper dialog if needed) and confirms it is present in the official
 // Hermes Skills API.
 
+import { pollUntil } from '../../e2e-harness.mjs'
 import { navigateScreen } from '../../installed-app.mjs'
 
 /**
@@ -21,11 +22,20 @@ export async function runSkills(ctx) {
       .getByLabel('איך התהליך עובד?')
       .fill('אסוף לידים חדשים, חלק לפי דחיפות, וסכם למי כדאי לחזור קודם. אין לשלוח דבר ללא אישור.')
     await skillDialog.getByRole('button', { name: 'שמור Skill' }).click()
-    // Deliberate settle: let the save round-trip surface any validation error.
-    await page.waitForTimeout(2_000)
-    const skillError = await skillDialog.locator('.form-error').textContent().catch(() => '')
-    if (skillError) throw new Error(`Hermes rejected wrapper Skill creation: ${skillError}`)
+    // Wait for the save round-trip to RESOLVE — either a validation error surfaces
+    // or the card appears — rather than sleeping a guessed two seconds and hoping
+    // the slower of the two already happened.
     skillCard = page.locator('.skill-card').filter({ has: page.getByRole('heading', { name: durableSkillName }) })
+    const outcome = await pollUntil(
+      async () => {
+        const message = await skillDialog.locator('.form-error').textContent().catch(() => '')
+        if (message) return { rejected: message.trim() }
+        if (await skillCard.isVisible().catch(() => false)) return { created: true }
+        return null
+      },
+      { timeoutMs: 30_000, intervalMs: 200, message: 'the wrapper Skill to be created or rejected' }
+    )
+    if (outcome.rejected) throw new Error(`Hermes rejected wrapper Skill creation: ${outcome.rejected}`)
     await skillCard.waitFor({ state: 'visible', timeout: 30_000 })
   }
 

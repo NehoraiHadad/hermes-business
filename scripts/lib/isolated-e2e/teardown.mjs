@@ -66,12 +66,9 @@ export function preserveForensicsIfMutated({ forensicDir, delta, liveUntouched, 
 }
 
 /** Give the OS a beat to release the port and file locks after close. */
-function osReleaseBeat() {
-  spawnSync(
-    process.platform === 'win32' ? 'cmd' : 'sleep',
-    process.platform === 'win32' ? ['/c', 'ping', '-n', '3', '127.0.0.1'] : ['1'],
-    { stdio: 'ignore' }
-  )
+/** Give Windows a beat to release handles a just-reaped process still holds. */
+function osReleaseBeat(ms = 1_000) {
+  return new Promise(resolve => setTimeout(resolve, ms))
 }
 
 /**
@@ -96,8 +93,8 @@ export async function finalizeTeardown({
   // boundary; ownership validation prevents ever touching the live gateway.
   const gateway = reapOwnedGateway(tempHome)
   killIsolatedPortProcess(isolatedPort)
-  osReleaseBeat()
-  const removed = removeTempHome(tempHome)
+  await osReleaseBeat()
+  const removed = await removeTempHome(tempHome)
   const portFree = await isPortFree(isolatedPort)
   const liveMarkerAfter = hermesHomeMarker(liveHome)
   const delta = markerDelta(liveMarkerBefore, liveMarkerAfter)

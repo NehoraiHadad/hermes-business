@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Badge, Button, host } from '@hermes/plugin-sdk'
+import { Badge, Button, StatusDot, host } from '@hermes/plugin-sdk'
 import { h } from '../dom.js'
 import { cronJobId, humanSchedule, isJobPaused, purgeLegacyPausedCache, useAsync } from '../helpers.js'
 import { loadScheduledTasks } from '../cron-source.js'
@@ -56,41 +56,53 @@ export function Automations({ storage }) {
         null,
         result.loading
           ? h('div', { className: 'py-8 text-center text-xs text-(--ui-text-tertiary)' }, 'טוען משימות…')
-          : jobs.length
+          : // A failed read is NOT proof of "no scheduled tasks" — show it as an
+            // explicit problem, never as the same empty state a genuinely-empty
+            // list would render.
+            result.error
             ? h(
                 'div',
-                { className: 'grid gap-2' },
-                ...jobs.map((job, index) =>
-                  h(
-                    'div',
-                    {
-                      key: cronJobId(job) || index,
-                      className:
-                        'flex flex-wrap items-center justify-between gap-3 rounded-[4px] border border-(--ui-stroke-secondary) px-3 py-2.5'
-                    },
+                { className: 'flex flex-col items-center gap-2 py-8 text-center text-xs text-(--ui-text-tertiary)' },
+                h(StatusDot, { tone: 'bad' }),
+                'לא הצלחנו לבדוק משימות מתוזמנות — נסו לרענן.'
+              )
+            : jobs.length
+              ? h(
+                  'div',
+                  { className: 'grid gap-2' },
+                  ...jobs.map((job, index) =>
                     h(
                       'div',
-                      null,
-                      h('div', { className: 'text-xs font-medium text-(--ui-text-primary)' }, job.name || 'משימה'),
+                      {
+                        key: cronJobId(job) || index,
+                        className:
+                          'flex flex-wrap items-center justify-between gap-3 rounded-[4px] border border-(--ui-stroke-secondary) px-3 py-2.5'
+                      },
                       h(
                         'div',
-                        { className: 'mt-0.5 text-[0.6875rem] text-(--ui-text-tertiary)' },
-                        humanSchedule(job.schedule_display || job.schedule || job.cron)
+                        null,
+                        h('div', { className: 'text-xs font-medium text-(--ui-text-primary)' }, job.name || 'משימה'),
+                        h(
+                          'div',
+                          { className: 'mt-0.5 text-[0.6875rem] text-(--ui-text-tertiary)' },
+                          humanSchedule(job.schedule_display || job.schedule || job.cron)
+                        )
+                      ),
+                      h(
+                        'div',
+                        { className: 'flex items-center gap-2' },
+                        h(Badge, { variant: isJobPaused(job) ? 'muted' : 'default' }, isJobPaused(job) ? 'מושהית' : 'פעילה'),
+                        h(Button, { variant: 'outline', size: 'sm', onClick: () => toggle(job) }, isJobPaused(job) ? 'הפעל' : 'השהה')
                       )
-                    ),
-                    h(
-                      'div',
-                      { className: 'flex items-center gap-2' },
-                      h(Badge, { variant: isJobPaused(job) ? 'muted' : 'default' }, isJobPaused(job) ? 'מושהית' : 'פעילה'),
-                      h(Button, { variant: 'outline', size: 'sm', onClick: () => toggle(job) }, isJobPaused(job) ? 'הפעל' : 'השהה')
                     )
                   )
                 )
-              )
-            : h('div', { className: 'py-8 text-center text-xs text-(--ui-text-tertiary)' }, 'עדיין אין משימות מתוזמנות.'),
-        // Honest degrade: shown only when the paused-inclusive backend door is
-        // unavailable and we fell back to the active-only cron.manage RPC.
-        pausedListingSupported
+              : h('div', { className: 'py-8 text-center text-xs text-(--ui-text-tertiary)' }, 'עדיין אין משימות מתוזמנות.'),
+        // Honest degrade: shown only when the read succeeded but the paused-inclusive
+        // backend door is unavailable and we fell back to the active-only cron.manage
+        // RPC. A failed read already has its own message above — don't stack a second,
+        // unrelated notice on top of it.
+        pausedListingSupported || result.error
           ? null
           : h(
               'p',

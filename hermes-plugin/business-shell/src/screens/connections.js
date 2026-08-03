@@ -22,15 +22,22 @@ export function Connections() {
     {
       title: 'ספק AI',
       copy: 'OpenAI, Anthropic, Gemini, OpenRouter וספקים נוספים.',
-      status: provider.loading ? 'בודק…' : provider.value?.ready ? 'מוגדר' : 'נדרשת הגדרה',
+      // A failed readiness probe is NOT proof the provider isn't configured —
+      // show it as an explicit unknown, never as the same "נדרשת הגדרה" a
+      // genuinely-unconfigured provider would render.
+      status: provider.loading ? 'בודק…' : provider.error ? 'לא הצלחנו לבדוק — נסו לרענן' : provider.value?.ready ? 'מוגדר' : 'נדרשת הגדרה',
       connected: Boolean(provider.value?.ready),
+      error: Boolean(provider.error),
       action: () => host.navigate('/settings?tab=providers&pview=keys')
     },
     {
       title: 'Google Workspace',
       copy: 'Gmail, יומן, Drive, Docs ו־Sheets דרך ה־Skill הרשמי.',
-      status: hasGoogle ? 'יכולת החיבור זמינה' : 'התקנת Skill נדרשת',
+      // Same rule for the skills-list read: a failed probe must not read as the
+      // confident "התקנת Skill נדרשת" a real not-installed Skill would show.
+      status: skills.loading ? 'בודק…' : skills.error ? 'לא הצלחנו לבדוק — נסו לרענן' : hasGoogle ? 'יכולת החיבור זמינה' : 'התקנת Skill נדרשת',
       connected: false,
+      error: Boolean(skills.error),
       action: async () => {
         try {
           const created = await host.request('session.create', { title: 'חיבור Google Workspace', source: 'desktop' })
@@ -48,8 +55,11 @@ export function Connections() {
     {
       title: 'Telegram',
       copy: 'דבר עם אותו Hermes גם מהטלפון באמצעות ה־gateway המובנה.',
-      status: telegramConnected ? 'מחובר' : system.loading ? 'בודק…' : 'לא מחובר',
+      // A failed status probe must not read as the confident "לא מחובר" a real
+      // disconnected channel would show.
+      status: telegramConnected ? 'מחובר' : system.loading ? 'בודק…' : system.error ? 'לא הצלחנו לבדוק — נסו לרענן' : 'לא מחובר',
       connected: telegramConnected,
+      error: Boolean(system.error),
       action: () => host.navigate('/messaging')
     }
   ]
@@ -77,7 +87,7 @@ export function Connections() {
             h(
               'span',
               { className: 'flex items-center gap-1.5 text-[0.6875rem] text-(--ui-text-tertiary)' },
-              h(StatusDot, { tone: card.connected ? 'good' : 'muted' }),
+              h(StatusDot, { tone: card.error ? 'bad' : card.connected ? 'good' : 'muted' }),
               card.status
             ),
             h(Button, { variant: card.connected ? 'outline' : 'default', onClick: card.action }, card.connected ? 'ניהול' : 'חבר')

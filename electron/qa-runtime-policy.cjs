@@ -1,6 +1,7 @@
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
+const { normalizePathForCompare: normCompare, isUnder } = require('./path-containment.cjs')
 
 // Path/host/port POLICY for the main-process QA runtime override
 // (electron/qa-runtime.cjs) — the fail-closed validators, split out so the
@@ -29,17 +30,6 @@ class QaOverrideError extends Error {
     this.name = 'QaOverrideError'
     this.code = 'QA_OVERRIDE_INVALID'
   }
-}
-
-const winCI = process.platform === 'win32'
-function normCompare(value) {
-  const trimmed = String(value).replace(/[\\/]+$/, '')
-  return winCI ? trimmed.toLowerCase() : trimmed
-}
-function isUnder(child, parent) {
-  const c = normCompare(child)
-  const p = normCompare(parent)
-  return c === p || c.startsWith(p + normCompare(path.sep))
 }
 
 /** Absolute default/live HERMES_HOME(s) that must never be used as a QA home. */

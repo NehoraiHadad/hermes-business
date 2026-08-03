@@ -23,9 +23,10 @@ import { verifySigntool } from './lib/release/signtool.mjs'
 import { classifySignature, signerApproved } from './lib/release/signing.mjs'
 import { resolveReleaseTools } from './lib/release/tool-discovery.mjs'
 import { measureInstallers } from './lib/release/gather.mjs'
+import { parseChannel } from './lib/parse-channel.mjs'
 
 const root = repoRoot()
-const channel = process.argv.includes('--channel') ? process.argv[process.argv.indexOf('--channel') + 1] : 'public'
+const channel = parseChannel()
 
 if (channel === 'qa') {
   console.log('QA channel: leaving EXEs UNSIGNED (non-distributable by policy). No signing performed.')

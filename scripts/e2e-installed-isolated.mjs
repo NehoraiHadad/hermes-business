@@ -74,7 +74,7 @@ try {
   if (!gate.ok) {
     report.error = gate.error
     report.teardown = { aborted_before_launch: true }
-    removeTempHome(tempHome)
+    await removeTempHome(tempHome)
     console.log(safeJson(report))
     process.exit(1)
   }
@@ -86,7 +86,7 @@ try {
 } catch (error) {
   report.error = String(error?.message || error)
   report.teardown = { aborted_before_launch: true }
-  removeTempHome(tempHome)
+  await removeTempHome(tempHome)
   console.log(safeJson(report))
   process.exit(1)
 }

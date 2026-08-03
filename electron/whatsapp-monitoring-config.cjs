@@ -1,15 +1,9 @@
 const { getConfig, putConfig } = require('./hermes-config.cjs')
 const { readWhatsappDirectory } = require('./whatsapp-directory.cjs')
+const { normalizeChat: principal } = require('./whatsapp-policy.cjs')
 
 const START = '[HERMES_BUSINESS_MONITORING]'
 const END = '[/HERMES_BUSINESS_MONITORING]'
-
-function principal(value) {
-  const normalized = String(value || '').trim().toLowerCase()
-    .replace(/^whatsapp(?:_cloud)?:/, '').replace(/^\+/, '')
-    .replace(/@(?:s\.whatsapp\.net|lid)$/i, '')
-  return /^[\d\s().-]+$/.test(normalized) ? normalized.replace(/\D/g, '') : normalized
-}
 
 function stripOwned(prompt) {
   const text = String(prompt || '')

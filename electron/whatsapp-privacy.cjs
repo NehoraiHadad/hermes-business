@@ -1,7 +1,8 @@
-const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 const { hermesHome } = require('./paths.cjs')
+const { safeWrite } = require('./atomic-write.cjs')
+const { isUnder } = require('./path-containment.cjs')
 
 // Truthful confidentiality posture for the WhatsApp reply policy file, which
 // contains PII (the allow-listed phone numbers / chat ids).
@@ -39,32 +40,16 @@ function privateHomeIsUserScoped(home = hermesHome()) {
     process.env.APPDATA,
     os.homedir()
   ].filter(Boolean)
-  return roots.some(root => {
-    const base = path.resolve(root)
-    const rel = path.relative(base, resolvedHome)
-    return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel))
-  })
+  return roots.some(root => isUnder(resolvedHome, path.resolve(root)))
 }
 
 // Atomic write with a truthful, platform-correct confidentiality boundary.
 function writeWhatsappPrivateFile(target, content) {
-  fs.mkdirSync(path.dirname(target), { recursive: true })
-  const temporary = `${target}.${process.pid}.tmp`
   // On POSIX 0o600 is meaningful; on Windows it is not a confidentiality
   // control, so we do not pretend it is one — confidentiality comes from the
-  // per-user home ACL asserted via privateHomeIsUserScoped().
-  const options = isWin()
-    ? { encoding: 'utf8' }
-    : { encoding: 'utf8', mode: 0o600 }
-  fs.writeFileSync(temporary, content, options)
-  if (!isWin()) {
-    try {
-      fs.chmodSync(temporary, 0o600)
-    } catch {
-      // Best-effort on exotic POSIX filesystems; the home ACL still applies.
-    }
-  }
-  fs.renameSync(temporary, target)
+  // per-user home ACL asserted via privateHomeIsUserScoped(). chmodAfter is a
+  // best-effort re-chmod on exotic POSIX filesystems; the home ACL still applies.
+  safeWrite(target, content, isWin() ? { mode: null } : { mode: 0o600, chmodAfter: 0o600 })
 }
 
 // Absolute paths a diagnostics/support bundle MUST NOT include.

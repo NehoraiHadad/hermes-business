@@ -6,11 +6,10 @@
 // forensic diff live in ./isolated-marker.mjs; nothing here ever touches the live
 // profile.
 
-import { existsSync, mkdtempSync, realpathSync, rmSync } from 'node:fs'
+import { existsSync, lstatSync, mkdtempSync, realpathSync, rmSync } from 'node:fs'
 import net from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
-import { spawnSync } from 'node:child_process'
 
 // Mirror of the main-process QA contract (electron/qa-runtime.cjs). Kept in sync
 // deliberately: the harness must speak the exact env the runtime validates.
@@ -19,8 +18,16 @@ export const QA_SENTINEL_VALUE = 'isolated-temp-home'
 export const QA_HOME_ENV = 'HERMES_BUSINESS_QA_HERMES_HOME'
 export const QA_HOST_ENV = 'HERMES_BUSINESS_QA_HOST'
 export const QA_PORT_ENV = 'HERMES_BUSINESS_QA_PORT'
-const QA_PORT_MIN = 41000
-const QA_PORT_MAX = 60000
+// Pinned against electron/qa-runtime-policy.cjs PORT_MIN/PORT_MAX by
+// electron/constants-lockstep.test.ts (which text-extracts these two literals,
+// so they must stay written as plain `const NAME = <number>` declarations).
+export const QA_PORT_MIN = 41000
+export const QA_PORT_MAX = 60000
+
+/** Resolve after `ms` milliseconds. */
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
 
 /** Absolute live/default HERMES_HOME the isolated run must never touch. */
 export function liveHermesHome() {
@@ -29,19 +36,49 @@ export function liveHermesHome() {
     : path.join(os.homedir(), '.hermes')
 }
 
+/**
+ * Prove a directory really is a throwaway QA home: an existing, non-symlinked
+ * directory whose CANONICAL path lives strictly under the OS TEMP root and never
+ * inside the live Hermes profile. This is the containment half of
+ * electron/qa-runtime-policy.cjs `validateIsolatedHome`; the emptiness clause of
+ * that validator is deliberately NOT mirrored here, because the harness-side gate
+ * also runs AFTER the app has legitimately populated the home (relaunches,
+ * per-probe asserts) where "empty" is no longer true and never was the isolation
+ * property we care about. Returns the canonical realpath, or throws.
+ */
+export function assertQaHomeContainment(home, { label = 'isolated Hermes home' } = {}) {
+  const raw = String(home || '')
+  if (!raw || !path.isAbsolute(raw)) throw new Error(`${label} must be an absolute path (got ${raw || '<empty>'})`)
+  let leaf
+  try {
+    leaf = lstatSync(raw)
+  } catch {
+    throw new Error(`${label} must be an existing directory: ${raw}`)
+  }
+  if (leaf.isSymbolicLink()) throw new Error(`${label} must not be a symlink/reparse point: ${raw}`)
+  if (!leaf.isDirectory()) throw new Error(`${label} must be a directory: ${raw}`)
+  let real
+  let realTmp
+  try {
+    real = realpathSync.native(raw)
+    realTmp = realpathSync.native(os.tmpdir())
+  } catch {
+    throw new Error(`${label} could not be canonicalized: ${raw}`)
+  }
+  if (!homeKey(real).startsWith(homeKey(realTmp) + path.sep.toLowerCase())) {
+    throw new Error(`${label} must be strictly under the OS TEMP root (${realTmp}): ${real}`)
+  }
+  const live = homeKey(liveHermesHome())
+  if (homeKey(real) === live || homeKey(real).startsWith(live + path.sep.toLowerCase())) {
+    throw new Error(`${label} resolved into the live Hermes profile: ${real}`)
+  }
+  return real
+}
+
 /** Create a fresh, empty temp HERMES_HOME under the OS TEMP root and own it. */
 export function createTempHermesHome() {
   const dir = mkdtempSync(path.join(os.tmpdir(), 'hermes-qa-home-'))
-  const real = realpathSync.native(dir)
-  const realTmp = realpathSync.native(os.tmpdir())
-  if (!real.toLowerCase().startsWith(realTmp.toLowerCase() + path.sep)) {
-    throw new Error(`temp home escaped TEMP root: ${real}`)
-  }
-  const live = path.resolve(liveHermesHome()).toLowerCase()
-  if (real.toLowerCase() === live || real.toLowerCase().startsWith(live + path.sep)) {
-    throw new Error(`temp home resolved into the live profile: ${real}`)
-  }
-  return real
+  return assertQaHomeContainment(dir, { label: 'temp home' })
 }
 
 /** Pick a free loopback port inside the QA-allowed safe high range. */
@@ -120,17 +157,21 @@ export function evaluateIsolationPreconditions({
   return { ok: failed.length === 0, failed, checks }
 }
 
-/** Remove a temp home we created; tolerate locks from a just-stopped process. */
-export function removeTempHome(home) {
+/**
+ * Remove a temp directory we created; tolerate the Windows file locks a
+ * just-stopped process can still hold for a beat. Async on purpose — the retry
+ * pause is a plain timer, never a spawned `ping`.
+ */
+export async function removeTempHome(home, { attempts = 5, delayMs = 400 } = {}) {
   if (!home || !existsSync(home)) return { removed: true }
-  for (let attempt = 0; attempt < 5; attempt += 1) {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
     try {
       rmSync(home, { recursive: true, force: true, maxRetries: 3 })
       if (!existsSync(home)) return { removed: true }
     } catch {
       /* retry after a beat */
     }
-    spawnSync(process.platform === 'win32' ? 'cmd' : 'sleep', process.platform === 'win32' ? ['/c', 'ping', '-n', '2', '127.0.0.1'] : ['0.3'], { stdio: 'ignore' })
+    await sleep(delayMs)
   }
   return { removed: !existsSync(home) }
 }

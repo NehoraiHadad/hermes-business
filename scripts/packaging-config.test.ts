@@ -6,6 +6,7 @@ import {
   isUpdateMetadataFile,
   findUpdateMetadata
 } from './verify-no-update-metadata.mjs'
+import { packagingStages } from './package-win.mjs'
 
 // Locks the electron-builder packaging contract so it cannot silently regress:
 //  1. `build` validates against electron-builder's OWN schema — an unknown
@@ -53,9 +54,19 @@ describe('electron-builder packaging config', () => {
   })
 })
 
-describe('two-phase signing order (CRITICAL 2) is pinned in the package script', () => {
+describe('two-phase signing order (CRITICAL 2) is pinned in the packaging orchestrator', () => {
   const win = pkg.build.win as Record<string, unknown>
-  const script = String(pkg.scripts['package:win'])
+  // The order used to live twice, as substring positions inside two ~400-char
+  // package.json one-liners — so only the public channel was ever asserted. It is
+  // now one declarative plan (scripts/package-win.mjs), asserted for BOTH channels.
+  const plan = (channel: 'public' | 'qa') => packagingStages(channel).map(stage => stage.id)
+  const at = (channel: 'public' | 'qa', id: string) => plan(channel).indexOf(id)
+  const channels: Array<'public' | 'qa'> = ['public', 'qa']
+
+  it('package.json delegates both channels to the single orchestrator', () => {
+    expect(String(pkg.scripts['package:win'])).toBe('node scripts/package-win.mjs --channel public')
+    expect(String(pkg.scripts['package:win:qa'])).toBe('node scripts/package-win.mjs --channel qa')
+  })
 
   it('skips ONLY code signing (signExecutable:false) while keeping native resedit enabled', () => {
     // Root cause of the missing-icon bug: signAndEditExecutable:false disabled electron-builder's
@@ -67,27 +78,73 @@ describe('two-phase signing order (CRITICAL 2) is pinned in the package script',
     expect(win.signAndEditExecutable).toBeUndefined()
   })
 
-  it('builds `--win dir` → finalize-payload (sign+verify+manifest) → `--prepackaged … --win nsis`', () => {
-    const dir = script.indexOf('electron-builder --win dir')
-    const sign = script.indexOf('finalize-payload.mjs --channel public')
-    const nsis = script.indexOf('--prepackaged release/win-unpacked --win nsis')
-    expect(dir).toBeGreaterThan(-1)
-    expect(sign).toBeGreaterThan(dir)
-    expect(nsis).toBeGreaterThan(sign)
+  it.each(channels)(
+    '[%s] builds `--win dir` → finalize-payload (sign+verify+manifest) → `--prepackaged … --win nsis`',
+    channel => {
+      const dir = at(channel, 'electron-builder --win dir')
+      const sign = at(channel, 'scripts/finalize-payload.mjs')
+      const nsis = at(channel, 'electron-builder --prepackaged release/win-unpacked --win nsis')
+      expect(dir).toBeGreaterThan(-1)
+      expect(sign).toBeGreaterThan(dir)
+      expect(nsis).toBeGreaterThan(sign)
+    }
+  )
+
+  it.each(channels)(
+    '[%s] signs the installer AFTER NSIS and runs the exact-artifact capture BEFORE promotion',
+    channel => {
+      const stages = plan(channel)
+      const nsis = at(channel, 'electron-builder --prepackaged release/win-unpacked --win nsis')
+      const signInstaller = at(channel, 'scripts/sign-release.mjs')
+      const report = at(channel, 'scripts/gen-release-report.mjs')
+      const capture = at(channel, 'scripts/e2e-exact-artifact.mjs')
+      const finalize = at(channel, 'scripts/finalize-release.mjs')
+      expect(signInstaller).toBeGreaterThan(nsis)
+      expect(report).toBeGreaterThan(signInstaller)
+      expect(capture).toBeGreaterThan(report)
+      // Promotion is the LAST action — no fallible verifier after commit.
+      expect(finalize).toBeGreaterThan(capture)
+      expect(finalize).toBe(stages.length - 1)
+      expect(stages.slice(finalize + 1)).toEqual([])
+    }
+  )
+
+  it.each(channels)('[%s] runs the fail-closed release preflight before anything is built', channel => {
+    expect(at(channel, 'npm:verify:release')).toBe(0)
+    expect(at(channel, 'scripts/gen-build-attestation.mjs')).toBeGreaterThan(0)
+    expect(at(channel, 'scripts/gen-build-attestation.mjs')).toBeLessThan(
+      at(channel, 'electron-builder --win dir')
+    )
+    expect(at(channel, 'scripts/verify-no-update-metadata.mjs')).toBeGreaterThan(
+      at(channel, 'electron-builder --prepackaged release/win-unpacked --win nsis')
+    )
+    expect(at(channel, 'scripts/gen-lock-attest.mjs')).toBeGreaterThan(
+      at(channel, 'scripts/verify-no-update-metadata.mjs')
+    )
   })
 
-  it('signs the installer AFTER NsIS and runs the exact-artifact capture BEFORE promotion', () => {
-    const nsis = script.indexOf('--prepackaged release/win-unpacked --win nsis')
-    const signInstaller = script.indexOf('sign-release.mjs --channel public')
-    const report = script.indexOf('gen-release-report.mjs')
-    const capture = script.indexOf('e2e-exact-artifact.mjs --channel public')
-    const finalize = script.indexOf('finalize-release.mjs --channel public')
-    expect(signInstaller).toBeGreaterThan(nsis)
-    expect(report).toBeGreaterThan(signInstaller)
-    expect(capture).toBeGreaterThan(report)
-    // Promotion is the LAST action — no fallible verifier after commit.
-    expect(finalize).toBeGreaterThan(capture)
-    expect(script.indexOf('verify:release-contract', finalize)).toBe(-1)
+  it('differs between channels in EXACTLY the build script and the channel arguments', () => {
+    expect(at('public', 'npm:build')).toBe(1)
+    expect(at('qa', 'npm:build:qa')).toBe(1)
+    expect(plan('public')).not.toContain('npm:build:qa')
+    expect(plan('qa')).not.toContain('npm:build')
+    // Same stage sequence otherwise.
+    expect(plan('qa').filter(id => id !== 'npm:build:qa')).toEqual(plan('public').filter(id => id !== 'npm:build'))
+    for (const channel of channels) {
+      for (const id of [
+        'scripts/finalize-payload.mjs',
+        'scripts/sign-release.mjs',
+        'scripts/e2e-exact-artifact.mjs',
+        'scripts/finalize-release.mjs'
+      ]) {
+        const stage = packagingStages(channel).find(s => s.id === id)
+        expect(stage?.args).toEqual(['--channel', channel])
+      }
+    }
+  })
+
+  it('rejects an unknown channel instead of packaging something undefined', () => {
+    expect(() => packagingStages('prod' as 'public')).toThrow(/unknown channel/)
   })
 
   it('afterPack does NOT sign (it runs before the final resource edit / NSIS capture)', () => {

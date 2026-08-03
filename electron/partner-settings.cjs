@@ -2,6 +2,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { hermesHome } = require('./paths.cjs')
 const { resolveRoots, denyAllSafeRoot } = require('./sandbox-roots.cjs')
+const { safeWrite } = require('./atomic-write.cjs')
 
 // Durable, local source of truth for the optional Business Partner mode and the
 // Hermes-native sandbox selection. This file is intentionally the ONLY place the
@@ -73,11 +74,7 @@ function readSettings() {
 
 function writeSettings(candidate) {
   const settings = normalizeSettings(candidate)
-  const target = settingsPath()
-  fs.mkdirSync(path.dirname(target), { recursive: true })
-  const temporary = `${target}.${process.pid}.tmp`
-  fs.writeFileSync(temporary, `${JSON.stringify(settings, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 })
-  fs.renameSync(temporary, target)
+  safeWrite(settingsPath(), `${JSON.stringify(settings, null, 2)}\n`)
   return settings
 }
 

@@ -1,4 +1,4 @@
-const { getWhatsappPolicy, normalizePolicy, setWhatsappPolicy } = require('./whatsapp-policy.cjs')
+const { getWhatsappPolicy, normalizePolicy, setWhatsappPolicy, normalizeChat } = require('./whatsapp-policy.cjs')
 const { applyMonitoringConfig } = require('./whatsapp-monitoring-config.cjs')
 
 const PLATFORM_ENDPOINT = '/api/messaging/platforms/whatsapp?profile=default'
@@ -9,12 +9,7 @@ const HEALTH_ENDPOINT = '/api/health'
 function dmPrincipals(policy, platform) {
   return (policy.sources || [])
     .filter(source => source.platform === platform && source.type === 'dm')
-    .map(source => {
-      const value = String(source.id).trim().toLowerCase()
-        .replace(/^whatsapp(?:_cloud)?:/, '').replace(/^\+/, '')
-        .replace(/@(?:s\.whatsapp\.net|lid)$/i, '')
-      return /^[\d\s().-]+$/.test(value) ? value.replace(/\D/g, '') : value
-    })
+    .map(source => normalizeChat(source.id))
 }
 
 function nativeUpdateForPolicy(policy) {

@@ -71,24 +71,36 @@ export function Support({ storage }) {
         h(Metric, { label: 'Hermes', value: gateway === 'open' ? 'פועל' : gateway, tone: gateway === 'open' ? 'good' : 'warn' }),
         h(Metric, {
           label: 'Provider',
-          value: runtime.loading ? 'בודק…' : runtime.value?.ready ? model || 'מוגדר' : 'לא מוכן',
-          tone: runtime.loading ? 'warn' : runtime.value?.ready ? 'good' : 'bad'
+          // A failed readiness probe is not proof the provider is unready — say so
+          // explicitly instead of reusing the same "לא מוכן" a real failure shows.
+          value: runtime.loading ? 'בודק…' : runtime.error ? 'לא הצלחנו לבדוק' : runtime.value?.ready ? model || 'מוגדר' : 'לא מוכן',
+          tone: runtime.loading ? 'warn' : runtime.error ? 'bad' : runtime.value?.ready ? 'good' : 'bad'
         }),
         h(Metric, {
           label: 'גרסת Hermes',
-          value: status.value?.version || status.value?.hermes_version || 'נבדקת…',
-          tone: 'good'
+          // status.error must not collapse into the same "נבדקת…" a still-loading
+          // read shows — the read already finished, and it failed.
+          value: status.error ? 'לא הצלחנו לבדוק' : status.value?.version || status.value?.hermes_version || 'נבדקת…',
+          tone: status.error ? 'bad' : 'good'
         }),
         h(Metric, { label: 'פרופיל', value: profile || 'default', tone: 'good' }),
         h(Metric, {
           label: 'חיבורים',
-          value: platformEntries.length ? `${connectedPlatforms} מתוך ${platformEntries.length} מחוברים` : 'אין חיבורים מוגדרים',
-          tone: connectedPlatforms ? 'good' : 'warn'
+          // A failed status read must not render as the confident "אין חיבורים
+          // מוגדרים" a genuinely-empty platform list would show.
+          value: status.error
+            ? 'לא הצלחנו לבדוק'
+            : platformEntries.length
+              ? `${connectedPlatforms} מתוך ${platformEntries.length} מחוברים`
+              : 'אין חיבורים מוגדרים',
+          tone: status.error ? 'bad' : connectedPlatforms ? 'good' : 'warn'
         }),
         h(Metric, {
           label: 'משימות פעילות',
-          value: `${activeJobs.length} פעילות`,
-          tone: activeJobs.length ? 'good' : 'warn'
+          // Same rule for a failed cron read: never render "0 פעילות" as if the
+          // list were proven empty.
+          value: cron.error ? 'לא הצלחנו לבדוק' : `${activeJobs.length} פעילות`,
+          tone: cron.error ? 'bad' : activeJobs.length ? 'good' : 'warn'
         })
       ),
       h(

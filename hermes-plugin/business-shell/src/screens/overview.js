@@ -28,6 +28,9 @@ export function Overview({ onOnboarding, storage }) {
   }, [sessionQuery, sessions.value])
   // Active tasks straight from the official cron.manage door — no local cache.
   const { jobs } = summarizeCronJobs(cron.value)
+  // A failed sessions/cron read must not render as "0 שיחות · 0 משימות" — that is a
+  // confident, proven-empty answer, not the "we couldn't check" truth.
+  const activityError = Boolean(sessions.error || cron.error)
 
   return h(
     React.Fragment,
@@ -67,14 +70,14 @@ export function Overview({ onOnboarding, storage }) {
         }),
         h(Metric, {
           label: 'ספק AI',
-          value: providerReady ? model || runtime.value?.model || 'מחובר' : 'נדרשת הגדרה',
-          tone: providerReady ? 'good' : 'warn'
+          value: runtime.error ? 'לא הצלחנו לבדוק' : providerReady ? model || runtime.value?.model || 'מחובר' : 'נדרשת הגדרה',
+          tone: runtime.error ? 'bad' : providerReady ? 'good' : 'warn'
         }),
         h(Metric, { label: 'פרופיל פעיל', value: profile || 'default', tone: 'good' }),
         h(Metric, {
           label: 'פעילות',
-          value: `${sessionCount} שיחות אחרונות · ${jobs.length} משימות פעילות`,
-          tone: 'good'
+          value: activityError ? 'לא הצלחנו לבדוק — נסו לרענן' : `${sessionCount} שיחות אחרונות · ${jobs.length} משימות פעילות`,
+          tone: activityError ? 'bad' : 'good'
         })
       )
     ),
@@ -100,34 +103,36 @@ export function Overview({ onOnboarding, storage }) {
       ),
       sessions.loading
         ? h('div', { className: 'py-5 text-center text-xs text-(--ui-text-tertiary)' }, 'טוען שיחות…')
-        : visibleSessions.length
-          ? h(
-              'div',
-              { className: 'grid gap-2 sm:grid-cols-2' },
-              ...visibleSessions.map(session =>
-                h(
-                  'button',
-                  {
-                    key: session.id,
-                    type: 'button',
-                    onClick: () => host.navigate(`/${encodeURIComponent(session.id)}`),
-                    className:
-                      'rounded-[4px] border border-(--ui-stroke-secondary) bg-(--ui-bg-primary) px-3 py-2.5 text-right hover:bg-(--ui-bg-tertiary)'
-                  },
-                  h('div', { className: 'truncate text-xs font-medium text-(--ui-text-primary)' }, session.title || 'שיחה ללא כותרת'),
+        : sessions.error
+          ? h('div', { className: 'py-5 text-center text-xs text-(--ui-text-tertiary)' }, 'לא הצלחנו לבדוק שיחות אחרונות — נסו לרענן.')
+          : visibleSessions.length
+            ? h(
+                'div',
+                { className: 'grid gap-2 sm:grid-cols-2' },
+                ...visibleSessions.map(session =>
                   h(
-                    'div',
-                    { className: 'mt-1 line-clamp-2 text-[0.6875rem] leading-5 text-(--ui-text-tertiary)' },
-                    session.preview || 'פתח את השיחה לצפייה'
+                    'button',
+                    {
+                      key: session.id,
+                      type: 'button',
+                      onClick: () => host.navigate(`/${encodeURIComponent(session.id)}`),
+                      className:
+                        'rounded-[4px] border border-(--ui-stroke-secondary) bg-(--ui-bg-primary) px-3 py-2.5 text-right hover:bg-(--ui-bg-tertiary)'
+                    },
+                    h('div', { className: 'truncate text-xs font-medium text-(--ui-text-primary)' }, session.title || 'שיחה ללא כותרת'),
+                    h(
+                      'div',
+                      { className: 'mt-1 line-clamp-2 text-[0.6875rem] leading-5 text-(--ui-text-tertiary)' },
+                      session.preview || 'פתח את השיחה לצפייה'
+                    )
                   )
                 )
               )
-            )
-          : h(
-              'div',
-              { className: 'py-5 text-center text-xs text-(--ui-text-tertiary)' },
-              sessionQuery ? 'לא נמצאו שיחות מתאימות.' : 'עדיין אין שיחות. אפשר להתחיל שיחה חדשה.'
-            )
+            : h(
+                'div',
+                { className: 'py-5 text-center text-xs text-(--ui-text-tertiary)' },
+                sessionQuery ? 'לא נמצאו שיחות מתאימות.' : 'עדיין אין שיחות. אפשר להתחיל שיחה חדשה.'
+              )
     ),
     h(HomeQuickActions)
   )
