@@ -12,8 +12,10 @@
 // sandbox and drops everything else, so no live profile/credential can leak (see
 // real-loader-env). The `hermes://` protocol write the app makes unconditionally
 // is snapshot/restored byte-exact with a DURABLE backup (real-loader-protocol);
-// owned descendants are reaped by identity (real-loader-procs); the exact temp
-// root is removed in finally. SIGINT/SIGTERM run the same cleanup. Never
+// owned descendants are reaped by identity (real-loader-procs), including a
+// command-line sandbox-path sweep that recovers a tree we hold no PID for; a
+// failed temp-root removal force-kills survivors and retries. SIGINT/SIGTERM
+// run the same cleanup. Never
 // process.exit() inside the lifecycle — process.exitCode is set after cleanup.
 // Without HERMES_BUSINESS_REAL_LOADER=1 the script does nothing.
 
@@ -46,7 +48,7 @@ import {
   discardBackup,
   recoverStaleProtocolBackups
 } from './lib/probes/hermes/real-loader-protocol.mjs'
-import { snapshotOwnedProcs, mergeRecords, reapOwned } from './lib/probes/hermes/real-loader-procs.mjs'
+import { snapshotOwnedProcs, snapshotOwnedByCmdline, mergeRecords, reapOwned } from './lib/probes/hermes/real-loader-procs.mjs'
 import { seedPausedCronJob } from './lib/probes/hermes/real-loader-seed.mjs'
 import {
   installPreseedInitScript,
@@ -271,6 +273,20 @@ function cleanup({ getState, setCleaned, isCleaned }) {
       /* keep the alive-snapshot */
     }
   }
+  // Ownership anchor of last resort: a launch that spawned the desktop but died
+  // before we held a PID handle (electron.launch timeout) leaves electronApp
+  // null, yet the desktop's command line carries the run-unique sandbox path
+  // (`--user-data-dir=...`). Sweep it — and, by descent, the gateway python it
+  // spawned (whose own command line carries NO sandbox marker) — into the
+  // identity-checked reap below.
+  if (sandbox) {
+    try {
+      const byCmd = snapshotOwnedByCmdline(sandbox.root)
+      if (byCmd.ok) records = mergeRecords(records, byCmd.records)
+    } catch {
+      /* keep the snapshots we have */
+    }
+  }
   try {
     if (electronApp) {
       // close() returns a promise; we cannot await in this sync finally-safe path,
@@ -311,7 +327,15 @@ function cleanup({ getState, setCleaned, isCleaned }) {
     /* ignore */
   }
   try {
-    report.cleanup.tempRoot = sandbox ? removeOwnedDir(sandbox.root) : { removed: true }
+    let tempRoot = sandbox ? removeOwnedDir(sandbox.root) : { removed: true }
+    if (sandbox && !tempRoot.removed) {
+      // A surviving owned child (e.g. a detached gateway python) can hold locks
+      // under the sandbox — force-kill identity-matched survivors (no grace) and
+      // retry the removal once. The verdict is re-recorded honestly either way.
+      report.cleanup.processes = reapOwned(records, { timeoutMs: 0 })
+      tempRoot = removeOwnedDir(sandbox.root)
+    }
+    report.cleanup.tempRoot = tempRoot
   } catch (e) {
     report.cleanup.tempRoot = { removed: false, error: String(e?.message || e) }
   }
