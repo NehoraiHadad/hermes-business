@@ -18,13 +18,19 @@ export function Topbar({
   runtime,
   onOpenFull,
   onNavigate,
-  onMini
+  onMini,
+  hasUpdateIndicator = false
 }: {
   title: string
   runtime: HermesRuntime | null
   onOpenFull: (surface: 'desktop' | 'dashboard' | 'logs' | 'settings') => void
   onNavigate: (screen: Screen) => void
   onMini: () => void
+  // Passive companion-update surface (docs/specs/versioning.md §7.2): a dot — not a
+  // count, unlike the Sidebar's .nav-badge unseen-activity counter — shown on the
+  // gear icon and the "עזרה ותמיכה" row once FullAppShell has seen a pushed
+  // update-available verdict the owner hasn't dismissed yet (by opening support).
+  hasUpdateIndicator?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const navigate = (screen: Screen) => {
@@ -50,11 +56,12 @@ export function Topbar({
         <div className="full-menu-wrap">
           <button
             className="icon-button"
-            aria-label="הגדרות ועזרה"
+            aria-label={hasUpdateIndicator ? 'הגדרות ועזרה — עדכון חדש זמין' : 'הגדרות ועזרה'}
             aria-expanded={open}
             onClick={() => setOpen(value => !value)}
           >
             <Settings2 size={19} />
+            {hasUpdateIndicator ? <span className="icon-button__update-dot" aria-hidden="true" /> : null}
           </button>
           {open ? (
             <div className="dropdown-menu settings-menu">
@@ -65,6 +72,7 @@ export function Topbar({
               <button onClick={() => navigate('support')}>
                 <CircleHelp size={17} />
                 <span><strong>עזרה ותמיכה</strong><small>בדיקה פשוטה ושליחת אבחון</small></span>
+                {hasUpdateIndicator ? <span className="dropdown-menu__update-dot" aria-hidden="true" /> : null}
               </button>
               <div className="dropdown-menu__section">כלים טכניים</div>
               <button onClick={() => onOpenFull('desktop')}>

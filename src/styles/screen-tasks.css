@@ -237,3 +237,47 @@
 .list-state .outline-button {
   margin-top: 14px;
 }
+
+/* Partner-visibility feed panel (docs/specs/partner-feed.md §6) — reuses .panel/
+   .task-row/.list-state above; these are the few genuinely new classes: the
+   ok/error/unknown status tag, and the muted "some sources failed" note. */
+.partner-feed-panel {
+  margin-bottom: 20px;
+}
+
+.partner-feed-status {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.partner-feed-status--ok {
+  color: var(--green);
+  background: var(--green-soft);
+}
+
+.partner-feed-status--error {
+  color: var(--red);
+  background: #f7e6e4;
+}
+
+.partner-feed-status--unknown {
+  color: var(--muted);
+  background: #efede8;
+}
+
+.partner-feed-degraded-note {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin: 0;
+  padding: 10px 19px;
+  color: var(--amber);
+  background: var(--amber-soft);
+  border-bottom: 1px solid var(--line);
+  font-size: 11px;
+}

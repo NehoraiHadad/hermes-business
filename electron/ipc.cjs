@@ -38,6 +38,7 @@ const { probeCodexGrant } = require('./codex-probe.cjs')
 const { getProviderEvidence, recordProviderEvidence } = require('./provider-evidence.cjs')
 const { guardStatusWithActivation, readGuardActivationJournal } = require('./whatsapp-guard-journal.cjs')
 const { openFullSurface } = require('./open-full.cjs')
+const { checkCompanionUpdate } = require('./companion-update.cjs')
 const {
   normalizeOpenFileFilters,
   createSerialGuard,
@@ -147,6 +148,13 @@ function registerIpc() {
     return openFullSurface(surface, { command: findHermes(), home: hermesHome(), shell })
   })
   ipcMain.handle('hermes:install', () => runInstallExclusively(performInstall))
+  // תכל'ס (companion) self-update CHECK ONLY (docs/specs/versioning.md §6.4): the
+  // renderer's `force` is the sole input, normalized here to a strict boolean
+  // (no other renderer-controlled input reaches the request). checkCompanionUpdate
+  // owns its OWN serial guard internally (companion-update.cjs's runExclusive) and
+  // never rejects — it resolves a scalar verdict for every branch, including a
+  // concurrent-call rejection — so this handler must not wrap it in a second guard.
+  ipcMain.handle('hermes:companion-update', (_event, force) => checkCompanionUpdate({ force: Boolean(force) }))
   ipcMain.handle('assistant:window-state', () => currentWindowState())
   ipcMain.handle('assistant:set-window-mode', (_event, mode) => setWindowMode(mode))
   ipcMain.handle('assistant:set-always-on-top', (_event, value) => setMiniPinned(value))

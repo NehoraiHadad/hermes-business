@@ -121,6 +121,19 @@ describe('preload bridge (sandboxed contract)', () => {
     await expect(bridge.getPartnerFeed()).resolves.toBe(snapshot)
     expect(calls).toEqual([{ channel: 'hermes:partner:feed', args: [] }])
   })
+
+  // Companion self-update check channel (docs/specs/versioning.md §6.4): the
+  // single renderer argument (force) is forwarded unchanged; main normalizes it.
+  it('exposes checkCompanionUpdate on hermes:companion-update, forwarding force unchanged', async () => {
+    const verdict = { status: 'unknown', current: '0.4.0', checkedAt: null }
+    const { bridge, calls } = loadPreload(() => verdict)
+    await expect(bridge.checkCompanionUpdate(true)).resolves.toBe(verdict)
+    await bridge.checkCompanionUpdate(false)
+    expect(calls).toEqual([
+      { channel: 'hermes:companion-update', args: [true] },
+      { channel: 'hermes:companion-update', args: [false] }
+    ])
+  })
 })
 
 describe('preload IPC error normalization', () => {
@@ -153,7 +166,9 @@ describe('preload IPC error normalization', () => {
     const { bridge } = loadPreload(channel => {
       throw wrapLikeElectron(channel, `Error: ${HEBREW}`)
     })
-    const invokeMethods = Object.keys(bridge).filter(name => name !== 'onRuntimeLog')
+    const invokeMethods = Object.keys(bridge).filter(
+      name => name !== 'onRuntimeLog' && name !== 'onCompanionUpdateAvailable'
+    )
     expect(invokeMethods.length).toBeGreaterThan(20)
     for (const name of invokeMethods) {
       await expect(bridge[name]()).rejects.toMatchObject({ message: HEBREW })
@@ -199,5 +214,29 @@ describe('preload runtime-log subscription', () => {
 
     unsubscribe()
     expect(removed).toEqual([{ channel: 'hermes:runtime-log', listener: listeners[0].listener }])
+  })
+})
+
+describe('preload companion-update-available subscription (§6.5 passive push)', () => {
+  it('follows the exact onRuntimeLog inline-listener + returned-unsubscribe pattern', () => {
+    const { bridge, listeners, removed } = loadPreload()
+    const seen: unknown[] = []
+    const unsubscribe = bridge.onCompanionUpdateAvailable((status: unknown) => seen.push(status)) as () => void
+
+    expect(listeners).toHaveLength(1)
+    expect(listeners[0].channel).toBe('hermes:companion-update-available')
+    const verdict = { status: 'update-available', current: '0.4.0', latest: '0.5.0', checkedAt: 1000 }
+    listeners[0].listener({}, verdict)
+    expect(seen).toEqual([verdict])
+
+    unsubscribe()
+    expect(removed).toEqual([{ channel: 'hermes:companion-update-available', listener: listeners[0].listener }])
+  })
+
+  it('two independent subscriptions register two independent listeners', () => {
+    const { bridge, listeners } = loadPreload()
+    bridge.onCompanionUpdateAvailable(() => {})
+    bridge.onCompanionUpdateAvailable(() => {})
+    expect(listeners.filter(l => l.channel === 'hermes:companion-update-available')).toHaveLength(2)
   })
 })

@@ -74,6 +74,14 @@ export interface HermesDesktopApi {
   /** `null` = the probe capability is unavailable, which callers must treat as
    *  "unproven" (fail closed) — never as a passing grant. */
   probeCodexGrant(): Promise<CodexGrantProbe | null>
+
+  // --- תכל'ס (companion) self-update check (docs/specs/versioning.md §6.4) ----
+  /** Main owns fetch/parse/decision entirely; this returns the scalar verdict
+   *  and never rejects (main-side fail-closed contract, §8). */
+  checkCompanionUpdate(force: boolean): Promise<CompanionUpdateStatus>
+  /** Passive push (§6.5): a ONE-SHOT event fired only when the startup timer
+   *  found `update-available`. Returns an unsubscribe function. */
+  onCompanionUpdateAvailable(callback: (status: CompanionUpdateStatus) => void): () => void
 }
 
 export type BridgeAccessor = () => HermesDesktopBridge | undefined
@@ -161,6 +169,18 @@ function createBridgeDesktop(getBridge: BridgeAccessor): HermesDesktopApi {
     async probeCodexGrant() {
       const probe = getBridge()?.probeCodexGrant
       return probe ? probe() : null
+    },
+
+    async checkCompanionUpdate(force) {
+      return need('checkCompanionUpdate')(force)
+    },
+    // Subscribe call, not a Promise: a missing bridge must not THROW synchronously
+    // out of a React effect. Degrade to a no-op unsubscribe instead — honest,
+    // since there is genuinely no passive push without a bridge (unlike a data
+    // read, there is no "unknown" value to report here).
+    onCompanionUpdateAvailable(callback) {
+      const onAvailable = getBridge()?.onCompanionUpdateAvailable
+      return onAvailable ? onAvailable(callback) : () => {}
     }
   }
 }

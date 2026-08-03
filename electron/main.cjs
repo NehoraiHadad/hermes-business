@@ -2,7 +2,7 @@ const { app, BrowserWindow } = require('electron')
 const fs = require('node:fs')
 const lifecycle = require('./lifecycle-state.cjs')
 const { rememberLog } = require('./logs.cjs')
-const { loadWindowPreferences, createWindow, createTray, showAssistant } = require('./windows.cjs')
+const { loadWindowPreferences, createWindow, createTray, showAssistant, getMainWindow } = require('./windows.cjs')
 const { startHermes, stopHermes, hasRunningProcess } = require('./runtime.cjs')
 const { patchRuntimeState } = require('./runtime-state.cjs')
 const { installDesktopPlugin } = require('./plugin-install.cjs')
@@ -16,6 +16,7 @@ const { reconcilePartnerCheckinsOnStartup } = require('./business-partner.cjs')
 const { registerIpc } = require('./ipc.cjs')
 const { getRuntimeMode } = require('./runtime-mode.cjs')
 const { recordQaNamespaceApplied } = require('./qa-diagnostics.cjs')
+const { checkCompanionUpdate, isPassiveUpdateCheckDisabled, getLastCheckedAt } = require('./companion-update.cjs')
 
 // Application entry point. Owns only process lifecycle; every feature lives in a
 // dedicated module (runtime, windows, ipc, google-setup, plugin-install,
@@ -92,6 +93,32 @@ if (runtimeFailClosed || !singleInstance) {
   app.on('second-instance', () => {
     showAssistant()
   })
+}
+
+// Passive companion self-update check timing (docs/specs/versioning.md §6.5): a
+// 60s post-ready delay and a 24h durable throttle. Named constants rather than
+// inline literals so the intent reads at the call site below.
+const PASSIVE_COMPANION_UPDATE_DELAY_MS = 60_000
+const PASSIVE_COMPANION_UPDATE_INTERVAL_MS = 24 * 60 * 60 * 1000
+
+// Runs the passive companion self-update check: skips entirely when disabled
+// (QA runtime override / TACHLES_DISABLE_UPDATE_CHECK — keeps the isolated
+// packaged E2E hermetic, R7) or when the durable last-check timestamp is still
+// fresh, then delegates to the SAME checkCompanionUpdate the explicit button
+// uses (fail-closed contract: never rejects). On `update-available` only, pushes
+// a ONE-SHOT event to the renderer so the support screen can show it without a
+// boot-time GitHub round trip; every other verdict is silently absorbed — the
+// passive path never surfaces "unknown"/"up-to-date" unprompted.
+async function runPassiveCompanionUpdateCheck() {
+  if (isPassiveUpdateCheckDisabled(process.env)) return
+  const lastCheckedAt = getLastCheckedAt()
+  if (typeof lastCheckedAt === 'number' && Date.now() - lastCheckedAt < PASSIVE_COMPANION_UPDATE_INTERVAL_MS) return
+  const verdict = await checkCompanionUpdate({ force: false })
+  if (verdict.status !== 'update-available') return
+  const mainWindow = getMainWindow()
+  if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.webContents.isDestroyed()) {
+    mainWindow.webContents.send('hermes:companion-update-available', verdict)
+  }
 }
 
 app.whenReady().then(async () => {
@@ -182,6 +209,17 @@ app.whenReady().then(async () => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
+  // Passive תכל'ס (companion) self-update check (docs/specs/versioning.md §6.5):
+  // fired 60s after ready so it never competes with the Hermes startup sequence
+  // above, and only when the durable throttle (companion-update-state.json) shows
+  // the last successful check is more than 24h old — a plain local read, no
+  // network call just to decide whether to check. Never blocks/awaited here;
+  // any failure is caught and logged, never surfaced as a startup failure.
+  setTimeout(() => {
+    runPassiveCompanionUpdateCheck().catch(error => {
+      rememberLog(`Passive companion update check failed: ${error.message || error}`)
+    })
+  }, PASSIVE_COMPANION_UPDATE_DELAY_MS)
 }).catch(error => {
   // A rejection here previously died as a silent unhandled rejection with no
   // window. Record it durably and surface it to any UI that does come up.

@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import type { useSupportActions } from '../hooks/useSupportActions'
 import type { LoadErrors } from '../lib/health'
+import type { PartnerFeed } from '../lib/partner-feed'
 import type { ProviderStatus } from '../lib/provider-readiness'
 import type { Connection, ScheduledTask, Screen, Skill, TaskActions } from '../types'
 import { ConnectionsScreen } from './screens/ConnectionsScreen'
@@ -26,7 +27,11 @@ export function MainScreen({
   onAddTask,
   taskActions,
   onAddSkill,
-  onOpenConnection
+  onOpenConnection,
+  feed,
+  feedLoading,
+  onRefreshFeed,
+  onOpenSession
 }: {
   screen: Screen
   chatScreen: ReactNode
@@ -43,9 +48,26 @@ export function MainScreen({
   taskActions: TaskActions
   onAddSkill: () => void
   onOpenConnection: (connection: Connection) => void
+  // Partner-visibility feed (docs/specs/partner-feed.md) — only TasksScreen
+  // ("פעילות ומשימות") consumes these; every other screen ignores them.
+  feed: PartnerFeed | null
+  feedLoading: boolean
+  onRefreshFeed: () => Promise<void>
+  onOpenSession: (sessionId: string) => void
 }) {
   if (screen === 'tasks') {
-    return <TasksScreen tasks={tasks} onAdd={onAddTask} actions={taskActions} loadError={loadErrors?.tasks} />
+    return (
+      <TasksScreen
+        tasks={tasks}
+        onAdd={onAddTask}
+        actions={taskActions}
+        loadError={loadErrors?.tasks}
+        feed={feed}
+        feedLoading={feedLoading}
+        onRefreshFeed={onRefreshFeed}
+        onOpenSession={onOpenSession}
+      />
+    )
   }
   if (screen === 'skills') return <SkillsScreen skills={skills} onAdd={onAddSkill} />
   if (screen === 'connections') {

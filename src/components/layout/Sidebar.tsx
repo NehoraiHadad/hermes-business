@@ -35,7 +35,8 @@ export function Sidebar({
   onSelectSession,
   onNewSession,
   runtime,
-  taskCount
+  taskCount,
+  feedUnseenCount
 }: {
   screen: Screen
   setScreen: (screen: Screen) => void
@@ -45,6 +46,9 @@ export function Sidebar({
   onNewSession: () => void
   runtime: HermesRuntime | null
   taskCount: number
+  // Partner-feed items newer than the localStorage seen-marker (docs/specs/partner-feed.md
+  // §6.4) — a client-side "you haven't looked at this yet" hint, not proof of anything.
+  feedUnseenCount: number
 }) {
   const visibleSessions = sessions.slice(0, 8)
 
@@ -75,6 +79,11 @@ export function Sidebar({
               <Icon size={18} strokeWidth={1.8} />
               <span>{item.label}</span>
               {item.id === 'tasks' && taskCount > 0 ? <span className="nav-count">{taskCount}</span> : null}
+              {item.id === 'tasks' && feedUnseenCount > 0 ? (
+                <span className="nav-badge" aria-label={`${feedUnseenCount} עדכוני פעילות חדשים`}>
+                  {feedUnseenCount}
+                </span>
+              ) : null}
             </button>
           )
         })}

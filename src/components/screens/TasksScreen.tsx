@@ -1,14 +1,20 @@
 import { AlertTriangle, CalendarClock, CheckCircle2, Clock3, Inbox, Pause, Pencil, Play, Plus, Trash2, Zap } from 'lucide-react'
 import { useState } from 'react'
 import { humanSchedule } from '../../lib/presentation'
+import type { PartnerFeed } from '../../lib/partner-feed'
 import type { ScheduledTask, TaskActions } from '../../types'
 import { TaskEditDialog } from '../dialogs/TaskEditDialog'
+import { PartnerFeedPanel } from './PartnerFeedPanel'
 
 export function TasksScreen({
   tasks,
   actions,
   onAdd,
-  loadError
+  loadError,
+  feed,
+  feedLoading,
+  onRefreshFeed,
+  onOpenSession
 }: {
   tasks: ScheduledTask[]
   actions: TaskActions
@@ -16,6 +22,12 @@ export function TasksScreen({
   // The last authoritative LIST read failed — tasks is an EMPTY placeholder, not a
   // proven-empty list. Must never render as "0 משימות"/no tasks; see useHermesData.
   loadError?: boolean
+  // Partner-visibility feed (docs/specs/partner-feed.md §6.1: "פעילות ומשימות" is the
+  // activity home, so the feed panel lives at the top of THIS screen).
+  feed: PartnerFeed | null
+  feedLoading: boolean
+  onRefreshFeed: () => Promise<void>
+  onOpenSession: (sessionId: string) => void
 }) {
   const [editing, setEditing] = useState<ScheduledTask | null>(null)
   // Unknown, not zero/dash, while the read that would prove either value failed.
@@ -25,7 +37,13 @@ export function TasksScreen({
   // Destructive/irreversible actions confirm first (delete permanently removes
   // the job; trigger fires a real run now). Editing opens a prefilled dialog.
   const confirmTrigger = (task: ScheduledTask) => {
-    if (window.confirm(`להריץ עכשיו את "${task.name}"? Hermes יבצע את המשימה מיד.`)) actions.onTrigger(task)
+    if (window.confirm(`להריץ עכשיו את "${task.name}"? Hermes יבצע את המשימה מיד.`)) {
+      // Spec §11 stage 5 / §7 trigger 2: the user just made Hermes DO something —
+      // refetch the feed so the new run shows up without waiting for the next
+      // live-refresh tick. actions.onTrigger already catches its own errors
+      // (useTaskActions) and never rejects, so this always resolves.
+      void actions.onTrigger(task).then(() => void onRefreshFeed())
+    }
   }
   const confirmDelete = (task: ScheduledTask) => {
     if (window.confirm(`למחוק לצמיתות את "${task.name}"? לא ניתן לשחזר.`)) actions.onDelete(task)
@@ -42,6 +60,13 @@ export function TasksScreen({
           <Plus size={17} /> משימה חדשה
         </button>
       </section>
+      <PartnerFeedPanel
+        feed={feed}
+        loading={feedLoading}
+        onRefresh={onRefreshFeed}
+        onOpenSession={onOpenSession}
+        onAddTask={onAdd}
+      />
       <div className="stats-row">
         <div className="stat-card">
           <span className="stat-card__icon stat-card__icon--green">

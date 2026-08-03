@@ -64,7 +64,16 @@ const HONEST_UNKNOWN_DEFAULTS: Record<string, () => unknown> = {
   probeCodexGrant: () => ({ ok: false, reachable: false, message: 'not probed (test default)' }),
   probeProvider: () => ({ ok: false, reachable: false }),
   getVersions: () => ({}),
-  getRecentLogs: () => ({ lines: [] })
+  getRecentLogs: () => ({ lines: [] }),
+  // Companion self-update check (docs/specs/versioning.md §6.2/§8): the honest
+  // "unproven" shape a test that forgets to stub it gets by default — never a
+  // fabricated up-to-date/update-available.
+  checkCompanionUpdate: () => ({
+    status: 'unknown',
+    current: '0.0.0',
+    checkedAt: null,
+    message: 'not probed (test default)'
+  })
 }
 
 // Side-effecting calls, or reads with no safe "unknown" shape: reject loudly
@@ -113,6 +122,7 @@ const ALL_METHOD_NAMES = [
   'getWindowState',
   ...(Object.keys(HONEST_UNKNOWN_DEFAULTS) as BridgeMethodName[]),
   'onRuntimeLog',
+  'onCompanionUpdateAvailable',
   ...NOT_STUBBED_METHODS
 ] as const satisfies readonly BridgeMethodName[]
 
@@ -138,6 +148,22 @@ export function emitRuntimeLog(line: string): void {
   runtimeLogListeners.forEach(listener => listener(line))
 }
 
+let companionUpdateListeners: Array<(status: CompanionUpdateStatus) => void> = []
+
+function onCompanionUpdateAvailableDefaultImpl(
+  callback: (status: CompanionUpdateStatus) => void
+): () => void {
+  companionUpdateListeners.push(callback)
+  return () => {
+    companionUpdateListeners = companionUpdateListeners.filter(listener => listener !== callback)
+  }
+}
+
+/** Simulates the passive-check main-process push (docs/specs/versioning.md §6.5) on every registered listener. */
+export function emitCompanionUpdateAvailable(status: CompanionUpdateStatus): void {
+  companionUpdateListeners.forEach(listener => listener(status))
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function defaultImplFor(name: BridgeMethodName): (...args: any[]) => any {
   if ((RUNTIME_LIFECYCLE_METHODS as readonly string[]).includes(name)) {
@@ -152,6 +178,9 @@ function defaultImplFor(name: BridgeMethodName): (...args: any[]) => any {
   }
   if (name === 'onRuntimeLog') {
     return onRuntimeLogDefaultImpl
+  }
+  if (name === 'onCompanionUpdateAvailable') {
+    return onCompanionUpdateAvailableDefaultImpl
   }
   // NOT_STUBBED_METHODS, and (fail-closed, not open) anything unaccounted for.
   return async () => {
@@ -198,6 +227,7 @@ export function bridge(): BridgeMock {
 /** Restores fail-closed defaults and clears call-state (called from afterEach). */
 export function resetBridge(): void {
   runtimeLogListeners = []
+  companionUpdateListeners = []
   for (const name of ALL_METHOD_NAMES) {
     const mockFn = (bridgeInstance as Record<string, ReturnType<typeof vi.fn>>)[name]
     mockFn.mockReset()

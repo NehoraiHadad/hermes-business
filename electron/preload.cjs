@@ -88,5 +88,18 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
     const listener = (_event, line) => callback(line)
     ipcRenderer.on('hermes:runtime-log', listener)
     return () => ipcRenderer.removeListener('hermes:runtime-log', listener)
+  },
+  // תכל'ס (companion) self-update CHECK (docs/specs/versioning.md §6.4): the ONLY
+  // renderer input is `force`; the request, fetch and verdict decision all live
+  // in main (companion-update.cjs) — this call never resolves anything but the
+  // scalar verdict shape.
+  checkCompanionUpdate: force => invoke('hermes:companion-update', force),
+  // Passive push (§6.5): a ONE-SHOT event from the main-process startup timer,
+  // fired only when it found an update-available verdict. Same
+  // subscribe/unsubscribe idiom as onRuntimeLog above.
+  onCompanionUpdateAvailable: callback => {
+    const listener = (_event, status) => callback(status)
+    ipcRenderer.on('hermes:companion-update-available', listener)
+    return () => ipcRenderer.removeListener('hermes:companion-update-available', listener)
   }
 })

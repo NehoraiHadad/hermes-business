@@ -11,6 +11,7 @@ import path from 'node:path'
 const {
   checkCompanionUpdate,
   isPassiveUpdateCheckDisabled,
+  getLastCheckedAt,
   STATE_FILE_NAME,
   __resetCompanionUpdateCacheForTests
 } = require('./companion-update.cjs')
@@ -284,5 +285,44 @@ describe('isPassiveUpdateCheckDisabled — passive-check hermeticity (§6.5, R7)
   it('fails CLOSED (disabled) when the QA sentinel is set but malformed', () => {
     const env = { [SENTINEL_ENV]: SENTINEL_VALUE } // sentinel on, home missing → QaOverrideError
     expect(isPassiveUpdateCheckDisabled(env)).toBe(true)
+  })
+})
+
+describe('getLastCheckedAt — durable read with no network I/O (passive-timer precondition, §6.5)', () => {
+  it('is null when no state file has ever been written', () => {
+    const dir = freshStateDir()
+    expect(getLastCheckedAt({ stateDir: () => dir })).toBeNull()
+  })
+
+  it('reads back lastCheckedAt after a real check wrote it', async () => {
+    const dir = freshStateDir()
+    const fetchImpl = vi.fn(async () => jsonResponse(200, [release({ tag_name: 'v1.0.0' })]))
+    await checkCompanionUpdate(
+      { force: true },
+      { fetch: fetchImpl, getVersion: () => '1.0.0', stateDir: () => dir, now: () => 12_000 }
+    )
+    expect(getLastCheckedAt({ stateDir: () => dir })).toBe(12_000)
+    // Never touches the network itself.
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+  })
+
+  it('is null when stateDir resolves to a falsy value', () => {
+    expect(getLastCheckedAt({ stateDir: () => null })).toBeNull()
+  })
+
+  it('is null when the state file is corrupt JSON', () => {
+    const dir = freshStateDir()
+    fs.writeFileSync(path.join(dir, STATE_FILE_NAME), '{not json')
+    expect(getLastCheckedAt({ stateDir: () => dir })).toBeNull()
+  })
+
+  it('falls back to defaultStateDir (electron app.getPath) when no deps are given', () => {
+    // No live Electron app in this suite — defaultStateDir() throws when it tries
+    // require('electron').app.getPath(...), which getLastCheckedAt must not let
+    // escape as a network-check-shaped failure. It is acceptable for this to
+    // throw here (no fail-closed contract is claimed for a missing Electron
+    // runtime, unlike checkCompanionUpdate) — the point is it does not silently
+    // fabricate "never checked" behind a swallowed error.
+    expect(() => getLastCheckedAt()).toThrow()
   })
 })

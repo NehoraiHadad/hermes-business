@@ -20,6 +20,8 @@ function fakeBridge(overrides: Record<string, unknown> = {}) {
       sessions: { ok: true, rows: [] },
       curator: { ok: true, insights: null }
     })),
+    checkCompanionUpdate: vi.fn(async () => ({ status: 'up-to-date', current: '0.4.0', checkedAt: 1000 })),
+    onCompanionUpdateAvailable: vi.fn(() => () => {}),
     ...overrides
   } as unknown as HermesDesktopBridge
 }
@@ -45,6 +47,23 @@ describe('desktop facade — bridge mode', () => {
     expect(createHermesDesktop(() => fakeBridge()).hasNativeFileDialog).toBe(true)
     expect(createHermesDesktop(() => fakeBridge({ chooseFile: undefined })).hasNativeFileDialog).toBe(false)
     expect(createHermesDesktop(() => undefined).hasNativeFileDialog).toBe(false)
+  })
+
+  it('delegates the companion update check with force unchanged', async () => {
+    const bridge = fakeBridge()
+    const desktop = createHermesDesktop(() => bridge)
+    await expect(desktop.checkCompanionUpdate(true)).resolves.toMatchObject({ status: 'up-to-date' })
+    expect(bridge.checkCompanionUpdate).toHaveBeenCalledWith(true)
+  })
+
+  it('delegates the companion update passive subscription and returns the bridge unsubscribe', () => {
+    const unsubscribe = vi.fn()
+    const bridge = fakeBridge({ onCompanionUpdateAvailable: vi.fn(() => unsubscribe) })
+    const desktop = createHermesDesktop(() => bridge)
+    const callback = vi.fn()
+    const returned = desktop.onCompanionUpdateAvailable(callback)
+    expect(bridge.onCompanionUpdateAvailable).toHaveBeenCalledWith(callback)
+    expect(returned).toBe(unsubscribe)
   })
 })
 
@@ -82,6 +101,23 @@ describe('desktop facade — missing bridge', () => {
     await expect(
       createHermesDesktop(() => fakeBridge({ probeCodexGrant: undefined })).probeCodexGrant()
     ).resolves.toBeNull()
+  })
+
+  it('rejects checkCompanionUpdate honestly rather than fabricating a verdict', async () => {
+    const desktop = createHermesDesktop(() => undefined)
+    await expect(desktop.checkCompanionUpdate(false)).rejects.toThrow(BRIDGE_UNAVAILABLE)
+  })
+
+  // A subscribe call, not a data read: no bridge means no passive push ever
+  // arrives, which a no-op unsubscribe expresses honestly without throwing out
+  // of a React effect.
+  it('degrades a missing companion-update subscription to a no-op unsubscribe, never a throw', () => {
+    const desktop = createHermesDesktop(() => undefined)
+    const callback = vi.fn()
+    expect(() => desktop.onCompanionUpdateAvailable(callback)).not.toThrow()
+    const unsubscribe = desktop.onCompanionUpdateAvailable(callback)
+    expect(() => unsubscribe()).not.toThrow()
+    expect(callback).not.toHaveBeenCalled()
   })
 })
 
@@ -141,5 +177,17 @@ describe('desktop facade — demo mode', () => {
     const result = await desktop.openFullSurface('dashboard')
     expect(result.ok).toBe(false)
     expect(result.message).toContain('dashboard')
+  })
+
+  // The demo never talks to api.github.com: a fixed unknown verdict, never a
+  // fabricated 'up-to-date'/'update-available', and no passive events (there is
+  // no main-process timer behind the fixture backend).
+  it('reports a fixed unknown companion-update verdict and never pushes a passive event', async () => {
+    const desktop = createHermesDesktop(() => undefined, createDemoDesktop())
+    await expect(desktop.checkCompanionUpdate(true)).resolves.toMatchObject({ status: 'unknown', checkedAt: null })
+    const callback = vi.fn()
+    const unsubscribe = desktop.onCompanionUpdateAvailable(callback)
+    expect(callback).not.toHaveBeenCalled()
+    expect(() => unsubscribe()).not.toThrow()
   })
 })

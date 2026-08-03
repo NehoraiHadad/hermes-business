@@ -85,6 +85,31 @@ declare global {
     setAlwaysOnTop: (value: boolean) => Promise<AssistantWindowState>
     hideWindow: () => Promise<AssistantWindowState>
     onRuntimeLog: (callback: (line: string) => void) => () => void
+    // תכל'ס (companion) self-update CHECK ONLY (docs/specs/versioning.md §6.4):
+    // main owns the fetch/parse/decision entirely — this call returns the scalar
+    // verdict, never rejects (main-side fail-closed contract, §8).
+    checkCompanionUpdate: (force: boolean) => Promise<CompanionUpdateStatus>
+    // Passive push (§6.5): a ONE-SHOT event fired by the main-process startup
+    // timer only when it found an update-available verdict.
+    onCompanionUpdateAvailable: (callback: (status: CompanionUpdateStatus) => void) => () => void
+  }
+
+  // Wire contract of `hermes:companion-update` / `hermes:companion-update-available`
+  // (docs/specs/versioning.md §6.2). Scalars only — no raw GitHub response object
+  // ever crosses this boundary. `status` is exactly one of the four verdicts §6.1
+  // decides; `up-to-date` is reported ONLY on a complete positive proof, never as
+  // a default. `checkedAt` is epoch ms of the last SUCCESSFUL check, or `null`
+  // before any check has completed.
+  type CompanionUpdateStatus = {
+    status: 'update-available' | 'up-to-date' | 'dev-ahead' | 'unknown'
+    current: string
+    latest?: string
+    releaseName?: string
+    notes?: string
+    downloadUrl?: string
+    publishedAt?: string
+    checkedAt: number | null
+    message?: string
   }
 
   // Durable record written by electron/whatsapp-guard-journal.cjs for the guard

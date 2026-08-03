@@ -72,6 +72,24 @@
   text-align: center;
 }
 
+/* "New activity" badge (docs/specs/partner-feed.md §6.4) — distinct from .nav-count
+   (which shows the total ACTIVE task count): this one counts partner-feed items newer
+   than the localStorage seen-marker, so it needs its own accent color to read as
+   "something changed" rather than a steady-state total. */
+.nav-badge {
+  display: inline-flex;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  background: var(--indigo);
+  border-radius: 10px;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
 .sidebar__divider {
   height: 1px;
   margin: 17px 7px 15px;

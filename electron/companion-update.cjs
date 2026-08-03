@@ -96,6 +96,24 @@ function unknownVerdict(current, checkedAt, message = UNKNOWN_MESSAGE) {
   return { status: 'unknown', current, checkedAt, message }
 }
 
+/**
+ * Read the durable last-successful-check timestamp (companion-update-state.json)
+ * WITHOUT performing any network I/O. Consulted by the passive startup timer
+ * (main.cjs, §6.5) to decide whether 24h have passed BEFORE ever calling
+ * `checkCompanionUpdate` — the passive path stays a pure local read when there is
+ * nothing to do, never touching the network just to find that out. Returns
+ * `null` when no state file exists yet, it is unreadable, or no stateDir is
+ * available — a missing/corrupt file is not proof a check ran recently, so the
+ * caller ends up (correctly) treating it as "due for a check", not skipping one.
+ */
+function getLastCheckedAt(deps = {}) {
+  const { stateDir = defaultStateDir } = deps
+  const dir = stateDir()
+  if (!dir) return null
+  const state = readState(dir)
+  return state && typeof state.lastCheckedAt === 'number' ? state.lastCheckedAt : null
+}
+
 async function fetchReleases(fetchImpl) {
   const response = await fetchImpl(RELEASES_URL, {
     headers: {
@@ -238,5 +256,6 @@ module.exports = {
   STATE_FILE_NAME,
   checkCompanionUpdate,
   isPassiveUpdateCheckDisabled,
+  getLastCheckedAt,
   __resetCompanionUpdateCacheForTests
 }

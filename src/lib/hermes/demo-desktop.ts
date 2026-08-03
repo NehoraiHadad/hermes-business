@@ -171,6 +171,21 @@ export function createDemoDesktop(): HermesDesktopApi {
     },
     async probeCodexGrant() {
       return { ok: true, reachable: true }
+    },
+
+    // A demo session never talks to api.github.com — a FIXED unknown verdict
+    // (never a fabricated 'up-to-date'/'update-available') and no passive
+    // events, since there is no main-process timer behind the fixture backend.
+    async checkCompanionUpdate() {
+      return {
+        status: 'unknown',
+        current: '0.4.0-demo',
+        checkedAt: null,
+        message: 'בדיקת עדכון אינה זמינה בדמו'
+      }
+    },
+    onCompanionUpdateAvailable() {
+      return () => {}
     }
   }
 }

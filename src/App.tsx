@@ -124,6 +124,17 @@ export default function App() {
     await windowControls.enterMini()
   }, [windowControls])
   const taskActions = useTaskActions({ setTasks, setToast })
+  // Partner-feed CTA (docs/specs/partner-feed.md §6.2): "פתח את השיחה" opens the REAL
+  // transcript, not a synthesized summary — same route the Sidebar's own session rows
+  // already use. chat.selectSession only reads `session.id` (it resumes by id and
+  // navigates to chat itself); the other Session fields are unused placeholders here,
+  // exactly like they would be irrelevant metadata on a session row we haven't loaded.
+  const onOpenSession = useCallback(
+    (sessionId: string) => {
+      void chat.selectSession({ id: sessionId, title: '', preview: '', started_at: 0, message_count: 0, source: '' })
+    },
+    [chat.selectSession]
+  )
 
   const title =
     screen === 'chat'
@@ -218,6 +229,7 @@ export default function App() {
       chat={chat}
       support={support}
       toast={toast}
+      setToast={setToast}
       chatScreen={chatScreen}
       modalLayer={modalLayer}
       onOpenFull={openFull}
@@ -226,6 +238,7 @@ export default function App() {
       taskActions={taskActions}
       onAddSkill={() => setModal('skill')}
       onOpenConnection={setConnectionModal}
+      onOpenSession={onOpenSession}
     />
   )
 }
