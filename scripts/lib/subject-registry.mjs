@@ -204,8 +204,8 @@ export const EVIDENCE_SUBJECTS = {
  * envelope is stale or unmigratable (no fabrication — it tells the operator how
  * to honestly re-attest). See docs/evidence/README.md for the full commands. */
 export const RECAPTURE = {
-  'packaged-e2e': 'rebuild (npm run build:test-packaged) then node scripts/e2e-installed-isolated.mjs | node scripts/capture-evidence.mjs packaged-e2e -',
-  approval: 're-run the isolated approval probe then node scripts/capture-evidence.mjs approval --isolated <raw>',
+  'packaged-e2e': 'recapture via the package pipeline (HERMES_BUSINESS_E2E_APPROVAL=1 npm run package:win:qa) — its exact-artifact stage (scripts/e2e-exact-artifact.mjs) machine-writes the bound envelope; a plain e2e-installed-isolated pipe lacks build_nonce/release_binding_digest/installer_sha256 and requirePassProof rejects it',
+  approval: 'recapture via the same package pipeline run (HERMES_BUSINESS_E2E_APPROVAL=1 npm run package:win:qa) — the exact-artifact stage machine-writes approval alongside packaged-e2e from the isolated denial probe',
   'shared-state': 'node scripts/e2e-hermes-shared-state.mjs then node scripts/capture-evidence.mjs shared-state <raw>',
   'thin-installer': 'npm run package:thin-installer:qa then node scripts/capture-evidence.mjs thin-installer <raw>',
   telegram: 're-run the redacted live Telegram probe and hand-reduce a fresh telegram.json (see docs/evidence/README.md)'

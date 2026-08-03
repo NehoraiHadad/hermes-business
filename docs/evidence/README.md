@@ -21,11 +21,15 @@ emails) and `redactPaths` (home/temp/drive paths) as a backstop.
   the approval wiring (the
   companion wrapper delegates to the official `approval.respond`; no competing
   engine) **and** the live denial probe against the isolated packaged runtime.
-  Produced by `e2e-installed-isolated.mjs`.
+  Machine-written by the exact-artifact stage (`scripts/e2e-exact-artifact.mjs`)
+  from an `e2e-installed-isolated.mjs` run.
 - `packaged-e2e.json` — **passed** against the current attested packaged build. It proves the packaged
   companion boots against an isolated, harness-owned temp `HERMES_HOME`, the
   isolated session count is 0, the live profile is unchanged, and teardown leaves
-  no residual. Produced by `e2e-installed-isolated.mjs`.
+  no residual — and binds the tested build (`build_nonce`,
+  `release_binding_digest`, `installer_sha256`). Machine-written by the
+  exact-artifact stage (`scripts/e2e-exact-artifact.mjs`) from an
+  `e2e-installed-isolated.mjs` run.
 - `telegram.json` — **passed** from a redacted live native-Hermes round trip.
   It proves a valid bot, polling with no competing webhook, inbound delivery to
   Hermes and an outbound agent reply. The wrapper owns no Telegram policy or
@@ -91,13 +95,15 @@ node scripts/capture-evidence.mjs shared-state raw-shared.json
 npm run package:thin-installer:qa > raw-thin.json   # emits JSON on stdout
 node scripts/capture-evidence.mjs thin-installer raw-thin.json
 
-# packaged companion, isolated runtime + REAL approval deny (needs the built
-# win-unpacked exe; point HERMES_BUSINESS_EXE at it). Emits the raw JSON report.
-$env:HERMES_BUSINESS_EXE = "...\release\win-unpacked\תכל'ס.exe"
+# packaged-e2e + approval: BOTH are machine-written ONLY by the exact-artifact
+# stage (scripts/e2e-exact-artifact.mjs) inside the package pipeline. It measures
+# the immutable candidate installer (installer_sha256 + build_nonce +
+# release_binding_digest) and binds those into the envelope — fields
+# requirePassProof demands ("must bind the tested build"). A plain
+# `e2e-installed-isolated.mjs | capture-evidence.mjs packaged-e2e -` pipe mints
+# an UNBOUND passed envelope the verifier rejects — do not use it.
 $env:HERMES_BUSINESS_E2E_APPROVAL = '1'
-node scripts/e2e-installed-isolated.mjs > raw-iso.json
-node scripts/capture-evidence.mjs packaged-e2e raw-iso.json
-node scripts/capture-evidence.mjs approval --isolated raw-iso.json
+npm run package:win:qa
 
 # telegram.json has no scripted capture: it is hand-reduced and redacted from a
 # manual live probe (never touching live config/env), then held to the same gate.

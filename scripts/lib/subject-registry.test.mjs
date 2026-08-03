@@ -1,3 +1,5 @@
+import { existsSync, readFileSync } from 'node:fs'
+import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   APP_RUNTIME_INPUTS,
@@ -12,6 +14,7 @@ import {
 import { CATEGORIES as GATE_CATEGORIES } from './evidence-gates.mjs'
 import { resolveSubjects } from './subject-hash.mjs'
 import { repoRoot } from './source-fingerprint.mjs'
+import { packagingStages } from '../package-win.mjs'
 
 // The registry is the single declarative source of truth; these guard its shape
 // so a category can never be attested by one gate and ignored by another.
@@ -87,6 +90,40 @@ describe('packaged input set — resolved over the real repo', () => {
       expect(f.startsWith('docs/evidence/'), f).toBe(false)
       expect(/\.test\.(cjs|mjs|js|jsx|ts|tsx|py)$/.test(f), f).toBe(false)
       expect(f.includes('__pycache__'), f).toBe(false)
+    }
+  })
+})
+
+describe('recapture hints match the real capture contract', () => {
+  // requirePassProof (evidence-gates.mjs) rejects a passed packaged-e2e envelope
+  // unless summary carries build_nonce + release_binding_digest + installer_sha256.
+  // The ONLY path that machine-writes those is scripts/e2e-exact-artifact.mjs, a
+  // stage of the package pipeline. A plain
+  //   e2e-installed-isolated.mjs | capture-evidence.mjs packaged-e2e -
+  // pipe mints an UNBOUND passed envelope the verifier then rejects, so the hint
+  // must never send an operator down that path (verified live 2026-08-03).
+  it('packaged-e2e points at the exact-artifact package stage, never the unbound plain pipe', () => {
+    const hint = RECAPTURE['packaged-e2e']
+    expect(hint).toMatch(/package:win:qa/)
+    expect(hint).toMatch(/exact-artifact/)
+    expect(hint).toMatch(/HERMES_BUSINESS_E2E_APPROVAL=1/)
+    expect(hint).not.toMatch(/build:test-packaged/)
+    expect(hint).not.toMatch(/capture-evidence\.mjs packaged-e2e/)
+  })
+
+  it('approval is captured by the same exact-artifact run, not a standalone pipe', () => {
+    expect(RECAPTURE.approval).toMatch(/package:win:qa/)
+    expect(RECAPTURE.approval).toMatch(/exact-artifact/)
+    expect(RECAPTURE.approval).not.toMatch(/capture-evidence\.mjs approval/)
+  })
+
+  it('the referenced pipeline script and stage actually exist and are wired', () => {
+    const pkg = JSON.parse(readFileSync(path.join(repoRoot(), 'package.json'), 'utf8'))
+    expect(pkg.scripts['package:win:qa']).toContain('package-win.mjs')
+    expect(existsSync(path.join(repoRoot(), 'scripts', 'e2e-exact-artifact.mjs'))).toBe(true)
+    for (const channel of ['public', 'qa']) {
+      const scripts = packagingStages(channel).map(s => s.script)
+      expect(scripts, channel).toContain('scripts/e2e-exact-artifact.mjs')
     }
   })
 })
