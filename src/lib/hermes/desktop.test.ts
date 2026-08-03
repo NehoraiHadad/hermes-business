@@ -13,6 +13,13 @@ function fakeBridge(overrides: Record<string, unknown> = {}) {
     chooseFile: vi.fn(async () => 'C:\\secrets\\client_secret.json'),
     openFull: vi.fn(async () => ({ ok: true })),
     probeCodexGrant: vi.fn(async () => ({ ok: true, reachable: true })),
+    getPartnerFeed: vi.fn(async () => ({
+      generatedAt: new Date().toISOString(),
+      available: true,
+      cron: { ok: true, jobs: [] },
+      sessions: { ok: true, rows: [] },
+      curator: { ok: true, insights: null }
+    })),
     ...overrides
   } as unknown as HermesDesktopBridge
 }
@@ -25,6 +32,13 @@ describe('desktop facade — bridge mode', () => {
     expect(bridge.startGoogleSetup).toHaveBeenCalledWith('C:\\secret.json')
     await expect(desktop.openFullSurface('logs')).resolves.toEqual({ ok: true })
     expect(bridge.openFull).toHaveBeenCalledWith('logs')
+  })
+
+  it('delegates the partner feed to the bridge', async () => {
+    const bridge = fakeBridge()
+    const desktop = createHermesDesktop(() => bridge)
+    await expect(desktop.getPartnerFeed()).resolves.toMatchObject({ available: true })
+    expect(bridge.getPartnerFeed).toHaveBeenCalledWith()
   })
 
   it('reports a native file dialog only when the bridge can actually open one', () => {
@@ -53,6 +67,14 @@ describe('desktop facade — missing bridge', () => {
     const desktop = createHermesDesktop(() => undefined)
     expect(() => desktop.getCuratorInsights().catch(() => 'handled')).not.toThrow()
     await expect(desktop.getWhatsappDirectory().catch(() => [])).resolves.toEqual([])
+  })
+
+  it('rejects the partner feed with BRIDGE_UNAVAILABLE, never a fabricated empty snapshot', async () => {
+    const desktop = createHermesDesktop(() => undefined)
+    await expect(desktop.getPartnerFeed()).rejects.toThrow(BRIDGE_UNAVAILABLE)
+    await expect(
+      createHermesDesktop(() => fakeBridge({ getPartnerFeed: undefined })).getPartnerFeed()
+    ).rejects.toThrow(BRIDGE_UNAVAILABLE)
   })
 
   it('reports an absent Codex probe as null so the grant gate fails closed, not loudly', async () => {
@@ -98,6 +120,20 @@ describe('desktop facade — demo mode', () => {
       mode: 'selected_chats',
       reply_chats: 2
     })
+  })
+
+  it('serves a faithful partner-feed fixture: one check-in run, one Telegram session, curator', async () => {
+    const desktop = createHermesDesktop(() => undefined, createDemoDesktop())
+    const snapshot = await desktop.getPartnerFeed()
+    expect(snapshot.available).toBe(true)
+    expect(snapshot.cron.ok).toBe(true)
+    expect(snapshot.cron.jobs).toHaveLength(1)
+    expect(snapshot.cron.jobs[0].isPartnerCheckin).toBe(true)
+    expect(snapshot.cron.jobs[0].runs).toHaveLength(1)
+    expect(snapshot.sessions.ok).toBe(true)
+    expect(snapshot.sessions.rows).toEqual([expect.objectContaining({ source: 'telegram' })])
+    expect(snapshot.curator).toMatchObject({ ok: true })
+    expect(snapshot.curator.insights?.available).toBe(true)
   })
 
   it('says a full-Hermes surface did not open here rather than claiming success', async () => {

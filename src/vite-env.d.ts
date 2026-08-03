@@ -34,6 +34,11 @@ declare global {
     chooseFile: (filters?: Array<{ name: string; extensions: string[] }>) => Promise<string | null>
     chooseFolder: () => Promise<string | null>
     getCuratorInsights: () => Promise<import('./lib/hermes/curator').CuratorInsights>
+    // Partner visibility feed (docs/specs/partner-feed.md §4.1): main-process
+    // aggregation of cron-job runs, background (Telegram/WhatsApp/…) sessions and
+    // curator insights, allow-list projected in electron/partner-feed.cjs before
+    // crossing this boundary — never a raw job/session payload.
+    getPartnerFeed: () => Promise<PartnerFeedSnapshot>
     getPartnerState: () => Promise<PartnerState>
     applyPartnerMode: (
       patch: Partial<PartnerSettings>
@@ -172,6 +177,51 @@ declare global {
     checkinMismatch: boolean
     writeRoot: string | null
     liveError: string | null
+  }
+
+  // Partner visibility feed (docs/specs/partner-feed.md §4.1) — the wire contract
+  // of the `hermes:partner:feed` channel. Every field crossing this boundary is
+  // allow-list projected in electron/partner-feed.cjs; a field NOT listed here
+  // (prompt/deliver/system_prompt/tokens/cwd) never leaves the main process.
+  // Fail-closed doctrine: an unproven field is `null`, a failed source is
+  // `ok:false` with an EMPTY list — never a fabricated "healthy" empty list.
+  type PartnerFeedSnapshot = {
+    generatedAt: string // ISO, when main collected this evidence
+    available: boolean // at least one source answered (like CuratorInsights.available)
+    cron: { ok: boolean; jobs: FeedCronJob[] }
+    sessions: { ok: boolean; rows: FeedSessionRow[] }
+    curator: { ok: boolean; insights: import('./lib/hermes/curator').CuratorInsights | null }
+  }
+
+  type FeedCronJob = {
+    id: string
+    name: string
+    enabled: boolean
+    schedule_display: string | null
+    last_run_at: string | null // ISO from Hermes; null = never run / not reported
+    last_status: 'ok' | 'error' | null // null = not reported (fail-closed: not "succeeded")
+    next_run_at: string | null
+    isPartnerCheckin: boolean // isOwnedCheckin() from electron/partner-checkin-def.cjs
+    runs: FeedRunRow[] // up to 3 most recent, only for jobs that ran within the window
+  }
+
+  type FeedRunRow = {
+    id: string // session id: cron_{job_id}_{timestamp}
+    title: string | null
+    started_at: number | null // epoch seconds, as Hermes returns it
+    ended_at: number | null
+    message_count: number
+    is_active: boolean
+  }
+
+  type FeedSessionRow = {
+    id: string
+    source: string // 'telegram' / 'whatsapp' / any platform
+    title: string | null
+    preview: string | null
+    started_at: number | null
+    last_active: number | null
+    message_count: number
   }
 
   interface Window {

@@ -62,6 +62,13 @@ export interface HermesDesktopApi {
   // --- learning / curator -------------------------------------------------
   getCuratorInsights(): Promise<CuratorInsights>
 
+  // --- partner visibility feed --------------------------------------------
+  /** Raw, allow-list-projected snapshot (docs/specs/partner-feed.md §4.1) —
+   *  cron runs + background sessions + curator insights. `available:false`
+   *  means every source failed; the renderer must show that honestly, never
+   *  as "no activity". */
+  getPartnerFeed(): Promise<PartnerFeedSnapshot>
+
   // --- provider evidence --------------------------------------------------
   recordProviderEvidence(evidence: ProviderValidation): Promise<ProviderValidation | null>
   /** `null` = the probe capability is unavailable, which callers must treat as
@@ -139,6 +146,10 @@ function createBridgeDesktop(getBridge: BridgeAccessor): HermesDesktopApi {
 
     async getCuratorInsights() {
       return need('getCuratorInsights')()
+    },
+
+    async getPartnerFeed() {
+      return need('getPartnerFeed')()
     },
 
     async recordProviderEvidence(evidence) {

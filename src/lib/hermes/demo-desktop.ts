@@ -29,6 +29,55 @@ const DEMO_CURATOR: CuratorInsights = {
   learning: { stats: { learned_skills: 2, nodes: 34, memories: 12 } }
 }
 
+// Faithful stand-in for the `hermes:partner:feed` snapshot (docs/specs/partner-feed.md
+// §4.1): one check-in run, one Telegram background session, curator — the SAME
+// DEMO_CURATOR fixture getCuratorInsights() returns, so the feed and the Skills
+// screen never show two different stories about the curator.
+const DEMO_PARTNER_FEED: PartnerFeedSnapshot = {
+  generatedAt: new Date().toISOString(),
+  available: true,
+  cron: {
+    ok: true,
+    jobs: [
+      {
+        id: 'demo-checkin',
+        name: 'צ׳ק־אין שותף עסקי · כל יום ראשון ב־08:00 [hermes-business-partner-checkin:brief:weekly]',
+        enabled: true,
+        schedule_display: 'כל יום ראשון ב־08:00',
+        last_run_at: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(),
+        last_status: 'ok',
+        next_run_at: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
+        isPartnerCheckin: true,
+        runs: [
+          {
+            id: 'cron_demo-checkin_1730000000',
+            title: 'צ׳ק־אין שותף עסקי',
+            started_at: Math.floor(Date.now() / 1000) - 5 * 60 * 60,
+            ended_at: Math.floor(Date.now() / 1000) - 5 * 60 * 60 + 240,
+            message_count: 6,
+            is_active: false
+          }
+        ]
+      }
+    ]
+  },
+  sessions: {
+    ok: true,
+    rows: [
+      {
+        id: 'demo-telegram-session',
+        source: 'telegram',
+        title: 'שיחה עם דני כהן',
+        preview: 'תודה על העדכון, נדבר מחר בבוקר',
+        started_at: Math.floor(Date.now() / 1000) - 20 * 60,
+        last_active: Math.floor(Date.now() / 1000) - 18 * 60,
+        message_count: 4
+      }
+    ]
+  },
+  curator: { ok: true, insights: DEMO_CURATOR }
+}
+
 const DEMO_RUNTIME: HermesRuntime = {
   installed: true,
   running: true,
@@ -111,6 +160,10 @@ export function createDemoDesktop(): HermesDesktopApi {
 
     async getCuratorInsights() {
       return DEMO_CURATOR
+    },
+
+    async getPartnerFeed() {
+      return DEMO_PARTNER_FEED
     },
 
     async recordProviderEvidence(evidence) {

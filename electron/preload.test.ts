@@ -111,6 +111,16 @@ describe('preload bridge (sandboxed contract)', () => {
       { channel: 'hermes:choose-file', args: [[{ name: 'JSON', extensions: ['json'] }]] }
     ])
   })
+
+  // Partner visibility feed channel (docs/specs/partner-feed.md §11 stage 2): the
+  // bridge method exists and goes through the same invoke() as every other
+  // channel, with no extra arguments.
+  it('exposes getPartnerFeed on hermes:partner:feed via invoke', async () => {
+    const snapshot = { available: true, cron: { ok: true, jobs: [] } }
+    const { bridge, calls } = loadPreload(() => snapshot)
+    await expect(bridge.getPartnerFeed()).resolves.toBe(snapshot)
+    expect(calls).toEqual([{ channel: 'hermes:partner:feed', args: [] }])
+  })
 })
 
 describe('preload IPC error normalization', () => {

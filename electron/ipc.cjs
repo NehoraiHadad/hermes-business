@@ -32,6 +32,7 @@ const { isAllowedExternalUrl } = require('./url-policy.cjs')
 const { applyOfficialHermesUpdate } = require('./hermes-update.cjs')
 const { getPartnerState, applyPartnerMode } = require('./business-partner.cjs')
 const { getCuratorInsights } = require('./curator-insights.cjs')
+const { getPartnerFeed } = require('./partner-feed.cjs')
 const { probeProviderCredential } = require('./provider-probe.cjs')
 const { probeCodexGrant } = require('./codex-probe.cjs')
 const { getProviderEvidence, recordProviderEvidence } = require('./provider-evidence.cjs')
@@ -112,6 +113,9 @@ function registerIpc() {
     return result.canceled ? null : result.filePaths[0]
   })
   ipcMain.handle('hermes:curator:insights', () => getCuratorInsights())
+  // Partner visibility feed: main-process aggregation of cron runs + background
+  // sessions + curator insights, allow-list projected (docs/specs/partner-feed.md).
+  ipcMain.handle('hermes:partner:feed', () => getPartnerFeed())
   // Provider validation: real out-of-band probe (never accepts an invalid key) + durable
   // non-secret evidence persisted in the Hermes-owned profile.
   ipcMain.handle('hermes:provider:probe', (_event, input) => probeProviderCredential(input))

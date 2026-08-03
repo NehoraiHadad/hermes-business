@@ -58,6 +58,7 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
   chooseFile: filters => invoke('hermes:choose-file', filters),
   chooseFolder: () => invoke('hermes:choose-folder'),
   getCuratorInsights: () => invoke('hermes:curator:insights'),
+  getPartnerFeed: () => invoke('hermes:partner:feed'),
   getPartnerState: () => invoke('hermes:partner:get'),
   applyPartnerMode: patch => invoke('hermes:partner:apply', patch),
   startGoogleSetup: clientSecretPath => invoke('hermes:google:start', clientSecretPath),
