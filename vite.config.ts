@@ -34,6 +34,13 @@ export default defineConfig(({ mode, command }) => {
       // Spawn-heavy suites (PowerShell/zip/python probes) exceed the 5s default
       // under parallel machine load; they pass in isolation well under this cap.
       testTimeout: 15000
+      // Component/hook tests live in src/**/*.test.tsx, opt into jsdom with a
+      // per-file `// @vitest-environment jsdom` docblock and import
+      // src/test/setup-dom as their FIRST import. Both are enforced by
+      // src/test/dom-conventions.test.ts. Default environment stays `node`
+      // (electron/*.test.ts, src/lib, scripts). Do NOT add environmentMatchGlobs
+      // (removed in Vitest 4) or test.projects (breaks the CLI --exclude flags
+      // that gate scripts/lib/evidence*.test.mjs out of `npm run test:unit`).
     }
   }
 })

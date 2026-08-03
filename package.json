@@ -27,6 +27,7 @@
     "build:qa": "node scripts/build-plugin.mjs && node scripts/verify-plugin.mjs && tsc -b && vite build --mode qa",
     "test": "npm run test:unit",
     "test:unit": "vitest run --exclude scripts/lib/evidence.test.mjs --exclude scripts/lib/evidence-subject.test.mjs",
+    "test:components": "vitest run src/components src/hooks src/test src/App.test.tsx",
     "test:evidence": "vitest run scripts/lib/evidence.test.mjs scripts/lib/evidence-subject.test.mjs",
     "test:contract": "npm run test:plugin:policy && npm run verify:plugin && npm run verify:bootstrap",
     "test:plugin:policy": "python -m unittest discover -s hermes-plugin/business-whatsapp-policy/tests -p test_*.py -v && python -m unittest discover -s hermes-plugin/business-shell/dashboard -p test_*.py -v",
@@ -70,6 +71,10 @@
     "react-markdown": "^9.0.3"
   },
   "devDependencies": {
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@types/adm-zip": "^0.5.7",
     "@types/node": "^22.10.2",
     "@types/react": "^19.0.3",
@@ -78,6 +83,7 @@
     "electron": "43.2.0",
     "electron-builder": "26.15.3",
     "js-yaml": "4.3.0",
+    "jsdom": "^27.4.0",
     "playwright-core": "^1.54.1",
     "rcedit": "^5.0.2",
     "rollup": "4.62.3",

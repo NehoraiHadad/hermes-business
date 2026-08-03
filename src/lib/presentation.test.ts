@@ -1,6 +1,32 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { TOOL_COPY_CASES, describeTool } from '../../shared/tool-copy.js'
-import { approvalCopy, humanizeTool, redactDiagnosticText } from './presentation'
+import { approvalCopy, humanizeTool, redactDiagnosticText, timeAgo } from './presentation'
+
+describe('timeAgo — shared relative-time copy (curator + partner feed)', () => {
+  afterEach(() => vi.useRealTimers())
+
+  it('covers each Hebrew bucket directly at its boundaries', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-08-04T12:00:00.000Z'))
+    expect(timeAgo('2026-08-04T12:00:00.000Z')).toBe('לפני רגע')
+    expect(timeAgo('2026-08-04T11:59:00.000Z')).toBe('לפני רגע') // 1 minute still "just now"
+    expect(timeAgo('2026-08-04T11:58:00.000Z')).toBe('לפני 2 דקות')
+    expect(timeAgo('2026-08-04T09:00:00.000Z')).toBe('לפני 3 שעות')
+    expect(timeAgo('2026-08-01T12:00:00.000Z')).toBe('לפני 3 ימים')
+  })
+
+  it('is fail-closed on unusable input: empty string, not never-invented copy', () => {
+    expect(timeAgo(null)).toBe('')
+    expect(timeAgo(undefined)).toBe('')
+    expect(timeAgo('not-a-date')).toBe('')
+  })
+
+  it('clamps a future timestamp to "just now" instead of a negative age', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-08-04T12:00:00.000Z'))
+    expect(timeAgo('2026-08-04T12:05:00.000Z')).toBe('לפני רגע')
+  })
+})
 
 describe('business presentation mapping', () => {
   it('turns internal tool names into plain-language activity', () => {

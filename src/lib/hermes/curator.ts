@@ -6,6 +6,8 @@
 // timestamps — if a field is absent, its notification is simply omitted, so the
 // UI can only ever show things the agent actually reported.
 
+import { timeAgo } from '../presentation'
+
 export type CuratorStatus = {
   enabled?: boolean
   paused?: boolean
@@ -40,19 +42,6 @@ export type CuratorNotification = {
   title: string
   detail?: string
   tone: 'success' | 'info' | 'muted'
-}
-
-// Present a UTC/ISO timestamp as a short Hebrew "time ago", or '' if unusable.
-function timeAgo(iso: string | null | undefined): string {
-  if (!iso) return ''
-  const then = Date.parse(iso)
-  if (Number.isNaN(then)) return ''
-  const minutes = Math.max(0, Math.round((Date.now() - then) / 60000))
-  if (minutes < 60) return minutes <= 1 ? 'לפני רגע' : `לפני ${minutes} דקות`
-  const hours = Math.round(minutes / 60)
-  if (hours < 24) return `לפני ${hours} שעות`
-  const days = Math.round(hours / 24)
-  return `לפני ${days} ימים`
 }
 
 // Turn the official payloads into friendly notifications. Order: learned-skills

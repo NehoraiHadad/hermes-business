@@ -71,6 +71,21 @@ export function humanSchedule(schedule: string): string {
   return humanizeSchedule(schedule)
 }
 
+// Present a UTC/ISO timestamp as a short Hebrew "time ago", or '' if unusable. Shared
+// by src/lib/hermes/curator.ts and the partner-feed UI (docs/specs/partner-feed.md
+// §6.1) so both surfaces render identical relative-time copy from one place.
+export function timeAgo(iso: string | null | undefined): string {
+  if (!iso) return ''
+  const then = Date.parse(iso)
+  if (Number.isNaN(then)) return ''
+  const minutes = Math.max(0, Math.round((Date.now() - then) / 60000))
+  if (minutes < 60) return minutes <= 1 ? 'לפני רגע' : `לפני ${minutes} דקות`
+  const hours = Math.round(minutes / 60)
+  if (hours < 24) return `לפני ${hours} שעות`
+  const days = Math.round(hours / 24)
+  return `לפני ${days} ימים`
+}
+
 export function redactDiagnosticText(text: string): string {
   return text
     .replace(/([?&](?:token|ticket)=)[^&\s]+/gi, '$1<redacted>')
