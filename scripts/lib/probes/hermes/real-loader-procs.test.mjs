@@ -5,16 +5,43 @@ import {
   mergeRecords,
   parseProcTable,
   partitionForKill,
+  pidsMatchingCmdline,
   reapOwned
 } from './real-loader-procs.mjs'
 
 describe('real-loader-procs pure PID-tree logic', () => {
-  it('parseProcTable parses pid/ppid/creation/exe with tab-safe exe paths', () => {
-    const text = ['100\t4\t2026-08-01T10:00:00.0000000\tC:\\a b\\Hermes.exe', 'bad-line', '200\t100\t2026-08-01T10:01:00.0000000\t'].join('\n')
+  it('parseProcTable parses pid/ppid/creation/exe/cmd; tabs inside cmd are re-joined', () => {
+    const text = [
+      '100\t4\t2026-08-01T10:00:00.0000000\tC:\\a b\\Hermes.exe\t"C:\\a b\\Hermes.exe" --user-data-dir=C:\\t\\ud',
+      'bad-line',
+      '200\t100\t2026-08-01T10:01:00.0000000\t\tweird\tcmd',
+      '300\t100\t2026-08-01T10:02:00.0000000\tC:\\py\\python.exe'
+    ].join('\n')
     const { byPid, parentByPid } = parseProcTable(text)
-    expect(byPid.get(100)).toEqual({ pid: 100, ppid: 4, creation: '2026-08-01T10:00:00.0000000', exe: 'C:\\a b\\Hermes.exe' })
+    expect(byPid.get(100)).toEqual({
+      pid: 100,
+      ppid: 4,
+      creation: '2026-08-01T10:00:00.0000000',
+      exe: 'C:\\a b\\Hermes.exe',
+      cmd: '"C:\\a b\\Hermes.exe" --user-data-dir=C:\\t\\ud'
+    })
     expect(byPid.get(200).exe).toBe('')
+    expect(byPid.get(200).cmd).toBe('weird\tcmd')
+    expect(byPid.get(300).cmd).toBe('') // legacy 4-column row stays parseable
     expect(parentByPid[200]).toBe(100)
+  })
+
+  it('pidsMatchingCmdline matches case-insensitively and spares the excluded PID', () => {
+    const { byPid } = parseProcTable(
+      [
+        '100\t4\tc\tH.exe\t"H.exe" --user-data-dir=C:\\Temp\\HERMES-ISO-E2E-1',
+        '200\t100\tc\tpy.exe\tpython -m hermes_cli.main gateway run',
+        '300\t4\tc\tme.exe\tnode e2e --marker c:\\temp\\hermes-iso-e2e-1'
+      ].join('\n')
+    )
+    expect(pidsMatchingCmdline('c:\\temp\\hermes-iso-e2e-1', byPid)).toEqual([100, 300])
+    expect(pidsMatchingCmdline('c:\\temp\\hermes-iso-e2e-1', byPid, { excludePid: 300 })).toEqual([100])
+    expect(pidsMatchingCmdline('', byPid)).toEqual([])
   })
 
   it('descendantsFromMap collects the whole subtree inclusive of root, cycle-safe', () => {

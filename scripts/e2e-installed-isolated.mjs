@@ -30,6 +30,7 @@ import {
 import { hermesHomeMarker } from './lib/isolated-marker.mjs'
 import { resolveAttestedArtifact } from './lib/isolated-e2e/attestation-gate.mjs'
 import { runApprovalCase } from './lib/isolated-e2e/approval-case.mjs'
+import { captureOwnedRecords, readOwnedGatewayPid } from './lib/isolated-e2e/gateway-process.mjs'
 import { assessAndGateIsolation, computeRunVerdict } from './lib/isolated-e2e/isolation-run.mjs'
 import { finalizeTeardown } from './lib/isolated-e2e/teardown.mjs'
 import { reapProcessTree } from '../electron/process-util.cjs'
@@ -93,21 +94,42 @@ try {
 
 const { HERMES_HOME, ...cleanEnv } = process.env // never let a stray HERMES_HOME leak in
 const launchEnv = { ...cleanEnv, ...isolatedLaunchEnv({ home: tempHome, port: isolatedPort }) }
+// Run-unique userData path: hoisted so teardown can use it as a command-line
+// ownership marker of last resort (a launch that dies before we hold a PID).
+const userDataDir = tempUserDataDir('hermes-iso-e2e')
 
 let electronApp = null
 let electronProcess = null
+// Identity records (creation date + exe) of every process this run owns. The
+// spawned `gateway run` python reuses the LIVE install's venv binary and its
+// command line carries NO temp-home marker, so a snapshot taken by descent
+// while the tree is alive is the only reliable post-mortem handle on it.
+let ownedProcs = null
 try {
   electronApp = await launchInstalledApp({
     executablePath,
     appDirectory,
-    userDataDir: tempUserDataDir('hermes-iso-e2e'),
+    userDataDir,
     env: launchEnv
   })
   electronProcess = electronApp.process()
+  ownedProcs = captureOwnedRecords({
+    prior: ownedProcs,
+    rootPids: [electronProcess.pid],
+    cmdlineMarkers: [userDataDir]
+  })
   const { page } = await openFirstWindow(electronApp)
   await verifyBoot({ page, consoleMessages: [], pageErrors: [], screenshotPath: path.join(os.tmpdir(), `hermes-iso-boot-${process.pid}.png`) })
 
   const runtime = await waitForRuntimeRunning(page)
+  // The gateway tree exists NOW (venv launcher + python, possibly already
+  // detached from Electron) and the profile-owned PID record is written —
+  // refresh the identity snapshot to cover both roots.
+  ownedProcs = captureOwnedRecords({
+    prior: ownedProcs,
+    rootPids: [electronProcess.pid, readOwnedGatewayPid(tempHome)],
+    cmdlineMarkers: [userDataDir]
+  })
   // Assess isolation and run both fail-fast gates (structural, then the tested
   // four-invariant set) BEFORE any session/prompt/credential-seed/approval.
   const assess = await assessAndGateIsolation({
@@ -138,18 +160,27 @@ try {
 } catch (error) {
   report.error = String(error?.message || error)
 } finally {
-  // Reap the full Electron → Hermes serve child tree before deleting the isolated
-  // home. A graceful window close can return before the venv Python grandchild
-  // releases Windows file handles, making teardown nondeterministically fail.
+  // Refresh the owned-identity snapshot while the tree is still walkable (late
+  // children included), THEN reap the full Electron → Hermes serve child tree
+  // before deleting the isolated home. A graceful window close can return before
+  // the venv Python grandchild releases Windows file handles, making teardown
+  // nondeterministically fail.
+  ownedProcs = captureOwnedRecords({
+    prior: ownedProcs,
+    rootPids: [electronProcess?.pid, readOwnedGatewayPid(tempHome)],
+    cmdlineMarkers: [userDataDir]
+  })
   if (electronProcess) reapProcessTree(electronProcess)
   try {
     if (electronApp) await electronApp.close()
   } catch {
     /* ignore */
   }
-  // Reap the port, delete the temp home, re-snapshot the live marker and derive
-  // the teardown verdict (mutates report.teardown + report.ok). If the live
-  // profile's defining state moved, a redacted forensic report is preserved.
+  // Reap the port, VERIFY every owned identity is dead (force-kill survivors,
+  // interleaving kill rounds with temp-home removal retries), re-snapshot the
+  // live marker and derive the teardown verdict (mutates report.teardown +
+  // report.ok). If the live profile's defining state moved, a redacted forensic
+  // report is preserved.
   await finalizeTeardown({
     report,
     tempHome,
@@ -158,7 +189,8 @@ try {
     liveMarkerBefore,
     probePath,
     forensicDir: path.join(root, 'docs', 'evidence', 'forensics'),
-    runApproval
+    runApproval,
+    ownedProcs
   })
 }
 

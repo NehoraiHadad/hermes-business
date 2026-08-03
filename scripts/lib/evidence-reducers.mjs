@@ -72,7 +72,15 @@ export function reduceIsolatedPackaged(r) {
     live_volatile_runtime_changes: sumCounts(td.live_volatile_runtime_changes),
     temp_home_removed: bool(td.temp_home_removed),
     isolated_port_free: bool(td.isolated_port_free),
-    no_residual: bool(td.temp_home_removed) && bool(td.isolated_port_free) && bool(td.probe_file_absent)
+    // Owned-tree containment: on Windows the run positively verifies every
+    // process identity it spawned is dead (a detached gateway is residue even
+    // when the temp home came off). Reports predating the field skip the term.
+    owned_tree_dead: td.owned_tracking_applicable ? bool(td.owned_tree_dead) : null,
+    no_residual:
+      bool(td.temp_home_removed) &&
+      bool(td.isolated_port_free) &&
+      bool(td.probe_file_absent) &&
+      (td.owned_tracking_applicable ? bool(td.owned_tree_dead) : true)
   }
 }
 

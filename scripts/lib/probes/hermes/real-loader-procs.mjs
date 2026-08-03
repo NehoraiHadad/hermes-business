@@ -1,20 +1,22 @@
-// Owned-descendant process containment for the real-loader E2E.
+// Owned-descendant process containment, shared by the real-loader E2E and the
+// isolated packaged E2E teardown.
 //
-// The launched Hermes Desktop spawns a tree of children (the Python dashboard
-// backend, node helpers, ...). Windows does NOT reparent orphans, so a descendant
-// snapshot taken while the app is alive stays valid after it exits. We identify
-// ownership by descent from the Electron main PID AND by process IDENTITY
-// (CreationDate + ExecutablePath), so a PID reused by an unrelated process after
-// our child exits is never mistakenly killed. A failed enumeration is treated as
-// "unknown, fail closed" — NEVER as "nothing alive".
+// The launched app spawns a tree of children (the Python gateway/backend, node
+// helpers, ...). Windows does NOT reparent orphans, so a descendant snapshot
+// taken while the app is alive stays valid after it exits. We identify ownership
+// by descent from a root PID (or by a unique sandbox path in the command line)
+// AND by process IDENTITY (CreationDate + ExecutablePath), so a PID reused by an
+// unrelated process after our child exits is never mistakenly killed. A failed
+// enumeration is treated as "unknown, fail closed" — NEVER as "nothing alive".
 
 import { spawnSync } from 'node:child_process'
 
-// One row per process: PID \t PPID \t CreationDate(o) \t ExecutablePath. Tabs are
-// safe separators — exe paths contain spaces but not tabs.
+// One row per process: PID \t PPID \t CreationDate(o) \t ExecutablePath \t
+// CommandLine. Tabs are safe separators — exe paths contain spaces but not tabs;
+// a tab inside the trailing CommandLine field is re-joined at parse time.
 const PROC_SCRIPT =
   "Get-CimInstance Win32_Process | ForEach-Object { " +
-  "\"$($_.ProcessId)`t$($_.ParentProcessId)`t$($_.CreationDate.ToString('o'))`t$($_.ExecutablePath)\" }"
+  "\"$($_.ProcessId)`t$($_.ParentProcessId)`t$($_.CreationDate.ToString('o'))`t$($_.ExecutablePath)`t$($_.CommandLine)\" }"
 
 function ps(script) {
   const out = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], {
@@ -25,17 +27,23 @@ function ps(script) {
   return { ok: out.status === 0, stdout: out.stdout || '', stderr: (out.stderr || '').trim() }
 }
 
-/** Parse the CIM proc table into { byPid: Map<pid,{pid,ppid,creation,exe}>,
+/** Parse the CIM proc table into { byPid: Map<pid,{pid,ppid,creation,exe,cmd}>,
  *  parentByPid }. Pure — testable without spawning anything. */
 export function parseProcTable(text) {
   const byPid = new Map()
   const parentByPid = {}
   for (const line of String(text).split(/\r?\n/)) {
     if (!line.trim()) continue
-    const [pid, ppid, creation, ...exeParts] = line.split('\t')
+    const [pid, ppid, creation, exe, ...cmdParts] = line.split('\t')
     const p = Number(pid)
     if (!Number.isInteger(p) || p <= 0) continue
-    byPid.set(p, { pid: p, ppid: Number(ppid), creation: (creation || '').trim(), exe: exeParts.join('\t').trim() })
+    byPid.set(p, {
+      pid: p,
+      ppid: Number(ppid),
+      creation: (creation || '').trim(),
+      exe: (exe || '').trim(),
+      cmd: cmdParts.join('\t').trim()
+    })
     parentByPid[p] = Number(ppid)
   }
   return { byPid, parentByPid }
@@ -112,13 +120,51 @@ export function snapshotOwnedProcs(rootPid) {
   return { ok: true, records: pids.map(p => cur.byPid.get(p)).filter(Boolean) }
 }
 
+/** PURE: PIDs whose command line contains `marker` (case-insensitive — Windows
+ *  paths), excluding `excludePid` (the harness itself, defensively). */
+export function pidsMatchingCmdline(marker, byPid, { excludePid } = {}) {
+  const needle = String(marker || '').toLowerCase()
+  if (!needle) return []
+  const pids = []
+  for (const rec of byPid.values()) {
+    if (rec.pid === excludePid) continue
+    if ((rec.cmd || '').toLowerCase().includes(needle)) pids.push(rec.pid)
+  }
+  return pids
+}
+
+/**
+ * Snapshot every process whose command line contains a run-unique sandbox path
+ * (e.g. the `--user-data-dir=<temp>` argument), PLUS its descendants. Ownership
+ * anchor of last resort: it recovers a tree we have no PID handle for (a launch
+ * that timed out after spawning) as long as the root's command line carries the
+ * marker — descendants (a gateway whose command line does NOT carry it) are then
+ * owned by descent. Fails closed like snapshotOwnedProcs.
+ */
+export function snapshotOwnedByCmdline(marker) {
+  if (!marker) return { ok: true, records: [] }
+  const cur = currentIdentityMap()
+  if (!cur.ok) return { ok: false, records: [], error: cur.error }
+  const parentByPid = {}
+  for (const rec of cur.byPid.values()) parentByPid[rec.pid] = rec.ppid
+  const pids = new Set()
+  for (const root of pidsMatchingCmdline(marker, cur.byPid, { excludePid: process.pid })) {
+    for (const pid of descendantsFromMap(root, parentByPid)) {
+      if (pid !== process.pid) pids.add(pid)
+    }
+  }
+  return { ok: true, records: [...pids].map(p => cur.byPid.get(p)).filter(Boolean) }
+}
+
 function killByIdentity(rec) {
   const cur = currentIdentityMap()
   if (!cur.ok) return false
   const now = cur.byPid.get(rec.pid)
   if (!now) return true // already gone
   if (!identityMatches(rec, now)) return false // PID reused — refuse to kill
-  spawnSync('taskkill', ['/PID', String(rec.pid), '/F'], { windowsHide: true })
+  // /T also reaps the survivor's CURRENT children — owned by descent even when
+  // they were spawned after our last snapshot and so have no record of their own.
+  spawnSync('taskkill', ['/PID', String(rec.pid), '/T', '/F'], { windowsHide: true })
   const after = currentIdentityMap()
   if (!after.ok) return false
   const post = after.byPid.get(rec.pid)

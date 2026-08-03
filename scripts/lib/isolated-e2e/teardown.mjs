@@ -7,6 +7,7 @@ import { reapProcessTree } from '../../../electron/process-util.cjs'
 import { safeJson } from '../e2e-harness.mjs'
 import { isPortFree, removeTempHome } from '../isolated-runtime.mjs'
 import { hermesHomeMarker, markerDelta } from '../isolated-marker.mjs'
+import { reapOwned } from '../probes/hermes/real-loader-procs.mjs'
 import { reapOwnedGateway } from './gateway-process.mjs'
 
 /** Reap any hermes process bound to the isolated port (belt-and-suspenders). */
@@ -65,10 +66,59 @@ export function preserveForensicsIfMutated({ forensicDir, delta, liveUntouched, 
   }
 }
 
-/** Give the OS a beat to release the port and file locks after close. */
 /** Give Windows a beat to release handles a just-reaped process still holds. */
 function osReleaseBeat(ms = 1_000) {
   return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+/**
+ * Positively verify every OWNED process identity (captured while the app was
+ * alive) is dead, force-killing identity-matched survivors, then remove the temp
+ * home — interleaving further kill rounds with removal retries. This is what
+ * guarantees a detached `gateway run` python (whose command line carries no
+ * temp-home marker and whose exe is the LIVE install's venv python) cannot
+ * survive the run and hold locks under the temp home. Fail-closed on every
+ * axis: `treeDead` is true ONLY when the snapshot succeeded AND every recorded
+ * identity is verified gone; `removed` reports only what is actually on disk.
+ */
+export async function reapOwnedTreeAndRemoveHome({
+  tempHome,
+  isolatedPort,
+  ownedProcs,
+  platform = process.platform,
+  reapFn = reapOwned,
+  removeFn = removeTempHome,
+  killPortFn = killIsolatedPortProcess,
+  sleepFn = osReleaseBeat,
+  rounds = 3,
+  naturalExitMs = 2_500
+} = {}) {
+  const applicable = platform === 'win32'
+  const snapshotOk = applicable ? Boolean(ownedProcs && ownedProcs.ok) : null
+  const records = ownedProcs?.records || []
+  let verdict = null
+  if (applicable) verdict = reapFn(records, { timeoutMs: naturalExitMs })
+  let removed = await removeFn(tempHome)
+  let removalRounds = 0
+  while (!removed.removed && removalRounds < rounds) {
+    removalRounds += 1
+    // A lock holder survived the first pass — force-kill immediately (no
+    // natural-exit grace; the app was already reaped) and retry the removal.
+    if (applicable) verdict = reapFn(records, { timeoutMs: 0 })
+    killPortFn(isolatedPort)
+    await sleepFn(1_000)
+    removed = await removeFn(tempHome)
+  }
+  return {
+    applicable,
+    snapshotOk,
+    treeDead: applicable ? Boolean(snapshotOk && verdict && verdict.allExited === true) : null,
+    survivors: verdict?.survivors || [],
+    killed: verdict?.killed || [],
+    ownedCount: records.length,
+    removalRounds,
+    removed
+  }
 }
 
 /**
@@ -86,7 +136,8 @@ export async function finalizeTeardown({
   liveMarkerBefore,
   probePath,
   forensicDir,
-  runApproval
+  runApproval,
+  ownedProcs = null
 }) {
   // Hermes' Windows venv launcher can detach/reparent away from Electron. Its
   // profile-owned PID record is therefore the authoritative second teardown
@@ -94,7 +145,11 @@ export async function finalizeTeardown({
   const gateway = reapOwnedGateway(tempHome)
   killIsolatedPortProcess(isolatedPort)
   await osReleaseBeat()
-  const removed = await removeTempHome(tempHome)
+  // Third boundary — identity-checked containment: every descendant snapshotted
+  // while the app was alive must be VERIFIED dead (survivors are force-killed,
+  // PID reuse refused), with kill rounds interleaved into removal retries.
+  const containment = await reapOwnedTreeAndRemoveHome({ tempHome, isolatedPort, ownedProcs })
+  const removed = containment.removed
   const portFree = await isPortFree(isolatedPort)
   const liveMarkerAfter = hermesHomeMarker(liveHome)
   const delta = markerDelta(liveMarkerBefore, liveMarkerAfter)
@@ -107,6 +162,13 @@ export async function finalizeTeardown({
   report.teardown = {
     isolated_gateway_pid_found: gateway.pid !== null,
     isolated_gateway_reaped: gateway.reaped,
+    owned_tracking_applicable: containment.applicable,
+    owned_snapshot_ok: containment.snapshotOk,
+    owned_proc_count: containment.ownedCount,
+    owned_tree_dead: containment.treeDead,
+    owned_tree_survivors: containment.survivors,
+    owned_tree_killed: containment.killed,
+    temp_home_removal_rounds: containment.removalRounds,
     temp_home_removed: removed.removed,
     isolated_port_free: portFree,
     live_home_untouched: liveUntouched,
@@ -126,6 +188,9 @@ export async function finalizeTeardown({
       delta.stable_unsafe_entries === 0 &&
       removed.removed &&
       portFree &&
+      // On Windows the owned tree must be POSITIVELY verified dead — a failed
+      // snapshot or a surviving identity fails the run even with the home gone.
+      (containment.applicable ? containment.treeDead === true : true) &&
       report.teardown.probe_file_absent
   )
   Object.assign(
