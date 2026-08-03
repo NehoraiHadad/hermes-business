@@ -5,10 +5,8 @@ const path = require('node:path')
 // private-home-scope check). A trailing separator is trimmed before
 // comparison, and case-folding applies ONLY on win32 — where the filesystem
 // is case-insensitive — so POSIX paths still compare byte-exact.
-//
-// NOTE: a third, near-identical copy (`pathKey`/`isUnder`) lives in
-// runtime-mode.cjs. That file is out of scope for this consolidation (owned
-// by a concurrent task) and is left untouched — worth revisiting later.
+// runtime-mode.cjs consumes it too (through a resolve-first wrapper), so this
+// is the single containment implementation in the main process.
 
 const winCI = process.platform === 'win32'
 

@@ -6,6 +6,7 @@ const {
   getQaRuntimeOverride,
   __resetQaRuntimeOverrideCache
 } = require('./qa-runtime.cjs')
+const { isUnder: isUnderShared } = require('./path-containment.cjs')
 
 const DEV_SENTINEL_ENV = 'HERMES_BUSINESS_DEV_RUNTIME'
 const DEV_SENTINEL_VALUE = 'isolated-dev-home'
@@ -38,21 +39,18 @@ function defaultDevRoot(env = process.env) {
   return path.join(base, 'hermes-business-dev')
 }
 
-function pathKey(value) {
-  return path.resolve(String(value || '')).replace(/[\\/]+$/, '').toLowerCase()
-}
-
+// Containment checks share the canonical separator-aware primitive; inputs here
+// may still be relative or trailing-separator-suffixed env values, so they are
+// resolved to absolute form first (path-containment compares as-given).
 function isUnder(child, parent) {
-  const c = pathKey(child)
-  const p = pathKey(parent)
-  return c === p || c.startsWith(p + path.sep.toLowerCase())
+  return isUnderShared(path.resolve(String(child || '')), path.resolve(String(parent || '')))
 }
 
 function isTestPath(value, env = process.env) {
   if (!value) return false
-  const key = pathKey(value)
-  const temp = pathKey(env.TEMP || env.TMP || os.tmpdir())
-  return isUnder(key, temp) && /hermes-(business-e2e|qa-home|e2e-home)/i.test(key)
+  const resolved = path.resolve(String(value))
+  const temp = path.resolve(String(env.TEMP || env.TMP || os.tmpdir()))
+  return isUnder(resolved, temp) && /hermes-(business-e2e|qa-home|e2e-home)/i.test(resolved)
 }
 
 function absoluteEnvPath(env, name, fallback) {

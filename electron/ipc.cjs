@@ -37,7 +37,12 @@ const { probeCodexGrant } = require('./codex-probe.cjs')
 const { getProviderEvidence, recordProviderEvidence } = require('./provider-evidence.cjs')
 const { guardStatusWithActivation, readGuardActivationJournal } = require('./whatsapp-guard-journal.cjs')
 const { openFullSurface } = require('./open-full.cjs')
-const { normalizeOpenFileFilters, createSerialGuard } = require('./ipc-guards.cjs')
+const {
+  normalizeOpenFileFilters,
+  createSerialGuard,
+  assertAllowedApiEndpoint,
+  sanitizeApiInit
+} = require('./ipc-guards.cjs')
 
 // A second `hermes:install` while the first is still running would start a second
 // PowerShell bootstrap against the SAME Hermes home (the first has a 45-minute
@@ -83,7 +88,13 @@ function registerIpc() {
   ipcMain.handle('hermes:start', startHermes)
   ipcMain.handle('hermes:restart', restartHermes)
   ipcMain.handle('hermes:update', applyOfficialHermesUpdate)
-  ipcMain.handle('hermes:api', (_event, endpoint, init) => hermesApi(endpoint, init))
+  // `endpoint`/`init` are renderer-supplied and the fetch behind hermesApi
+  // carries the gateway session token: only allow-listed product routes pass,
+  // and init is rebuilt as {method, body} so renderer headers can never reach
+  // the authenticated request (see ipc-guards.assertAllowedApiEndpoint).
+  ipcMain.handle('hermes:api', (_event, endpoint, init) =>
+    hermesApi(assertAllowedApiEndpoint(endpoint), sanitizeApiInit(init))
+  )
   ipcMain.handle('hermes:versions', getVersions)
   ipcMain.handle('hermes:logs', () => ({ lines: recentLogs(250) }))
   ipcMain.handle('hermes:diagnostics', createDiagnosticsBundle)

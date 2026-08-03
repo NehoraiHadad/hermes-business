@@ -83,11 +83,25 @@ plugins+shared). העיקרון: הליבות הטהורות מצוינות; ה�
 - `verify:plugin`: bundle מסונכרן + חוזה SDK מול Hermes 0.19.1 מותקן.
 - `test:plugin:policy`: ‏71+7 בדיקות פייתון (כולל ה-dashboard שחווט בשלב 1).
 - `npm run build`: הצליח (אזהרת chunk>500kB אינפורמטיבית בלבד).
-- `test:e2e:installed-isolated` **נדחה בכוונה**: תלוי בתיקון רגרסיית ה-QA שרץ
-  בסשן נפרד (task_e3941eb9) — יש להריץ אחרי מיזוגו + `build:test-packaged` טרי.
+- `test:e2e:installed-isolated` ✅ **עבר** (הושלם אחרי מיזוג תיקון ה-QA,
+  ‏commit ‏2a9eb2d): ‏`build:test-packaged` טרי (0.4.0-alpha.1, ‏head ‏d502166)
+  ואז ריצה מבודדת מלאה — mode=qa-isolated, פורט מבודד, הפרופיל החי לא נגע
+  (`live_marker_exact_equal:true`, רק churn נדיף מותר `{cron:1}`), teardown נקי.
 
 ## ממצאים שנפתחו כמשימות נפרדות תוך כדי
 
-- רגרסיית מצב QA מבודד (סשן נפרד, task_e3941eb9).
-- באג סמוי ב-`isUnder` — גבול-מפריד no-op, `/tmp-evil` נחשב תחת `/tmp`
-  (task_8e7e3608; קיים-מראש, תועד בבדיקה, ההתנהגות שומרה).
+- רגרסיית מצב QA מבודד — ✅ תוקנה (סשן נפרד task_e3941eb9, ‏commit ‏2a9eb2d).
+- באג סמוי ב-`isUnder` — גבול-מפריד no-op, `/tmp-evil` נחשב תחת `/tmp` —
+  ✅ תוקן (סשן נפרד task_8e7e3608, ‏commit ‏d502166).
+
+## המשך (2026-08-03, אחרי השער הסופי)
+
+- ✅ הגבלת `hermes:api`: הערוץ היה proxy פתוח לכל ה-gateway עם ה-session token,
+  ו-`hermesApi` אף העביר `init.headers` מה-renderer אל ה-fetch המאומת. נוספו
+  `assertAllowedApiEndpoint` (allow-list אנכורי של כל מסלולי המוצר + הגנות
+  traversal/קידוד + allow-list למפתחות query) ו-`sanitizeApiInit` (רק
+  `{method, body}`; ‏headers לעולם לא מועברים) ב-`ipc-guards.cjs`, מחווטים
+  ב-`ipc.cjs`. בדיקת lockstep סורקת את כל ליטרלי `/api/…` ב-`src/` כך ש-endpoint
+  חדש ב-renderer שובר CI ולא נכשל בזמן ריצה.
+- ✅ עותק ה-`isUnder` השלישי ב-`runtime-mode.cjs` אוחד על `path-containment.cjs`
+  (עטיפת resolve-first); נותרה מימוש containment יחיד ב-main.
