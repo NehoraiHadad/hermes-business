@@ -1,41 +1,44 @@
 import { useCallback, useMemo } from 'react'
 import { hermesClient } from '../lib/hermes-client'
+import type { ToastSeverity } from '../lib/toast'
 import type { ScheduledTask, TaskActions, TaskEditValues } from '../types'
 
 type SetTasks = (updater: (current: ScheduledTask[]) => ScheduledTask[]) => void
 
 // Scheduled-task CRUD wiring: toggle/trigger/edit/delete against Hermes with
 // optimistic local updates and toast feedback. Kept out of App so the shell
-// composition stays focused on routing/layout.
+// composition stays focused on routing/layout. The toast queue (see useToasts)
+// now owns auto-dismiss timing, so this hook no longer hand-rolls a timer.
 export function useTaskActions({
   setTasks,
   setToast
 }: {
   setTasks: SetTasks
-  setToast: (toast: string) => void
+  setToast: (toast: string, severity?: ToastSeverity) => void
 }): TaskActions {
   const notify = useCallback(
-    (message: string) => {
-      setToast(message)
-      window.setTimeout(() => setToast(''), 2500)
-    },
+    (message: string, severity?: ToastSeverity) => setToast(message, severity),
     [setToast]
   )
 
   return useMemo<TaskActions>(
     () => ({
       onToggle: async task => {
-        await hermesClient.toggleTask(task)
-        setTasks(current =>
-          current.map(item => (item.id === task.id ? { ...item, enabled: !item.enabled } : item))
-        )
+        try {
+          await hermesClient.toggleTask(task)
+          setTasks(current =>
+            current.map(item => (item.id === task.id ? { ...item, enabled: !item.enabled } : item))
+          )
+        } catch (error) {
+          notify(error instanceof Error ? error.message : 'עדכון המשימה נכשל', 'error')
+        }
       },
       onTrigger: async task => {
         try {
           await hermesClient.triggerTask(task.id)
           notify(`המשימה "${task.name}" רצה עכשיו`)
         } catch (error) {
-          notify(error instanceof Error ? error.message : 'הרצת המשימה נכשלה')
+          notify(error instanceof Error ? error.message : 'הרצת המשימה נכשלה', 'error')
         }
       },
       onEdit: async (task, updates: TaskEditValues) => {
@@ -57,7 +60,7 @@ export function useTaskActions({
           setTasks(current => current.filter(item => item.id !== task.id))
           notify(`המשימה "${task.name}" נמחקה`)
         } catch (error) {
-          notify(error instanceof Error ? error.message : 'מחיקת המשימה נכשלה')
+          notify(error instanceof Error ? error.message : 'מחיקת המשימה נכשלה', 'error')
         }
       }
     }),

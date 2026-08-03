@@ -37,6 +37,44 @@ const { probeCodexGrant } = require('./codex-probe.cjs')
 const { getProviderEvidence, recordProviderEvidence } = require('./provider-evidence.cjs')
 const { guardStatusWithActivation, readGuardActivationJournal } = require('./whatsapp-guard-journal.cjs')
 const { openFullSurface } = require('./open-full.cjs')
+const { normalizeOpenFileFilters, createSerialGuard } = require('./ipc-guards.cjs')
+
+// A second `hermes:install` while the first is still running would start a second
+// PowerShell bootstrap against the SAME Hermes home (the first has a 45-minute
+// timeout, so the overlap window is long). Serialized with the same in-flight
+// idiom applyOfficialHermesUpdate uses in hermes-update.cjs; the flag is
+// module-level so it survives any re-registration of the channels.
+const runInstallExclusively = createSerialGuard('התקנת Hermes כבר מתבצעת')
+
+async function performInstall() {
+  if (findHermes()) {
+    installDesktopPlugin()
+    installWhatsappPolicyPlugin()
+    await ensureGatewayBackground()
+    return { ok: true, installed: true }
+  }
+  const stagingRoot = stageBusinessBootstrap()
+  try {
+    await runCaptured(
+      'powershell.exe',
+      [
+        '-NoProfile',
+        '-ExecutionPolicy', 'Bypass',
+        '-File', path.join(stagingRoot, 'bootstrap.ps1'),
+        '-PayloadRoot', stagingRoot,
+        '-BootstrapVersion', app.getVersion(),
+        '-HermesHome', hermesHome(),
+        '-SkipCompanionInstall',
+        '-NoLaunch'
+      ],
+      45 * 60_000
+    )
+  } finally {
+    fs.rmSync(stagingRoot, { recursive: true, force: true })
+  }
+  const installed = Boolean(findHermes())
+  return { ok: installed, installed, code: installed ? 0 : 1 }
+}
 
 // Single place that maps every renderer IPC channel to a module function. Keeps
 // the wiring auditable and the feature modules free of Electron IPC concerns.
@@ -50,7 +88,12 @@ function registerIpc() {
   ipcMain.handle('hermes:logs', () => ({ lines: recentLogs(250) }))
   ipcMain.handle('hermes:diagnostics', createDiagnosticsBundle)
   ipcMain.handle('hermes:choose-file', async (_event, filters) => {
-    const result = await dialog.showOpenDialog(getMainWindow(), { properties: ['openFile'], filters: filters || [] })
+    // `filters` is renderer-supplied: validate the shape and forward a sanitized
+    // copy, never the raw object (see ipc-guards.normalizeOpenFileFilters).
+    const result = await dialog.showOpenDialog(getMainWindow(), {
+      properties: ['openFile'],
+      filters: normalizeOpenFileFilters(filters)
+    })
     return result.canceled ? null : result.filePaths[0]
   })
   ipcMain.handle('hermes:choose-folder', async () => {
@@ -88,35 +131,7 @@ function registerIpc() {
   ipcMain.handle('hermes:open-full', async (_event, surface) => {
     return openFullSurface(surface, { command: findHermes(), home: hermesHome(), shell })
   })
-  ipcMain.handle('hermes:install', async () => {
-    if (findHermes()) {
-      installDesktopPlugin()
-      installWhatsappPolicyPlugin()
-      await ensureGatewayBackground()
-      return { ok: true, installed: true }
-    }
-    const stagingRoot = stageBusinessBootstrap()
-    try {
-      await runCaptured(
-        'powershell.exe',
-        [
-          '-NoProfile',
-          '-ExecutionPolicy', 'Bypass',
-          '-File', path.join(stagingRoot, 'bootstrap.ps1'),
-          '-PayloadRoot', stagingRoot,
-          '-BootstrapVersion', app.getVersion(),
-          '-HermesHome', hermesHome(),
-          '-SkipCompanionInstall',
-          '-NoLaunch'
-        ],
-        45 * 60_000
-      )
-    } finally {
-      fs.rmSync(stagingRoot, { recursive: true, force: true })
-    }
-    const installed = Boolean(findHermes())
-    return { ok: installed, installed, code: installed ? 0 : 1 }
-  })
+  ipcMain.handle('hermes:install', () => runInstallExclusively(performInstall))
   ipcMain.handle('assistant:window-state', () => currentWindowState())
   ipcMain.handle('assistant:set-window-mode', (_event, mode) => setWindowMode(mode))
   ipcMain.handle('assistant:set-always-on-top', (_event, value) => setMiniPinned(value))

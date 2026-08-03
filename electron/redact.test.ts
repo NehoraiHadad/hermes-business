@@ -76,6 +76,47 @@ describe('redactSecrets', () => {
     expect(out).toContain('/home/<redacted>/.hermes/config.json')
   })
 
+  it('strips the patterns migrated from the deleted security.cjs', () => {
+    // These four shapes were guarded ONLY by security.cjs, which used to be the
+    // redactor on the live runtime-log stream. They must now be covered here.
+    const sessionHeader = redactSecrets(`GET /api/status\n${FAKE_SECRETS.sessionHeader}\naccept: application/json`)
+    expect(sessionHeader).toContain('x-hermes-session-token: <redacted>')
+    expect(sessionHeader).toContain('accept: application/json')
+
+    expect(redactSecrets(`grant ${FAKE_SECRETS.googleRefresh} stored`)).toBe('grant <redacted> stored')
+    expect(redactSecrets(FAKE_SECRETS.lowercaseBearer)).toBe('authorization: <redacted>')
+    expect(redactSecrets(`https://oauth.example/token?${FAKE_SECRETS.clientSecretQuery}&grant_type=code`)).toBe(
+      'https://oauth.example/token?client_secret=<redacted>&grant_type=code'
+    )
+
+    const all = redactSecrets(Object.values(FAKE_SECRETS).join('\n'))
+    for (const value of FAKE_SECRET_VALUES) expect(all).not.toContain(value)
+  })
+
+  it('strips bare secret assignments (spawned command lines / env dumps)', () => {
+    expect(redactSecrets(`bootstrap -Env refresh_token=${'FAKEfake000bare000refresh'}`)).toBe(
+      'bootstrap -Env refresh_token=<redacted>'
+    )
+    expect(redactSecrets('password=FAKEfake000bare000password')).toBe('password=<redacted>')
+    // Ordinary diagnostics text with an ambiguous name stays readable.
+    expect(redactSecrets('Setup exited with code=1')).toBe('Setup exited with code=1')
+  })
+
+  it('redacts a quoted session-token field without eating neighbouring fields', () => {
+    const json = '{"x-hermes-session-token":"FAKEfake000quoted000session","gateway_state":"running"}'
+    const out = redactSecrets(json)
+    expect(out).not.toContain('FAKEfake000quoted000session')
+    expect(out).toContain('"gateway_state":"running"')
+    expect(() => JSON.parse(out)).not.toThrow()
+  })
+
+  it('is idempotent for every migrated pattern too', () => {
+    for (const raw of Object.values(FAKE_SECRETS)) {
+      const once = redactSecrets(raw)
+      expect(redactSecrets(once)).toBe(once)
+    }
+  })
+
   it('preserves ordinary version/status/error text', () => {
     const text = 'version 0.19.1 overall=degraded gateway_state=running active_agents=2'
     expect(redactSecrets(text)).toBe(text)

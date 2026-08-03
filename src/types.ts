@@ -61,10 +61,10 @@ export type ScheduledTask = {
 export type TaskEditValues = { name: string; prompt: string; schedule: string }
 
 export type TaskActions = {
-  onToggle: (task: ScheduledTask) => void
-  onTrigger: (task: ScheduledTask) => void
+  onToggle: (task: ScheduledTask) => Promise<void>
+  onTrigger: (task: ScheduledTask) => Promise<void>
   onEdit: (task: ScheduledTask, updates: TaskEditValues) => Promise<void>
-  onDelete: (task: ScheduledTask) => void
+  onDelete: (task: ScheduledTask) => Promise<void>
 }
 
 export type Skill = {

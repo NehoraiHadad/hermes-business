@@ -192,3 +192,48 @@
   color: var(--green);
   background: var(--green-soft);
 }
+
+/* Honest empty/error states for a failed or genuinely-empty authoritative list read.
+   Shared by TasksScreen and ConnectionsScreen so a failed read and a proven-empty
+   list never look identical, and neither reads as a confident healthy default. */
+.list-state {
+  display: grid;
+  max-width: 360px;
+  margin: 0 auto;
+  padding: 40px 20px;
+  place-items: center;
+  color: var(--muted);
+  text-align: center;
+}
+
+.list-state__icon {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  margin-bottom: 10px;
+  place-items: center;
+  color: #8c877d;
+  background: #efede8;
+  border-radius: 12px;
+}
+
+.list-state__icon--error {
+  color: var(--amber);
+  background: var(--amber-soft);
+}
+
+.list-state strong {
+  color: var(--ink);
+  font-size: 13.5px;
+}
+
+.list-state p {
+  max-width: 320px;
+  margin: 6px 0 0;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.list-state .outline-button {
+  margin-top: 14px;
+}

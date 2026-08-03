@@ -1,4 +1,4 @@
-import { CheckCircle2, ChevronLeft, MessageCircle, ShieldAlert, ShieldCheck } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, ChevronLeft, MessageCircle, ShieldAlert, ShieldCheck } from 'lucide-react'
 import type { Connection } from '../../types'
 import { ServiceIcon } from '../ui/ServiceIcon'
 
@@ -40,10 +40,15 @@ function ConnectionRow({
 
 export function ConnectionsScreen({
   connections,
-  onConnect
+  onConnect,
+  loadError
 }: {
   connections: Connection[]
   onConnect: (connection: Connection) => void
+  // The last authoritative readiness read failed — `connections` still reflects the
+  // prior/default state, not a proven-current one. Must never render as "נדרשת הגדרה"
+  // (a confident negative) when we simply couldn't check; see useHermesData.
+  loadError?: boolean
 }) {
   return (
     <main className="content-screen">
@@ -67,11 +72,21 @@ export function ConnectionsScreen({
           <h3>חיבורים זמינים</h3>
           <span>בחר את השירות שמתאים לעסק; אפשר לנתק כל חיבור בכל רגע</span>
         </div>
-        <div className="connections-list">
-          {connections.map(connection => (
-            <ConnectionRow key={connection.id} connection={connection} onConnect={onConnect} />
-          ))}
-        </div>
+        {loadError ? (
+          <div className="list-state list-state--error">
+            <span className="list-state__icon list-state__icon--error">
+              <AlertTriangle size={20} />
+            </span>
+            <strong>לא הצלחנו לבדוק את מצב החיבורים</strong>
+            <p>ייתכן שהחיבור ל־Hermes נקטע. רעננו את החלון, או בדקו את מצב המערכת במסך התמיכה.</p>
+          </div>
+        ) : (
+          <div className="connections-list">
+            {connections.map(connection => (
+              <ConnectionRow key={connection.id} connection={connection} onConnect={onConnect} />
+            ))}
+          </div>
+        )}
       </section>
 
       <div className="privacy-note">

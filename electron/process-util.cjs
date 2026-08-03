@@ -1,5 +1,5 @@
 const { spawn, spawnSync } = require('node:child_process')
-const { redact } = require('./security.cjs')
+const { redactSecrets } = require('./redact.cjs')
 const { rememberLog } = require('./logs.cjs')
 const { hermesHome } = require('./paths.cjs')
 
@@ -37,7 +37,7 @@ function runCaptured(command, args, timeout = 120_000, extraEnv = {}) {
     child.on('exit', code => {
       clearTimeout(timer)
       if (code === 0) resolve({ stdout, stderr })
-      else reject(new Error(redact(stderr || stdout || `Setup exited with code ${code}`)))
+      else reject(new Error(redactSecrets(stderr || stdout || `Setup exited with code ${code}`)))
     })
   })
 }

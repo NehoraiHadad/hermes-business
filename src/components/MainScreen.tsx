@@ -45,10 +45,12 @@ export function MainScreen({
   onOpenConnection: (connection: Connection) => void
 }) {
   if (screen === 'tasks') {
-    return <TasksScreen tasks={tasks} onAdd={onAddTask} actions={taskActions} />
+    return <TasksScreen tasks={tasks} onAdd={onAddTask} actions={taskActions} loadError={loadErrors?.tasks} />
   }
   if (screen === 'skills') return <SkillsScreen skills={skills} onAdd={onAddSkill} />
-  if (screen === 'connections') return <ConnectionsScreen connections={connections} onConnect={onOpenConnection} />
+  if (screen === 'connections') {
+    return <ConnectionsScreen connections={connections} onConnect={onOpenConnection} loadError={loadErrors?.connections} />
+  }
   if (screen === 'support') {
     return (
       <SupportScreen

@@ -1,23 +1,30 @@
 import { useCallback, useState } from 'react'
 import { interpretHealthResponse, withTimeout } from '../lib/health'
 import { hermesClient, type HermesUpdateStatus } from '../lib/hermes-client'
+import type { ToastSeverity } from '../lib/toast'
 import { runHermesUpdate } from '../lib/update-flow'
 
 type OpenFull = (surface: 'desktop' | 'dashboard' | 'logs' | 'settings') => void
 
+// How long a restart may take before we stop claiming the connection came back.
+// Generous enough for a cold gateway start, short enough to stay a UI action.
+const RESTART_RECONNECT_TIMEOUT_MS = 30_000
+
 // Support-and-diagnostics actions: health check, restart, logs, safe diagnostic
 // bundle, and the two-stage update (check + apply). The apply path delegates to
-// the tested runHermesUpdate flow.
+// the tested runHermesUpdate flow. Failure branches pass severity 'error' so the
+// toast queue (see useToasts) lets them linger longer than a routine confirmation.
 export function useSupportActions({
   setRuntime,
   setToast,
   openFull
 }: {
   setRuntime: (runtime: HermesRuntime) => void
-  setToast: (toast: string) => void
+  setToast: (toast: string, severity?: ToastSeverity) => void
   openFull: OpenFull
 }) {
   const [checking, setChecking] = useState(false)
+  const [restarting, setRestarting] = useState(false)
   const [updating, setUpdating] = useState(false)
   const [updateStatus, setUpdateStatus] = useState<HermesUpdateStatus | null>(null)
 
@@ -32,28 +39,59 @@ export function useSupportActions({
       setToast(
         verdict.healthy
           ? 'בדיקת התקינות הושלמה — הכול פועל כרגיל'
-          : `נמצאה בעיה: ${verdict.reason}. אפשר לפתוח Logs או ליצור חבילת אבחון.`
+          : `נמצאה בעיה: ${verdict.reason}. אפשר לפתוח Logs או ליצור חבילת אבחון.`,
+        verdict.healthy ? 'info' : 'error'
       )
     } catch {
-      setToast('בדיקת התקינות לא הושלמה (תקלת תקשורת או פסק זמן) — לא ניתן לאשר תקינות. אפשר לפתוח Logs או ליצור חבילת אבחון.')
+      setToast(
+        'בדיקת התקינות לא הושלמה (תקלת תקשורת או פסק זמן) — לא ניתן לאשר תקינות. אפשר לפתוח Logs או ליצור חבילת אבחון.',
+        'error'
+      )
     } finally {
       setChecking(false)
     }
   }, [setToast])
 
+  // A restart kills the dashboard socket, so the old code's immediate success
+  // toast was a lie: chat stayed dead. Claim success only after the transport is
+  // provably usable again (bounded wait), otherwise say so honestly.
   const onRestart = useCallback(async () => {
-    if (window.hermesDesktop) setRuntime(await window.hermesDesktop.restartRuntime())
-    setToast('Hermes הופעל מחדש')
+    setRestarting(true)
+    try {
+      const runtime = await hermesClient.restartRuntime()
+      setRuntime(runtime)
+      if (!runtime.running) {
+        setToast(runtime.error || 'Hermes לא חזר לפעול לאחר ההפעלה מחדש. אפשר לפתוח Logs או ליצור חבילת אבחון.', 'error')
+        return
+      }
+      const reconnected = await hermesClient.waitForConnection({
+        // Empty means the bridge reported no endpoint — fall back to the URL the
+        // transport already knows rather than waiting on nothing.
+        wsUrl: runtime.wsUrl || undefined,
+        timeoutMs: RESTART_RECONNECT_TIMEOUT_MS
+      })
+      setToast(
+        reconnected
+          ? 'Hermes הופעל מחדש והחיבור חזר'
+          : 'Hermes הופעל מחדש אך החיבור לצ׳אט טרם חזר. נסה שוב בעוד רגע, או פתח Logs.',
+        reconnected ? 'info' : 'error'
+      )
+    } catch (caught) {
+      setToast(caught instanceof Error ? caught.message : 'ההפעלה מחדש של Hermes נכשלה', 'error')
+    } finally {
+      setRestarting(false)
+    }
   }, [setRuntime, setToast])
 
   const onLogs = useCallback(() => openFull('logs'), [openFull])
 
   const onDiagnostics = useCallback(async () => {
-    if (window.hermesDesktop) {
-      const result = await window.hermesDesktop.createDiagnostics()
+    try {
+      const result = await hermesClient.createDiagnostics()
       if (result.ok) setToast(`חבילת האבחון נשמרה: ${result.path}`)
-    } else {
-      setToast('חבילת אבחון בטוחה נוצרה בהצלחה (מצב הדגמה)')
+      else if (!result.canceled) setToast('יצירת חבילת האבחון נכשלה', 'error')
+    } catch (caught) {
+      setToast(caught instanceof Error ? caught.message : 'יצירת חבילת האבחון נכשלה', 'error')
     }
   }, [setToast])
 
@@ -68,7 +106,7 @@ export function useSupportActions({
           : result.message || 'Hermes מעודכן'
       )
     } catch {
-      setToast('לא ניתן לבדוק עדכונים כרגע. לא בוצע שינוי.')
+      setToast('לא ניתן לבדוק עדכונים כרגע. לא בוצע שינוי.', 'error')
     } finally {
       setUpdating(false)
     }
@@ -91,11 +129,22 @@ export function useSupportActions({
           : 'Hermes עודכן ובדיקת התקינות עברה בהצלחה'
       )
     } catch (caught) {
-      setToast(caught instanceof Error ? caught.message : 'העדכון נכשל; המידע של Hermes נשמר')
+      setToast(caught instanceof Error ? caught.message : 'העדכון נכשל; המידע של Hermes נשמר', 'error')
     } finally {
       setUpdating(false)
     }
   }, [setToast])
 
-  return { checking, updating, updateStatus, onHealth, onRestart, onLogs, onDiagnostics, onUpdateCheck, onUpdateApply }
+  return {
+    checking,
+    restarting,
+    updating,
+    updateStatus,
+    onHealth,
+    onRestart,
+    onLogs,
+    onDiagnostics,
+    onUpdateCheck,
+    onUpdateApply
+  }
 }

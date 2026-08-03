@@ -10,7 +10,13 @@ export const FAKE_SECRETS = {
   google: 'AIzaFAKEfake000example000example0',
   telegram: '1234567:FAKEfake000example000bottoken',
   refreshQuery: 'refresh_token=FAKEfake000refresh000value',
-  accessJson: '"access_token":"FAKEfake000access000value"'
+  accessJson: '"access_token":"FAKEfake000access000value"',
+  // Shapes migrated from the deleted security.cjs, which used to be the ONLY
+  // guard on the live runtime-log stream.
+  sessionHeader: 'x-hermes-session-token: FAKEfake000session000header000value',
+  googleRefresh: '1/FAKEfake000google000refresh000token',
+  lowercaseBearer: 'authorization: bearer FAKEfake000lowercase000scheme',
+  clientSecretQuery: 'client_secret=FAKEfake000client000secret000value'
 }
 
 /** Every raw secret value (without its field wrapper) that must not survive. */
@@ -20,7 +26,11 @@ export const FAKE_SECRET_VALUES = [
   'AIzaFAKEfake000example000example0',
   '1234567:FAKEfake000example000bottoken',
   'FAKEfake000refresh000value',
-  'FAKEfake000access000value'
+  'FAKEfake000access000value',
+  'FAKEfake000session000header000value',
+  '1/FAKEfake000google000refresh000token',
+  'FAKEfake000lowercase000scheme',
+  'FAKEfake000client000secret000value'
 ]
 
 /** A synthetic personal email — local part must be stripped, domain kept. */

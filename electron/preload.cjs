@@ -1,43 +1,88 @@
 const { contextBridge, ipcRenderer } = require('electron')
 
+// This preload runs SANDBOXED (see window-create.cjs: `sandbox: true`). In a
+// sandboxed preload Electron replaces `require` with a polyfill that resolves
+// ONLY its own loadable modules (`electron`, `events`, `timers`, `url`) and
+// throws `module not found` for anything else — so every helper below must stay
+// inline in this file. electron/preload.test.ts loads this exact file through the
+// same single-module require contract, which both exercises the helpers and
+// fails loudly if a relative require is ever added here.
+
+// Electron wraps ANY error a `ipcMain.handle` handler throws before the renderer
+// sees it. Verified against the shipped Electron 43 runtime: the main process
+// replies with `error.toString()` and the renderer throws
+//   new Error(`Error invoking remote method '<channel>': <that string>`)
+// so a handler that threw `new Error('העדכון נכשל')` reaches the UI as
+//   "Error invoking remote method 'hermes:update': Error: העדכון נכשל".
+// The main process is where the user-facing Hebrew messages are authored
+// (hermes-update-flow.cjs, hermes-compat.cjs, …) and several renderer consumers
+// render `err.message` verbatim (e.g. src/hooks/useSupportActions.ts). Stripping
+// the wrapper HERE — the single boundary every consumer shares — fixes them all
+// without touching the renderer or changing the bridge surface.
+//
+// The optional inner class prefix covers both `Error: ` and `TypeError: `-style
+// `toString()` output, and stays optional for a handler that threw a non-Error.
+const REMOTE_INVOKE_PREFIX = /^Error invoking remote method '[^']*': (?:(?:[A-Za-z_$][A-Za-z0-9_$]*)?Error: )?/
+
+function stripRemoteInvokePrefix(message) {
+  const text = typeof message === 'string' ? message : String(message == null ? '' : message)
+  const stripped = text.replace(REMOTE_INVOKE_PREFIX, '')
+  // Never turn a message into an empty string: an unhelpful English wrapper is
+  // still better than no message at all.
+  return stripped.trim() ? stripped : text
+}
+
+// Every bridged call goes through here, so no channel can be added later with the
+// mangled-error behaviour. Signatures/return values are unchanged; only the
+// rejection message is normalized.
+async function invoke(channel, ...args) {
+  try {
+    return await ipcRenderer.invoke(channel, ...args)
+  } catch (caught) {
+    const raw = caught instanceof Error ? caught.message : String(caught)
+    const clean = stripRemoteInvokePrefix(raw)
+    if (clean === raw) throw caught
+    throw new Error(clean)
+  }
+}
+
 contextBridge.exposeInMainWorld('hermesDesktop', {
-  getRuntime: () => ipcRenderer.invoke('hermes:runtime'),
-  startRuntime: () => ipcRenderer.invoke('hermes:start'),
-  restartRuntime: () => ipcRenderer.invoke('hermes:restart'),
-  applyUpdate: () => ipcRenderer.invoke('hermes:update'),
-  installHermes: () => ipcRenderer.invoke('hermes:install'),
-  api: (path, init) => ipcRenderer.invoke('hermes:api', path, init),
-  openFull: surface => ipcRenderer.invoke('hermes:open-full', surface),
-  openExternal: url => ipcRenderer.invoke('hermes:open-external', url),
-  chooseFile: filters => ipcRenderer.invoke('hermes:choose-file', filters),
-  chooseFolder: () => ipcRenderer.invoke('hermes:choose-folder'),
-  getCuratorInsights: () => ipcRenderer.invoke('hermes:curator:insights'),
-  getPartnerState: () => ipcRenderer.invoke('hermes:partner:get'),
-  applyPartnerMode: patch => ipcRenderer.invoke('hermes:partner:apply', patch),
-  startGoogleSetup: (clientSecretPath, services) =>
-    ipcRenderer.invoke('hermes:google:start', clientSecretPath, services),
-  finishGoogleSetup: code => ipcRenderer.invoke('hermes:google:finish', code),
-  getGoogleStatus: () => ipcRenderer.invoke('hermes:google:status'),
-  ensureGateway: () => ipcRenderer.invoke('hermes:gateway:ensure'),
-  getWhatsappPolicy: () => ipcRenderer.invoke('hermes:whatsapp-policy:get'),
-  getWhatsappDirectory: () => ipcRenderer.invoke('hermes:whatsapp-directory:get'),
-  setWhatsappPolicy: policy => ipcRenderer.invoke('hermes:whatsapp-policy:set', policy),
-  ensureWhatsappPolicy: () => ipcRenderer.invoke('hermes:whatsapp-policy:ensure'),
-  getWhatsappGuard: () => ipcRenderer.invoke('hermes:whatsapp-policy:guard-status'),
+  getRuntime: () => invoke('hermes:runtime'),
+  startRuntime: () => invoke('hermes:start'),
+  restartRuntime: () => invoke('hermes:restart'),
+  applyUpdate: () => invoke('hermes:update'),
+  installHermes: () => invoke('hermes:install'),
+  api: (path, init) => invoke('hermes:api', path, init),
+  openFull: surface => invoke('hermes:open-full', surface),
+  openExternal: url => invoke('hermes:open-external', url),
+  chooseFile: filters => invoke('hermes:choose-file', filters),
+  chooseFolder: () => invoke('hermes:choose-folder'),
+  getCuratorInsights: () => invoke('hermes:curator:insights'),
+  getPartnerState: () => invoke('hermes:partner:get'),
+  applyPartnerMode: patch => invoke('hermes:partner:apply', patch),
+  startGoogleSetup: clientSecretPath => invoke('hermes:google:start', clientSecretPath),
+  finishGoogleSetup: code => invoke('hermes:google:finish', code),
+  getGoogleStatus: () => invoke('hermes:google:status'),
+  ensureGateway: () => invoke('hermes:gateway:ensure'),
+  getWhatsappPolicy: () => invoke('hermes:whatsapp-policy:get'),
+  getWhatsappDirectory: () => invoke('hermes:whatsapp-directory:get'),
+  setWhatsappPolicy: policy => invoke('hermes:whatsapp-policy:set', policy),
+  ensureWhatsappPolicy: () => invoke('hermes:whatsapp-policy:ensure'),
+  getWhatsappGuard: () => invoke('hermes:whatsapp-policy:guard-status'),
   // Observable guard-activation transaction phase (restarting/verifying/active/failed) so the
   // UI can surface an in-progress gateway restart instead of a bare BLOCKED state.
-  getWhatsappGuardActivation: () => ipcRenderer.invoke('hermes:whatsapp-policy:activation-state'),
-  probeProvider: input => ipcRenderer.invoke('hermes:provider:probe', input),
-  probeCodexGrant: () => ipcRenderer.invoke('hermes:codex:probe'),
-  getProviderEvidence: () => ipcRenderer.invoke('hermes:provider:evidence:get'),
-  recordProviderEvidence: evidence => ipcRenderer.invoke('hermes:provider:evidence:set', evidence),
-  createDiagnostics: () => ipcRenderer.invoke('hermes:diagnostics'),
-  getRecentLogs: () => ipcRenderer.invoke('hermes:logs'),
-  getVersions: () => ipcRenderer.invoke('hermes:versions'),
-  getWindowState: () => ipcRenderer.invoke('assistant:window-state'),
-  setWindowMode: mode => ipcRenderer.invoke('assistant:set-window-mode', mode),
-  setAlwaysOnTop: value => ipcRenderer.invoke('assistant:set-always-on-top', value),
-  hideWindow: () => ipcRenderer.invoke('assistant:hide'),
+  getWhatsappGuardActivation: () => invoke('hermes:whatsapp-policy:activation-state'),
+  probeProvider: input => invoke('hermes:provider:probe', input),
+  probeCodexGrant: () => invoke('hermes:codex:probe'),
+  getProviderEvidence: () => invoke('hermes:provider:evidence:get'),
+  recordProviderEvidence: evidence => invoke('hermes:provider:evidence:set', evidence),
+  createDiagnostics: () => invoke('hermes:diagnostics'),
+  getRecentLogs: () => invoke('hermes:logs'),
+  getVersions: () => invoke('hermes:versions'),
+  getWindowState: () => invoke('assistant:window-state'),
+  setWindowMode: mode => invoke('assistant:set-window-mode', mode),
+  setAlwaysOnTop: value => invoke('assistant:set-always-on-top', value),
+  hideWindow: () => invoke('assistant:hide'),
   onRuntimeLog: callback => {
     const listener = (_event, line) => callback(line)
     ipcRenderer.on('hermes:runtime-log', listener)
