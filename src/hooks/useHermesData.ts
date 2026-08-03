@@ -27,6 +27,54 @@ export function useHermesData() {
   // "could not read" instead of a false-healthy empty list. Reset each refresh.
   const [loadErrors, setLoadErrors] = useState<{ tasks: boolean; connections: boolean }>({ tasks: false, connections: false })
 
+  // Per-slice fetchers (docs/specs/live-refresh.md §5.5, phase 3): each owns exactly
+  // one server-state slice's data AND its own loadErrors flag, and each is safe to
+  // call independently — not just from `refresh` below, but also as the fetcher a
+  // server-state store slice invokes on invalidate()/reconnect/focus/backstop
+  // (wired once in App.tsx via server-state-wiring.ts). Same calls, same fail-closed
+  // loadErrors doctrine as before the split; only the composition changed.
+  const fetchSessions = useCallback(async () => {
+    const nextSessions = await hermesClient.listSessions().catch(() => [])
+    if (!mounted.current) return
+    startTransition(() => setSessions(nextSessions))
+  }, [])
+
+  const fetchSchedule = useCallback(async () => {
+    let failed = false
+    const nextTasks = await hermesClient.listTasks().catch(() => {
+      failed = true
+      return []
+    })
+    if (!mounted.current) return
+    startTransition(() => {
+      setTasks(nextTasks)
+      setLoadErrors(prev => ({ ...prev, tasks: failed }))
+    })
+  }, [])
+
+  const fetchConnections = useCallback(async () => {
+    let failed = false
+    const [messaging, googleStatus] = await Promise.all([
+      hermesClient.listMessagingPlatforms().catch(() => {
+        failed = true
+        return []
+      }),
+      hermesClient.getGoogleStatus().catch(() => {
+        failed = true
+        return { available: false, authenticated: false }
+      })
+    ])
+    if (!mounted.current) return
+    startTransition(() => {
+      setConnections(hydrateConnectionStates(CONNECTIONS, messaging, googleStatus.authenticated))
+      setLoadErrors(prev => ({ ...prev, connections: failed }))
+    })
+  }, [])
+
+  // Reusable for existing callers (boot/install/modals) as the full refreshAll: boots
+  // the runtime, then runs every per-slice fetcher above IN PARALLEL alongside the two
+  // reads that have no server-state slice of their own (skills, provider readiness),
+  // exactly as the pre-split monolithic version did.
   const refresh = useCallback(async () => {
     const nextRuntime = await settleRuntimeBoot(() => hermesClient.boot())
     if (!mounted.current) return nextRuntime
@@ -42,24 +90,11 @@ export function useHermesData() {
       return nextRuntime
     }
 
-    // Track which authoritative list reads FAILED so we never render a failed read as
-    // a healthy empty list. Each entry flips its flag in its own catch.
-    const errs = { tasks: false, connections: false }
-    const [nextSessions, nextTasks, nextSkills, messaging, googleStatus, oauthProviders, env] = await Promise.all([
-      hermesClient.listSessions().catch(() => []),
-      hermesClient.listTasks().catch(() => {
-        errs.tasks = true
-        return []
-      }),
+    const [, , nextSkills, , oauthProviders, env] = await Promise.all([
+      fetchSessions(),
+      fetchSchedule(),
       hermesClient.listSkills().catch(() => []),
-      hermesClient.listMessagingPlatforms().catch(() => {
-        errs.connections = true
-        return []
-      }),
-      hermesClient.getGoogleStatus().catch(() => {
-        errs.connections = true
-        return { available: false, authenticated: false }
-      }),
+      fetchConnections(),
       // Official provider sources: a FAILED inspection must stay null (→ unknown),
       // never []/{} — an empty success would be read as proof of "no provider".
       hermesClient.listOAuthProviders().catch(() => null),
@@ -69,17 +104,13 @@ export function useHermesData() {
     ])
     if (!mounted.current) return nextRuntime
     startTransition(() => {
-      setSessions(nextSessions)
-      setTasks(nextTasks)
       setSkills(nextSkills)
-      setConnections(hydrateConnectionStates(CONNECTIONS, messaging, googleStatus.authenticated))
       setProviderStatus(resolveProviderStatus({ runtime: nextRuntime, oauthProviders, env }))
-      setLoadErrors(errs)
     })
     const nextVersions = await hermesClient.getVersions().catch(() => ({}))
     if (mounted.current) setVersions(nextVersions)
     return nextRuntime
-  }, [])
+  }, [fetchSessions, fetchSchedule, fetchConnections])
 
   useEffect(() => {
     mounted.current = true
@@ -126,6 +157,13 @@ export function useHermesData() {
     installError,
     loadErrors,
     ensureInstalled,
-    refresh
+    refresh,
+    // Per-slice fetchers, exposed so App.tsx can register them with the
+    // server-state store (docs/specs/live-refresh.md §5.4) — the store then
+    // drives them from gateway change-events/reconnect/focus/backstop, and
+    // this hook keeps owning the resulting React state either way.
+    fetchSessions,
+    fetchSchedule,
+    fetchConnections
   }
 }

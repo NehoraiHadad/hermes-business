@@ -184,6 +184,7 @@
     "win": {
       "icon": "build/icon.ico",
       "signExecutable": false,
+      "artifactName": "Tachles-Setup-${version}.exe",
       "target": [
         {
           "target": "nsis",

@@ -8,11 +8,11 @@ const candidate = { installer_sha256: 'a'.repeat(64), build_nonce: NONCE, releas
 describe('selectVersionedInstaller', () => {
   it('ignores stale and thin-bootstrap executables', () => {
     const result = selectVersionedInstaller([
-      "תכל'ס Setup 0.3.3.exe",
+      'Tachles-Setup-0.3.3.exe',
       'Hermes-Business-Web-Setup-0.4.0-alpha.1.exe',
-      "תכל'ס Setup 0.4.0-alpha.1.exe"
+      'Tachles-Setup-0.4.0-alpha.1.exe'
     ], '0.4.0-alpha.1')
-    expect(result).toEqual({ ok: true, name: "תכל'ס Setup 0.4.0-alpha.1.exe", errors: [] })
+    expect(result).toEqual({ ok: true, name: 'Tachles-Setup-0.4.0-alpha.1.exe', errors: [] })
   })
 
   it('fails closed when the current version is missing or ambiguous', () => {

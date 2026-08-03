@@ -54,7 +54,7 @@ MVP/Alpha מקומי ל־Windows (מוכן לפיילוט, אך עדיין לא 
 ### המוצר המלא
 
 ```text
-release/תכל'ס Setup <גרסה>.exe
+release/Tachles-Setup-<גרסה>.exe
 ```
 
 - build מקומי של Alpha, **לא חתום ולא artifact הפצה** — שם הקובץ נושא את גרסת

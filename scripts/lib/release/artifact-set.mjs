@@ -1,23 +1,32 @@
 // Pure verifier for the EXACT expected release artifact set.
 //
-// electron-builder's NSIS target emits one installer named by the default
-// artifactName template `${productName} Setup ${version}.exe`. A release must ship
-// EXACTLY that one installer for the current version — no extra .exe (a stale
-// same-name-different-version binary, a leftover from another target, an unrelated
-// tool), and no file whose name we cannot parse a version out of. An unexpected or
-// unparseable artifact means the release tree is not the one we think we cut, so
-// the contract fails closed rather than measuring whatever happens to be present.
+// electron-builder's NSIS target is configured with an explicit ASCII
+// `build.win.artifactName` override (`Tachles-Setup-${version}.exe`) — NOT the
+// default `${productName} Setup ${version}.exe` template, which would render the
+// Hebrew `productName` and produce a name GitHub Releases silently normalizes
+// (docs/specs/versioning.md D3). A release must ship EXACTLY that one installer
+// for the current version — no extra .exe (a stale same-name-different-version
+// binary, a leftover from another target, an unrelated tool), and no file whose
+// name we cannot parse a version out of. An unexpected or unparseable artifact
+// means the release tree is not the one we think we cut, so the contract fails
+// closed rather than measuring whatever happens to be present.
 
 import { versionFromInstallerName } from './checksums.mjs'
 
-/** The single installer basename electron-builder is expected to emit. */
-export function expectedInstallerName(productName, version) {
-  return `${productName} Setup ${version}.exe`
+/**
+ * The single installer basename electron-builder is expected to emit. Fixed
+ * ASCII template — does NOT depend on productName (see D3). The parameter is
+ * kept for call-site compatibility / signature stability but is intentionally
+ * unused.
+ */
+export function expectedInstallerName(_productName, version) {
+  return `Tachles-Setup-${version}.exe`
 }
 
 /**
  * Verify the measured installer set against the expected one.
- *   productName : build.productName (may be non-ASCII, e.g. Hebrew)
+ *   productName : build.productName (unused by the expected-name template; kept
+ *                 for call-site compatibility, see expectedInstallerName)
  *   version     : package.json version
  *   installers  : [{ name, version? }]  (measured from release/)
  * Returns { ok, errors[], expected }. Fails closed on: no installer, more than
@@ -27,8 +36,8 @@ export function expectedInstallerName(productName, version) {
 export function verifyArtifactSet({ productName, version, installers = [] } = {}) {
   const errors = []
   const expected = expectedInstallerName(productName, version)
-  if (!productName || !version) {
-    errors.push('cannot derive expected artifact name: missing productName/version')
+  if (!version) {
+    errors.push('cannot derive expected artifact name: missing version')
     return { ok: false, errors, expected }
   }
   if (installers.length === 0) {

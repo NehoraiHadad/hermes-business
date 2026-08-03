@@ -732,7 +732,7 @@ tokens, raw logs, שיחות, מיילים, קבצי עסק או פרטי לקו
 הזעיר כולל bootstrap, Plugin ו־Skill; Hermes עצמו יורד מה־release הרשמי,
 וה־Companion יורד לפי manifest חיצוני עם גרסה, URL ו־SHA-256.
 
-ה־artifact שנבנה והותקן מקומית הוא `release/תכל'ס Setup <גרסה>.exe` — build
+ה־artifact שנבנה והותקן מקומית הוא `release/Tachles-Setup-<גרסה>.exe` — build
 מקומי של Alpha, **לא חתום ולא artifact הפצה**; הגרסה (`0.3.x`) אינה מקובעת בפרוזה
 כדי שלא תוצג כ"סופית" או כניתנת־להפצה. הגודל וה־SHA-256 המדויקים משתנים בכל build
 ולכן אינם משוכפלים בפרוזה; מקור האמת הוא

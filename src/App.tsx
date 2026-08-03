@@ -13,6 +13,7 @@ import { useTaskActions } from './hooks/useTaskActions'
 import { useToasts } from './hooks/useToasts'
 import { hermesClient } from './lib/hermes-client'
 import { verifyBusinessContextPersisted } from './lib/business-context'
+import { initServerStateWiring } from './lib/server-state-wiring'
 import type { Connection, Screen } from './types'
 
 type FullSurface = 'desktop' | 'dashboard' | 'logs' | 'settings'
@@ -80,6 +81,21 @@ export default function App() {
       alive = false
     }
   }, [gate, data.runtime])
+  // Live-refresh wiring (docs/specs/live-refresh.md §5.4): initialized once the
+  // client has booted (data.runtime is set), registering useHermesData's own
+  // per-slice fetchers so the module-level server-state store drives the SAME
+  // React state useHermesData already owns. initServerStateWiring guards its own
+  // double-init, so a later re-run of this effect (e.g. a runtime refresh after
+  // install/restart) is a safe no-op.
+  useEffect(() => {
+    if (data.runtime === null) return
+    initServerStateWiring({
+      sessions: data.fetchSessions,
+      schedule: data.fetchSchedule,
+      connections: data.fetchConnections
+    })
+  }, [data.runtime, data.fetchSessions, data.fetchSchedule, data.fetchConnections])
+
   const windowControls = useAssistantWindow(showOnboarding)
   const chat = useChat({ setScreen, setToast })
 
