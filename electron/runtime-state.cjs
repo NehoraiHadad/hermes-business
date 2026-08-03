@@ -44,6 +44,11 @@ let runtimeState = {
 const getRuntimeState = () => runtimeState
 /** Merge a partial into the runtime state and return the new snapshot. */
 const patchRuntimeState = partial => {
+  // Every runtime failure flows through this single owner, so recording here
+  // gives the diagnostics error journal full coverage with no per-site wiring.
+  if (partial && partial.error) {
+    require('./error-journal.cjs').recordAppError('runtime', partial.error)
+  }
   runtimeState = { ...runtimeState, ...partial }
   return runtimeState
 }

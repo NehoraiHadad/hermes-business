@@ -21,6 +21,20 @@ const { recordQaNamespaceApplied } = require('./qa-diagnostics.cjs')
 // dedicated module (runtime, windows, ipc, google-setup, plugin-install,
 // diagnostics). Behaviour and security settings match the original single file.
 
+// Last-resort main-process failure capture for the diagnostics bundle.
+// uncaughtExceptionMonitor observes WITHOUT changing crash behaviour (a plain
+// 'uncaughtException' listener would suppress the default failure path). For
+// rejections there is no monitor variant; the listener records and logs, which
+// replaces Electron's default console warning with an equivalent redacted line.
+const { recordAppError } = require('./error-journal.cjs')
+process.on('uncaughtExceptionMonitor', error => {
+  recordAppError('uncaught', error)
+})
+process.on('unhandledRejection', reason => {
+  recordAppError('unhandled-rejection', reason)
+  rememberLog(`Unhandled rejection: ${reason?.message || reason}`)
+})
+
 // ── Automated-QA isolation (main-process only, fail-closed) ──────────────────
 // When the QA sentinel is present the packaged app MUST run in its own Electron
 // userData + single-instance namespace, rooted UNDER the validated throwaway

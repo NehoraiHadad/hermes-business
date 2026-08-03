@@ -51,9 +51,38 @@ function poisonedInputs() {
         }
       }
     },
-    runtimeState: { installed: true, running: true, starting: false, mode: 'business', error: PERSONAL_PATHS.windows },
+    runtimeState: {
+      installed: true,
+      running: true,
+      starting: false,
+      mode: 'business',
+      version: '0.19.1',
+      compatible: true,
+      compatRange: '>=0.19.0 <0.20.0',
+      error: PERSONAL_PATHS.windows
+    },
     createdAt: '2026-08-01T00:00:00.000Z',
-    platform: { type: 'Windows_NT', release: '10.0.26100', arch: 'x64' }
+    platform: { type: 'Windows_NT', release: '10.0.26100', arch: 'x64' },
+    // Poisoned optional facts: unknown keys must be dropped, strings coerced.
+    guard: {
+      pluginLoaded: true,
+      enforcing: true,
+      mode: 'read_only',
+      activationPhase: 'active',
+      raw_policy_file: PERSONAL_PATHS.posixHome, // non-allow-listed — dropped
+      chats: [BUSINESS_MARKER] // non-allow-listed — dropped
+    },
+    updateJournal: {
+      phase: 'verify',
+      failures: [{ error: FAKE_SECRETS.bearer }, { error: BUSINESS_MARKER }], // only the COUNT survives
+      backupPath: PERSONAL_PATHS.windows // non-allow-listed — dropped
+    },
+    partner: { mode: 'partner', sandbox: 'guard', token: FAKE_SECRETS.telegram }, // token dropped
+    recentErrors: [
+      { at: '2026-08-01T00:00:00.000Z', source: 'runtime', message: `key ${FAKE_SECRETS.openai} rejected` },
+      { at: '2026-08-01T00:01:00.000Z', source: 'uncaught', message: 'boom', extra: BUSINESS_MARKER } // extra dropped
+    ],
+    uptimeSeconds: 1234.9
   }
 }
 
@@ -97,5 +126,58 @@ describe('diagnostics allow-list + redaction (end-to-end payload)', () => {
     expect(parsed.status.nous_session_valid).toBe('<redacted>@shop.example')
     expect(parsed.runtime.error_present).toBe(true)
     expect(parsed.platform.release).toBe('10.0.26100')
+  })
+
+  it('carries the runtime error TEXT, redacted — not just a boolean', () => {
+    const parsed = JSON.parse(payload)
+    expect(parsed.runtime.error).toContain('<redacted>')
+    expect(parsed.runtime.error).not.toContain(PERSONAL_USERNAME)
+    expect(parsed.runtime.version).toBe('0.19.1')
+    expect(parsed.runtime.compat_range).toBe('>=0.19.0 <0.20.0')
+    expect(parsed.uptime_seconds).toBe(1235)
+  })
+
+  it('projects guard/update-journal/partner to enums and counters only', () => {
+    const parsed = JSON.parse(payload)
+    expect(parsed.whatsapp_guard).toEqual({
+      plugin_loaded: true,
+      enforcing: true,
+      mode: 'read_only',
+      activation_phase: 'active'
+    })
+    expect(parsed.update_journal).toEqual({ present: true, phase: 'verify', failures: 2 })
+    expect(parsed.partner).toEqual({ mode: 'partner', sandbox: 'guard' })
+    // Poisoned extras (paths, chats, tokens, failure details) never survive.
+    expect(payload).not.toContain('raw_policy_file')
+    expect(payload).not.toContain('backupPath')
+    expect('token' in parsed.partner).toBe(false)
+  })
+
+  it('projects the app-error timeline with redaction and no extra keys', () => {
+    const parsed = JSON.parse(payload)
+    expect(parsed.recent_errors.length).toBe(2)
+    expect(parsed.recent_errors[0]).toEqual({
+      at: '2026-08-01T00:00:00.000Z',
+      source: 'runtime',
+      message: 'key <redacted> rejected'
+    })
+    expect(Object.keys(parsed.recent_errors[1]).sort()).toEqual(['at', 'message', 'source'])
+  })
+
+  it('reports absent optional facts as honest nulls/empties, never fabricated', () => {
+    const minimal = buildManifest({
+      versions: {},
+      health: null,
+      status: null,
+      runtimeState: { installed: false, running: false, starting: false, mode: 'live', error: null },
+      createdAt: 'now',
+      platform: {}
+    })
+    expect(minimal.whatsapp_guard).toBeNull()
+    expect(minimal.update_journal).toEqual({ present: false, phase: null, failures: 0 })
+    expect(minimal.partner).toBeNull()
+    expect(minimal.recent_errors).toEqual([])
+    expect(minimal.runtime.error).toBeNull()
+    expect(minimal.uptime_seconds).toBeNull()
   })
 })

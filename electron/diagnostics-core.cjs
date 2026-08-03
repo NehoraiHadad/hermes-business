@@ -18,7 +18,32 @@ function serializeDiagnostics(manifest) {
 // chat/message/business content or secret carried on an unknown field is
 // structurally dropped — it can never appear in the manifest. `createdAt` and
 // `platform` are injected so callers/tests control them deterministically.
-function buildManifest({ versions, health, status, runtimeState, createdAt, platform }) {
+const MAX_ERROR_TEXT = 500
+const MAX_RECENT_ERRORS = 50
+
+// Coerce one app-error journal entry to typed scalars (the journal already
+// redacts at ingestion; the serialize chokepoint re-redacts anyway).
+function safeErrorEntry(entry) {
+  return {
+    at: typeof entry?.at === 'string' ? entry.at : null,
+    source: typeof entry?.source === 'string' ? entry.source.slice(0, 40) : null,
+    message: typeof entry?.message === 'string' ? entry.message.slice(0, 300) : null
+  }
+}
+
+function buildManifest({
+  versions,
+  health,
+  status,
+  runtimeState,
+  createdAt,
+  platform,
+  guard,
+  updateJournal,
+  partner,
+  recentErrors,
+  uptimeSeconds
+}) {
   const safeHealth = health
     ? {
         ok: Boolean(health.ok),
@@ -57,6 +82,35 @@ function buildManifest({ versions, health, status, runtimeState, createdAt, plat
       }
     : null
 
+  // Live messaging-guard proof, projected to enums/booleans. null means "no
+  // proof was obtainable" — never fabricated, mirroring the UI's fail-closed
+  // reading of the same source.
+  const safeGuard = guard
+    ? {
+        plugin_loaded: Boolean(guard.pluginLoaded ?? guard.plugin_loaded),
+        enforcing: Boolean(guard.enforcing),
+        mode: typeof guard.mode === 'string' ? guard.mode : null,
+        activation_phase: typeof guard.activationPhase === 'string' ? guard.activationPhase : null
+      }
+    : null
+
+  // An incomplete-update journal is one of the most valuable single facts for
+  // support: phase + failure count, never paths or command output.
+  const safeUpdateJournal = updateJournal
+    ? {
+        present: true,
+        phase: typeof updateJournal.phase === 'string' ? updateJournal.phase : null,
+        failures: Array.isArray(updateJournal.failures) ? updateJournal.failures.length : 0
+      }
+    : { present: false, phase: null, failures: 0 }
+
+  const safePartner = partner
+    ? {
+        mode: typeof partner.mode === 'string' ? partner.mode : null,
+        sandbox: typeof partner.sandbox === 'string' ? partner.sandbox : null
+      }
+    : null
+
   return {
     created_at: createdAt,
     privacy:
@@ -65,14 +119,29 @@ function buildManifest({ versions, health, status, runtimeState, createdAt, plat
       'that survived the allow-list is stripped to <redacted>.',
     platform,
     versions,
+    uptime_seconds: Number.isFinite(uptimeSeconds) ? Math.round(uptimeSeconds) : null,
     runtime: {
       installed: runtimeState.installed,
       running: runtimeState.running,
       starting: runtimeState.starting,
       mode: runtimeState.mode,
       isolated: Boolean(runtimeState.isolated),
-      error_present: Boolean(runtimeState.error)
+      version: typeof runtimeState.version === 'string' ? runtimeState.version : null,
+      compatible: Boolean(runtimeState.compatible),
+      compat_range: typeof runtimeState.compatRange === 'string' ? runtimeState.compatRange : null,
+      error_present: Boolean(runtimeState.error),
+      // The single most-requested support fact: the actual failure text. App-
+      // generated vocabulary, redacted here AND by the serialize chokepoint.
+      error: runtimeState.error ? String(runtimeState.error).slice(0, MAX_ERROR_TEXT) : null
     },
+    whatsapp_guard: safeGuard,
+    update_journal: safeUpdateJournal,
+    partner: safePartner,
+    // App-level error journal (redacted at ingestion): timeline of what failed
+    // and in which domain — never raw gateway/runtime logs.
+    recent_errors: Array.isArray(recentErrors)
+      ? recentErrors.slice(-MAX_RECENT_ERRORS).map(safeErrorEntry)
+      : [],
     health: safeHealth,
     status: safeStatus
   }

@@ -34,7 +34,11 @@ const EMAIL =
 // the `<redacted>` placeholder likewise contains no separator, keeping the pass
 // idempotent. The POSIX lookbehind stops URL segments like `site.com/home/x` from
 // being mistaken for a `/home/<user>` path.
-const WINDOWS_USER_PATH = /([A-Za-z]:[\\/]Users[\\/])([^\\/:*?"<>|\r\n]+)/gi
+// The Windows separator is `[\\/]+` (one or MORE): a JSON-serialized path
+// (`C:\\Users\\jane`) carries doubled backslashes, and this redactor runs over
+// already-stringified payloads (diagnostics serialize chokepoint) — a single-
+// separator pattern silently missed those.
+const WINDOWS_USER_PATH = /([A-Za-z]:[\\/]+Users[\\/]+)([^\\/:*?"<>|\r\n]+)/gi
 const POSIX_USER_PATH = /(?<![\w.-])(\/(?:home|Users)\/)([^/\0\r\n"'\\]+)/g
 
 // Credentials carried in a query string, e.g. `...&client_secret=…`. `code` and

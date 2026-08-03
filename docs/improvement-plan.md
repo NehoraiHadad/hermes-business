@@ -105,3 +105,26 @@ plugins+shared). העיקרון: הליבות הטהורות מצוינות; ה�
   חדש ב-renderer שובר CI ולא נכשל בזמן ריצה.
 - ✅ עותק ה-`isUnder` השלישי ב-`runtime-mode.cjs` אוחד על `path-containment.cjs`
   (עטיפת resolve-first); נותרה מימוש containment יחיד ב-main.
+- ✅ דיוק אבחון (2026-08-03): חבילת האבחון נושאת עכשיו את **טקסט** שגיאת
+  ה-runtime (redacted, לא רק boolean), יומן שגיאות-אפליקציה מובנה
+  (`error-journal.cjs` — ring redacted-at-ingestion, מוזן אוטומטית מכל
+  `patchRuntimeState({error})` ומ-`uncaughtExceptionMonitor`/`unhandledRejection`),
+  מצב guard חי + שלב activation, מצב journal של עדכון (נוכחות/שלב/מונה כשלים),
+  מצב partner (enums), ‏uptime וגרסת/תאימות runtime. הכול הקרנת allow-list
+  קשיחה — לוגים גולמיים נשארים בחוץ בכוונה (עלולים לשאת תוכן שיחות).
+
+## רשימת המשך-דרך (roadmap, לפי ערך למוצר)
+
+1. **נראוּת השותף** — פיד "מה השותף עשה בשבילך": ‏check-ins שרצו, ‏insights של
+   ה-curator, ‏sessions שנוצרו ברקע מ-cron/ערוצים — במסך הבית. זה מה שהופך
+   "סוכן על המכונה" ל"שותף לעסק" בעיני בעל העסק. (בקשת המשתמש, 2026-08-03.)
+2. **מודל רענון server-state** — מונע-אירועים דרך `hermesClient.onEvent` הקיים
+   (refetch על אירועי session/cron, על reconnect ועל focus; ‏polling עדין רק
+   כ-fallback). משלים את 1 — בלי זה הפיד לא חי.
+3. **תשתית בדיקות קומפוננטות** — ‏vitest + ‏jsdom ל-`*.test.tsx` + ‏Testing
+   Library; להתחיל מ-Modal (focus-trap), ‏toasts, שער ה-onboarding, ‏ErrorBoundary.
+4. **שערי הפצה** (כשמפיצים בפועל): ‏code signing (SmartScreen מופעל רק על קבצים
+   שהורדו — לכן מקומית לא רואים אזהרה), ‏manifest ב-GitHub Releases (כתובות
+   קבועות, חינם, immutable), ‏Google OAuth — ‏per-עסק credentials זו הארכיטקטורה
+   הנכונה ל-local-first; ‏verification נדרש רק לאפליקציה מרכזית מרובת-עסקים.
+5. ‏telegram evidence — ‏round-trip חי (דורש אישור משתמש — שולח הודעות אמיתיות).

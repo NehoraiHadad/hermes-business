@@ -36,6 +36,15 @@ describe('redactPaths', () => {
     expect(redactPaths(err)).not.toContain(PERSONAL_USERNAME)
   })
 
+  it('redacts JSON-serialized Windows paths (doubled backslashes) — the diagnostics chokepoint runs over stringified payloads', () => {
+    const serialized = JSON.stringify({ error: 'C:\\Users\\testuser\\AppData\\Roaming\\Hermes\\config.json' })
+    const redacted = redactPaths(serialized)
+    expect(redacted).not.toContain(PERSONAL_USERNAME)
+    expect(redacted).toContain('<redacted>')
+    // Still valid JSON after redaction (the placeholder has no separators/quotes).
+    expect(() => JSON.parse(redacted)).not.toThrow()
+  })
+
   it('does not corrupt ordinary text, URL path segments, or version banners', () => {
     expect(redactPaths('version 0.19.1 gateway_state running arch x64')).toBe('version 0.19.1 gateway_state running arch x64')
     expect(redactPaths('https://status.example.com/home/dashboard')).toBe('https://status.example.com/home/dashboard')
