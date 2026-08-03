@@ -14,10 +14,12 @@ describe('stripDemoFixtures production boundary', () => {
     const out = stripDemoFixtures(false).load(posix)
     expect(out).toContain('createDemoBackend')
     expect(out).toContain('throw new Error')
-    // None of the real fixture surface may survive into the stub.
+    // None of the real fixture surface may survive into the stub — RPC, REST, or the
+    // desktop-bridge fixtures the facade swaps in for demo mode.
     expect(out).not.toContain('DEMO_SESSIONS')
     expect(out).not.toContain('tomorrow-calendar')
     expect(out).not.toContain('createDemoApi')
+    expect(out).not.toContain('createDemoDesktop')
   })
 
   it('matches the demo entry regardless of path separator or query suffix', () => {
@@ -33,5 +35,8 @@ describe('stripDemoFixtures production boundary', () => {
   it('never touches non-demo modules', () => {
     expect(stripDemoFixtures(false).load('/repo/src/lib/hermes/rest.ts')).toBeNull()
     expect(stripDemoFixtures(false).load('/repo/src/lib/hermes/demo-data.ts')).toBeNull()
+    // demo-desktop is reached only THROUGH the stubbed entry, so it needs no rule of
+    // its own — tree-shaking removes it once nothing imports demo.ts's real body.
+    expect(stripDemoFixtures(false).load('/repo/src/lib/hermes/demo-desktop.ts')).toBeNull()
   })
 })

@@ -1,17 +1,20 @@
 import { useRef, useState } from 'react'
+import { hermesClient } from '../../lib/hermes-client'
 import { pendingFromPath, readBrowserFile, type PendingAttachment } from '../../lib/hermes/attachments'
 
-// Composer attachment state + picking. Desktop uses the native dialog (Hermes
-// reads the returned path directly, since the runtime is loopback-local);
-// browsers/demo fall back to a hidden <input type=file> read as data URLs.
+// Composer attachment state + picking. Where a native OS dialog exists, Hermes reads
+// the returned host path directly (the runtime is loopback-local); everywhere else we
+// fall back to a hidden <input type=file> read as data URLs. This is a CAPABILITY
+// question, not a demo question: `hasNativeFileDialog` is exactly "a real path a
+// local Hermes can open", which browser and fixture sessions cannot produce.
 export function useComposerAttachments(busy: boolean) {
   const [attachments, setAttachments] = useState<PendingAttachment[]>([])
   const fileInput = useRef<HTMLInputElement>(null)
 
   const pickAttachment = async () => {
     if (busy) return
-    if (window.hermesDesktop?.chooseFile) {
-      const chosen = await window.hermesDesktop.chooseFile([])
+    if (hermesClient.hasNativeFileDialog) {
+      const chosen = await hermesClient.chooseFile([]).catch(() => null)
       if (chosen) setAttachments(current => [...current, pendingFromPath(chosen)])
       return
     }

@@ -30,9 +30,7 @@ export function WhatsappPolicyForm({
     let active = true
     ;(async () => {
       try {
-        const policy = hermesClient.demo
-          ? DEFAULT_WHATSAPP_POLICY
-          : (await window.hermesDesktop?.getWhatsappPolicy()) || DEFAULT_WHATSAPP_POLICY
+        const policy = (await hermesClient.getWhatsappPolicy()) || DEFAULT_WHATSAPP_POLICY
         if (!active) return
         setMode(policy.mode)
         setBehavior(policy.behavior || 'monitor')
@@ -58,7 +56,7 @@ export function WhatsappPolicyForm({
     setSaving(true)
     setError('')
     try {
-      if (!hermesClient.demo) await window.hermesDesktop?.setWhatsappPolicy(result.policy)
+      await hermesClient.setWhatsappPolicy(result.policy)
       setSaved(true)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'שמירת המדיניות נכשלה.')
@@ -134,7 +132,7 @@ export function WhatsappPolicyForm({
           </div>
         </>
       ) : null}
-      {error ? <p className="form-error">{error}</p> : null}
+      {error ? <p className="form-error" role="alert">{error}</p> : null}
       <button className="primary-button" disabled={saving} onClick={save}>
         {saving ? <LoaderCircle className="spin" size={16} /> : <Save size={16} />}
         {saved ? ' נשמר' : ' שמור מדיניות'}

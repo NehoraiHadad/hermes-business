@@ -38,7 +38,7 @@ declare global {
     applyPartnerMode: (
       patch: Partial<PartnerSettings>
     ) => Promise<{ settings: PartnerSettings; restarted: boolean; checkin?: { error?: string } }>
-    startGoogleSetup: (clientSecretPath: string, services: string) => Promise<{ ok: boolean; authUrl: string }>
+    startGoogleSetup: (clientSecretPath: string) => Promise<{ ok: boolean; authUrl: string }>
     finishGoogleSetup: (code: string) => Promise<{ ok: boolean }>
     getGoogleStatus: () => Promise<{ available: boolean; authenticated: boolean }>
     ensureGateway: () => Promise<{ ok: boolean; installed: boolean; running?: boolean }>
@@ -51,6 +51,9 @@ declare global {
     // + gateway role). The app's interpretWhatsappGuard() is the fail-closed parser/trust
     // boundary. Returns null when it cannot be positively proven live (→ BLOCKED in the UI).
     getWhatsappGuard: () => Promise<Record<string, unknown> | null>
+    // Observable phase of the guard-ACTIVATION transaction (plugin update → gateway
+    // restart → verify). Null when no transaction has been journalled.
+    getWhatsappGuardActivation: () => Promise<WhatsappGuardActivation | null>
     // Real out-of-band credential probe (main process, no CORS). Verifies a provider
     // Hermes cannot itself validate (Anthropic) against its official endpoint.
     probeProvider?: (input: {
@@ -77,6 +80,20 @@ declare global {
     setAlwaysOnTop: (value: boolean) => Promise<AssistantWindowState>
     hideWindow: () => Promise<AssistantWindowState>
     onRuntimeLog: (callback: (line: string) => void) => () => void
+  }
+
+  // Durable record written by electron/whatsapp-guard-journal.cjs for the guard
+  // activation transaction: 'restarting' → 'verifying' → 'active' | 'failed'. While it
+  // is in-flight or failed, `supersedeNonce` pins the PRE-restart heartbeat so the
+  // status reader fails closed on the old gateway's proof.
+  type WhatsappGuardActivation = {
+    schema: number
+    updatedAt: string
+    status: 'restarting' | 'verifying' | 'active' | 'failed'
+    changed?: boolean
+    supersedeNonce?: string
+    expectedVersion?: string | null
+    reason?: string
   }
 
   type AssistantWindowState = {

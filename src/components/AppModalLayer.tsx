@@ -57,9 +57,7 @@ export function AppModalLayer({
             // to the exact provider+model — persist it so the onboarding gate and restart
             // resume can require FRESH evidence, then refresh authoritative app state.
             const { validation } = await hermesClient.connectProvider(provider, key)
-            if (window.hermesDesktop?.recordProviderEvidence) {
-              await window.hermesDesktop.recordProviderEvidence(validation).catch(() => {})
-            }
+            await hermesClient.recordProviderEvidence(validation).catch(() => {})
             await providerConnected()
           }}
         />

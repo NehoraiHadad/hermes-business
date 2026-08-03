@@ -32,10 +32,11 @@ export function WhatsappCloudConnect({ onConnected }: { onConnected: () => void 
     setBusy(true)
     setError('')
     try {
-      if (!hermesClient.demo) {
-        const safety = await window.hermesDesktop?.ensureWhatsappPolicy()
-        if (!safety?.ok || !safety.enabled) throw new Error('רכיב ההגנה של WhatsApp אינו פעיל.')
-      }
+      // Safety precondition for EVERY mode: no WhatsApp channel may be configured
+      // unless the messaging-policy guard is live. The demo backend satisfies this
+      // through its fixture, so the check is never skipped in shipped code.
+      const safety = await hermesClient.ensureWhatsappPolicy()
+      if (!safety?.ok || !safety.enabled) throw new Error('רכיב ההגנה של WhatsApp אינו פעיל.')
       const verifyToken = createVerifyToken()
       const result = await hermesClient.configureWhatsappCloud({
         ...checked.credentials,
@@ -95,11 +96,11 @@ export function WhatsappCloudConnect({ onConnected }: { onConnected: () => void 
         </div>
         <button
           className="link-button link-button--external"
-          onClick={() => window.hermesDesktop?.openExternal('https://developers.facebook.com/apps/')}
+          onClick={() => void hermesClient.openExternal('https://developers.facebook.com/apps/').catch(() => undefined)}
         >
           פתח את Meta Developers <ExternalLink size={14} />
         </button>
-        {error ? <p className="form-error">{error}</p> : null}
+        {error ? <p className="form-error" role="alert">{error}</p> : null}
         <button className="primary-button" disabled={busy || !publicUrl.trim()} onClick={test}>
           {busy ? <LoaderCircle className="spin" size={16} /> : <CheckCircle2 size={16} />}
           בדוק שוב לאחר הגדרת Meta
@@ -119,11 +120,11 @@ export function WhatsappCloudConnect({ onConnected }: { onConnected: () => void 
       <CloudField label="App Secret" value={appSecret} onChange={setAppSecret} secret />
       <button
         className="link-button link-button--external"
-        onClick={() => window.hermesDesktop?.openExternal('https://developers.facebook.com/apps/')}
+        onClick={() => void hermesClient.openExternal('https://developers.facebook.com/apps/').catch(() => undefined)}
       >
         פתח את Meta Developers <ExternalLink size={14} />
       </button>
-      {error ? <p className="form-error">{error}</p> : null}
+      {error ? <p className="form-error" role="alert">{error}</p> : null}
       <button
         className="primary-button"
         disabled={busy || !phoneNumberId || !accessToken || !appSecret}

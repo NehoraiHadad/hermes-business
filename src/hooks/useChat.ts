@@ -1,15 +1,23 @@
 import { useCallback, useEffect, useState } from 'react'
 import { hermesClient } from '../lib/hermes-client'
 import { handleGatewayEvent, nextTimelineOrder, now } from '../lib/hermes/chat-events'
+import { createReconnectResumeTracker } from '../lib/hermes/chat-resume'
 import { stageAttachments, type PendingAttachment } from '../lib/hermes/attachments'
 import { startSkillSession } from '../lib/hermes/skill-session'
+import type { ToastSeverity } from '../lib/toast'
 import type { Activity, Approval, ChatMessage, ClarifyRequest, Screen, Session } from '../types'
 
 // Owns the live conversation: streaming messages, tool activity, approvals and
 // clarify requests driven by the Hermes event stream, plus the actions that
 // start/resume/submit sessions. The per-event reducer lives in ../lib/hermes/
 // chat-events so this hook stays focused on session lifecycle.
-export function useChat({ setScreen, setToast }: { setScreen: (screen: Screen) => void; setToast: (toast: string) => void }) {
+export function useChat({
+  setScreen,
+  setToast
+}: {
+  setScreen: (screen: Screen) => void
+  setToast: (toast: string, severity?: ToastSeverity) => void
+}) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [activities, setActivities] = useState<Activity[]>([])
   const [approval, setApproval] = useState<Approval | null>(null)
@@ -26,9 +34,30 @@ export function useChat({ setScreen, setToast }: { setScreen: (screen: Screen) =
         setActivities,
         setApproval,
         setClarify,
-        setToast
+        // chat-events only calls this on the 'error' gateway event, so it is
+        // always an error toast — give it the longer, lingering duration.
+        setToast: message => setToast(message, 'error')
       })
     )
+  }, [runtimeSession, setToast])
+
+  // Stream recovery after a reconnect. The transport reconnects on its own and our
+  // onEvent subscription survives, but Hermes binds a session to the CONNECTION it was
+  // created/resumed on and detaches it when that socket drops — so the new socket
+  // delivers nothing for this session until `session.resume` re-binds it. The tracker
+  // (pure, tested in lib/hermes/chat-resume) fires only on an 'open' that FOLLOWS a
+  // drop, so a normal boot never re-resumes. A failed re-bind is surfaced, not hidden:
+  // the turn is provably dead, so we stop claiming to be busy and say so.
+  useEffect(() => {
+    if (!runtimeSession) return
+    const tracker = createReconnectResumeTracker()
+    return hermesClient.onConnectionChange(state => {
+      if (!tracker.observe(state)) return
+      void hermesClient.resumeSession(runtimeSession).catch(() => {
+        setBusy(false)
+        setToast('החיבור ל־Hermes חזר, אך לא ניתן היה לחדש את השיחה. שלח/י הודעה כדי להמשיך.', 'error')
+      })
+    })
   }, [runtimeSession, setToast])
 
   const resetConversation = () => {
@@ -68,7 +97,7 @@ export function useChat({ setScreen, setToast }: { setScreen: (screen: Screen) =
       setMessages([{ id: 'welcome', role: 'assistant', text: 'היי, אני כאן. במה נתחיל?' }])
       resetConversation()
     } catch (error) {
-      setToast(error instanceof Error ? error.message : 'לא ניתן לפתוח שיחה חדשה')
+      setToast(error instanceof Error ? error.message : 'לא ניתן לפתוח שיחה חדשה', 'error')
     } finally {
       setBusy(false)
     }
@@ -108,7 +137,7 @@ export function useChat({ setScreen, setToast }: { setScreen: (screen: Screen) =
       } catch (error) {
         setMessages(current => current.filter(message => message.id !== userId))
         setBusy(false)
-        setToast(error instanceof Error ? error.message : 'שליחת ההודעה נכשלה')
+        setToast(error instanceof Error ? error.message : 'שליחת ההודעה נכשלה', 'error')
         return false
       }
     },
@@ -126,7 +155,6 @@ export function useChat({ setScreen, setToast }: { setScreen: (screen: Screen) =
       await hermesClient.respondApproval(approval.sessionId, choice)
       setApproval(null)
       setToast(choice === 'once' ? 'הפעולה אושרה' : 'הפעולה נדחתה')
-      window.setTimeout(() => setToast(''), 2500)
     },
     [approval, setToast]
   )
@@ -157,7 +185,7 @@ export function useChat({ setScreen, setToast }: { setScreen: (screen: Screen) =
       } catch (error) {
         setMessages(current => current.filter(message => message.id !== userId && message.id !== assistantId))
         setClarify(pending)
-        setToast(error instanceof Error ? error.message : 'שליחת התשובה ל־Hermes נכשלה')
+        setToast(error instanceof Error ? error.message : 'שליחת התשובה ל־Hermes נכשלה', 'error')
       }
     },
     [clarify, setToast]
@@ -188,7 +216,7 @@ export function useChat({ setScreen, setToast }: { setScreen: (screen: Screen) =
         })
       } catch (error) {
         setBusy(false)
-        setToast(error instanceof Error ? error.message : 'שמירת ההיכרות ב־Hermes נכשלה')
+        setToast(error instanceof Error ? error.message : 'שמירת ההיכרות ב־Hermes נכשלה', 'error')
         throw error
       }
     },

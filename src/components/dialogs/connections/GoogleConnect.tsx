@@ -23,15 +23,11 @@ export function GoogleConnect({
   const [error, setError] = useState('')
 
   const start = async () => {
-    if (hermesClient.demo) {
-      setStep(2)
-      return
-    }
     if (!googleFile) return
     setSaving(true)
     setError('')
     try {
-      await window.hermesDesktop!.startGoogleSetup(googleFile, 'all')
+      await hermesClient.startGoogleSetup(googleFile)
       setStep(2)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'לא ניתן להתחיל את החיבור')
@@ -44,7 +40,7 @@ export function GoogleConnect({
     setSaving(true)
     setError('')
     try {
-      if (!hermesClient.demo) await window.hermesDesktop!.finishGoogleSetup(redirectUrl)
+      await hermesClient.finishGoogleSetup(redirectUrl)
       onConnected(connection.id)
       onClose()
     } catch (caught) {
@@ -75,13 +71,10 @@ export function GoogleConnect({
               type="button"
               className="file-picker"
               onClick={async () => {
-                if (hermesClient.demo) setGoogleFile('client_secret_demo.json')
-                else {
-                  const file = await window.hermesDesktop!.chooseFile([
-                    { name: 'Google OAuth JSON', extensions: ['json'] }
-                  ])
-                  if (file) setGoogleFile(file)
-                }
+                const file = await hermesClient
+                  .chooseFile([{ name: 'Google OAuth JSON', extensions: ['json'] }])
+                  .catch(() => null)
+                if (file) setGoogleFile(file)
               }}
             >
               <FileText size={18} />
@@ -91,11 +84,15 @@ export function GoogleConnect({
           <button
             type="button"
             className="link-button link-button--external"
-            onClick={() => window.hermesDesktop?.openExternal('https://console.cloud.google.com/apis/credentials')}
+            onClick={() =>
+              void hermesClient
+                .openExternal('https://console.cloud.google.com/apis/credentials')
+                .catch(() => undefined)
+            }
           >
             איך יוצרים קובץ כזה? <ExternalLink size={14} />
           </button>
-          {error ? <p className="form-error">{error}</p> : null}
+          {error ? <p className="form-error" role="alert">{error}</p> : null}
           <div className="modal__actions">
             <button className="ghost-button" onClick={onClose}>
               ביטול
@@ -124,7 +121,7 @@ export function GoogleConnect({
               placeholder="http://localhost:1/?code=..."
             />
           </label>
-          {error ? <p className="form-error">{error}</p> : null}
+          {error ? <p className="form-error" role="alert">{error}</p> : null}
           <div className="modal__actions">
             <button className="ghost-button" onClick={() => setStep(1)}>
               חזרה

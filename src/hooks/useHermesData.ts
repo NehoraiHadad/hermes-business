@@ -32,9 +32,11 @@ export function useHermesData() {
     if (!mounted.current) return nextRuntime
     setRuntime(nextRuntime)
     setInstallError(nextRuntime.running ? '' : nextRuntime.error || '')
-    if (!nextRuntime.running && !hermesClient.demo) {
+    if (!nextRuntime.running) {
       // Runtime down → we cannot inspect providers OR read any list; fail closed
-      // (unknown provider, and the lists are unread, not empty-healthy).
+      // (unknown provider, and the lists are unread, not empty-healthy). The demo
+      // backend reports a RUNNING runtime, so it takes the normal path; a fixture
+      // session that somehow failed to boot fails closed here too, as it should.
       setProviderStatus(resolveProviderStatus({ runtime: nextRuntime, error: nextRuntime.error }))
       setLoadErrors({ tasks: true, connections: true })
       return nextRuntime
@@ -54,12 +56,10 @@ export function useHermesData() {
         errs.connections = true
         return []
       }),
-      window.hermesDesktop
-        ? window.hermesDesktop.getGoogleStatus().catch(() => {
-            errs.connections = true
-            return { available: false, authenticated: false }
-          })
-        : Promise.resolve({ available: false, authenticated: false }),
+      hermesClient.getGoogleStatus().catch(() => {
+        errs.connections = true
+        return { available: false, authenticated: false }
+      }),
       // Official provider sources: a FAILED inspection must stay null (→ unknown),
       // never []/{} — an empty success would be read as proof of "no provider".
       hermesClient.listOAuthProviders().catch(() => null),
@@ -76,9 +76,7 @@ export function useHermesData() {
       setProviderStatus(resolveProviderStatus({ runtime: nextRuntime, oauthProviders, env }))
       setLoadErrors(errs)
     })
-    const nextVersions = window.hermesDesktop
-      ? await window.hermesDesktop.getVersions().catch(() => ({}))
-      : { hermes: '0.19.0', shell: '0.1.0' }
+    const nextVersions = await hermesClient.getVersions().catch(() => ({}))
     if (mounted.current) setVersions(nextVersions)
     return nextRuntime
   }, [])
@@ -97,8 +95,7 @@ export function useHermesData() {
     setInstalling(true)
     setInstallError('')
     try {
-      if (!window.hermesDesktop) return await refresh()
-      const result = await window.hermesDesktop.installHermes()
+      const result = await hermesClient.installHermes()
       if (!result.ok || !result.installed) throw new Error(`התקנת Hermes נכשלה (קוד ${result.code ?? 'לא ידוע'})`)
       const nextRuntime = await refresh()
       if (!nextRuntime.running) throw new Error(nextRuntime.error || 'Hermes הותקן אך השירות עדיין אינו פועל')

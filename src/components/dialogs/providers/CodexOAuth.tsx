@@ -39,18 +39,16 @@ export function CodexOAuth({
   //     so onboarding stays incomplete and the failure is surfaced in the UI.
   const finish = async () => {
     const { model } = await hermesClient.activateProvider('openai-codex')
-    if (window.hermesDesktop?.recordProviderEvidence) {
-      await window.hermesDesktop
-        .recordProviderEvidence({
-          provider: 'openai-codex',
-          model: model || null,
-          validatedAt: new Date().toISOString(),
-          ok: true,
-          reachable: true,
-          method: 'validate'
-        })
-        .catch(() => {})
-    }
+    await hermesClient
+      .recordProviderEvidence({
+        provider: 'openai-codex',
+        model: model || null,
+        validatedAt: new Date().toISOString(),
+        ok: true,
+        reachable: true,
+        method: 'validate'
+      })
+      .catch(() => {})
     if (!cancelled.current) onConnected()
   }
 
@@ -62,7 +60,7 @@ export function CodexOAuth({
       const next = await hermesClient.startOAuth('openai-codex')
       sessionId.current = next.session_id
       setSession(next)
-      await window.hermesDesktop?.openExternal(next.verification_url)
+      await hermesClient.openExternal(next.verification_url).catch(() => undefined)
       const interval = Math.max(1, next.poll_interval) * 1000
       const deadline = Date.now() + Math.max(1, next.expires_in) * 1000
       let transientFailures = 0
@@ -98,9 +96,9 @@ export function CodexOAuth({
     setError('')
     try {
       // A stored grant is NOT proof it still works — probe it live before minting evidence.
-      // Fail closed if the probe capability is unavailable (never a blind pass).
-      const probe = window.hermesDesktop?.probeCodexGrant
-      const gate = gateExistingCodexGrant(probe ? await probe() : null)
+      // The facade returns null when the probe capability is unavailable, and the gate
+      // fails closed on null (never a blind pass).
+      const gate = gateExistingCodexGrant(await hermesClient.probeCodexGrant())
       if (!gate.allow) {
         // Revoked / expired / unreachable grant → NO evidence, onboarding stays incomplete.
         setError(gate.error)
@@ -121,7 +119,7 @@ export function CodexOAuth({
           <CheckCircle2 size={18} />
           <span>חשבון ChatGPT כבר מחובר ל־Hermes. אין צורך להדביק מפתח API.</span>
         </div>
-        {error ? <p className="form-error">{error}</p> : null}
+        {error ? <p className="form-error" role="alert">{error}</p> : null}
         <button className="primary-button" type="button" disabled={working} onClick={() => void useExisting()}>
           {working ? <LoaderCircle className="spin" size={16} /> : <CheckCircle2 size={16} />}
           השתמש בחיבור הזה
@@ -143,13 +141,13 @@ export function CodexOAuth({
           <button
             type="button"
             className="ghost-button"
-            onClick={() => window.hermesDesktop?.openExternal(session.verification_url)}
+            onClick={() => void hermesClient.openExternal(session.verification_url).catch(() => undefined)}
           >
             <ExternalLink size={16} /> פתח שוב את דף האישור
           </button>
         </div>
       ) : null}
-      {error ? <p className="form-error">{error}</p> : null}
+      {error ? <p className="form-error" role="alert">{error}</p> : null}
       <button className="primary-button" type="button" disabled={working} onClick={() => void begin()}>
         {working ? <LoaderCircle className="spin" size={16} /> : <ExternalLink size={16} />}
         {working ? 'ממתין לאישור בדפדפן…' : 'חבר באמצעות ChatGPT'}

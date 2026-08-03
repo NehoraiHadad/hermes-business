@@ -1,11 +1,12 @@
 import { GraduationCap, Lightbulb, Sparkles, WandSparkles } from 'lucide-react'
 import { useCuratorInsights } from '../../hooks/useCuratorInsights'
+import { hermesClient } from '../../lib/hermes-client'
 import type { Skill } from '../../types'
 
 export function SkillsScreen({ skills, onAdd }: { skills: Skill[]; onAdd: () => void }) {
   const learnedSkill = skills.find(skill => skill.provenance === 'agent')
   // Friendly Curator/learning notifications sourced from Hermes' official
-  // endpoints (never fabricated); empty in demo/browser or when unavailable.
+  // endpoints (never fabricated); empty when the read is unavailable.
   const curatorNotifications = useCuratorInsights(true)
   return (
     <main className="content-screen">
@@ -44,7 +45,7 @@ export function SkillsScreen({ skills, onAdd }: { skills: Skill[]; onAdd: () => 
           </div>
           <button
             className="outline-button outline-button--small"
-            onClick={() => window.hermesDesktop?.openFull('desktop')}
+            onClick={() => void hermesClient.openFullSurface('desktop').catch(() => undefined)}
           >
             הצג ב־Hermes
           </button>

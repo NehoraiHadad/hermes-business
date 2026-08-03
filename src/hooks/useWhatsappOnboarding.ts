@@ -7,13 +7,15 @@ import { allowedUsersForPolicy } from '../lib/whatsapp-policy'
 // Drives the official Hermes QR onboarding REST flow: start → poll until a
 // terminal status → apply (persist + gateway restart). Timers and the pairing
 // id are kept in refs so the effect cleanup can always cancel in-flight polls.
-export function useWhatsappOnboarding(mode: 'bot' | 'self-chat', allowedUsers: string) {
+// The reply allow-list is never taken from the caller: it is derived in start()
+// from the ENFORCED policy, so pairing can only ever apply what the guard allows.
+export function useWhatsappOnboarding(mode: 'bot' | 'self-chat') {
   const [onboarding, setOnboarding] = useState<WhatsappOnboarding | null>(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const timer = useRef<number | null>(null)
   const pairing = useRef<string | null>(null)
-  const appliedAllowedUsers = useRef(allowedUsers)
+  const appliedAllowedUsers = useRef('')
   const pollFailures = useRef(0)
 
   const stopPolling = useCallback(() => {
@@ -50,17 +52,16 @@ export function useWhatsappOnboarding(mode: 'bot' | 'self-chat', allowedUsers: s
     stopPolling()
     pollFailures.current = 0
     try {
-      if (!hermesClient.demo) {
-        const safety = await window.hermesDesktop?.ensureWhatsappPolicy()
-        if (!safety?.ok || !safety.enabled) {
-          throw new Error('רכיב ההגנה של WhatsApp אינו פעיל.')
-        }
-        const policy = await window.hermesDesktop?.getWhatsappPolicy()
-        if (!policy) throw new Error('לא ניתן לקרוא את מדיניות WhatsApp.')
-        appliedAllowedUsers.current = allowedUsersForPolicy(policy)
-      } else {
-        appliedAllowedUsers.current = allowedUsers
+      // Safety precondition, enforced identically in every mode: the messaging-policy
+      // guard must be live before a channel may be paired, and the allow-list comes
+      // from the policy the guard actually enforces — never from the form state.
+      const safety = await hermesClient.ensureWhatsappPolicy()
+      if (!safety?.ok || !safety.enabled) {
+        throw new Error('רכיב ההגנה של WhatsApp אינו פעיל.')
       }
+      const policy = await hermesClient.getWhatsappPolicy()
+      if (!policy) throw new Error('לא ניתן לקרוא את מדיניות WhatsApp.')
+      appliedAllowedUsers.current = allowedUsersForPolicy(policy)
       const started = await hermesClient.startWhatsappOnboarding(
         mode,
         appliedAllowedUsers.current
@@ -73,7 +74,7 @@ export function useWhatsappOnboarding(mode: 'bot' | 'self-chat', allowedUsers: s
     } finally {
       setBusy(false)
     }
-  }, [mode, allowedUsers, poll, stopPolling])
+  }, [mode, poll, stopPolling])
 
   const apply = useCallback(async () => {
     if (!pairing.current) return false
@@ -93,7 +94,7 @@ export function useWhatsappOnboarding(mode: 'bot' | 'self-chat', allowedUsers: s
     } finally {
       setBusy(false)
     }
-  }, [mode, allowedUsers])
+  }, [mode])
 
   const cancel = useCallback(() => {
     stopPolling()

@@ -1,5 +1,6 @@
 import { RefreshCw, Search, UserRound, UsersRound } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
+import { hermesClient } from '../../../lib/hermes-client'
 import type { WhatsappPlatform, WhatsappSource } from '../../../lib/whatsapp-policy'
 
 export function WhatsappSourcePicker({
@@ -20,7 +21,7 @@ export function WhatsappSourcePicker({
   const load = async () => {
     setLoading(true)
     try {
-      setSources((await window.hermesDesktop?.getWhatsappDirectory()) || [])
+      setSources((await hermesClient.getWhatsappDirectory().catch(() => [])) || [])
     } finally {
       setLoading(false)
     }

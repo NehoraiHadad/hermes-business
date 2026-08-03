@@ -1,20 +1,21 @@
 import { useEffect, useState } from 'react'
+import { hermesClient } from '../lib/hermes-client'
 import { deriveCuratorNotifications, type CuratorNotification } from '../lib/hermes/curator'
 
-// Loads Curator/learning insights from the desktop bridge and reshapes them into
-// friendly notifications. Purely additive and best-effort: without a desktop
-// bridge (browser/demo) or on any error it stays empty, so the UI never shows a
-// fabricated "the agent learned…" message.
+// Loads Curator/learning insights through the Hermes facade and reshapes them into
+// friendly notifications. Purely additive and best-effort: when the read fails (no
+// desktop bridge, or Hermes could not answer) it stays empty, so the UI never shows
+// a fabricated "the agent learned…" message.
 export function useCuratorInsights(enabled: boolean): CuratorNotification[] {
   const [notifications, setNotifications] = useState<CuratorNotification[]>([])
 
   useEffect(() => {
-    if (!enabled || !window.hermesDesktop?.getCuratorInsights) {
+    if (!enabled) {
       setNotifications([])
       return
     }
     let active = true
-    window.hermesDesktop
+    hermesClient
       .getCuratorInsights()
       .then(insights => {
         if (active) setNotifications(deriveCuratorNotifications(insights))
