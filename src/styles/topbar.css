@@ -51,6 +51,9 @@
   display: flex;
   gap: 8px;
   align-items: center;
+  /* Physically anchored, not direction-relative: clears the Electron
+     titleBarOverlay window controls (electron/window-create.cjs), which sit on
+     the left regardless of text direction. Keep as a physical offset. */
   margin-left: 130px;
 }
 
@@ -72,23 +75,6 @@
   background: var(--surface-soft);
 }
 
-.outline-button {
-  color: #4c4943;
-  background: #fffefb;
-  border: 1px solid var(--line-strong);
-}
-
-.outline-button:hover {
-  background: #f8f6f0;
-  border-color: #c7c1b4;
-}
-
-.outline-button--small {
-  min-height: 34px;
-  padding: 0 12px;
-  font-size: 12px;
-}
-
 .full-menu-wrap {
   position: relative;
 }
@@ -96,7 +82,7 @@
 .dropdown-menu {
   position: absolute;
   top: calc(100% + 8px);
-  left: 0;
+  inset-inline-end: 0;
   width: 245px;
   padding: 7px;
   background: var(--surface);
@@ -152,6 +138,6 @@
 }
 
 .settings-menu button > svg:last-child:not(:first-child) {
-  margin-right: auto;
+  margin-inline-start: auto;
   color: var(--muted);
 }

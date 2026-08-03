@@ -1,6 +1,6 @@
 .mini-shell .chat-screen {
-  min-height: 0;
-  flex: 1;
+  /* min-height and flex are inherited unchanged from the base .chat-screen rule
+     (chat-shell.css) — only the background gradient differs here. */
   background:
     radial-gradient(circle at 50% 0%, rgba(224, 218, 238, 0.28), transparent 38%),
     var(--bg);
@@ -85,9 +85,9 @@
 }
 
 .floating-toast--mini {
-  right: 12px;
+  inset-inline-start: 12px;
   bottom: 94px;
-  left: 12px;
+  inset-inline-end: 12px;
   width: auto;
   font-size: 10.5px;
 }

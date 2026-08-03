@@ -21,7 +21,7 @@
 }
 
 .activity-row small {
-  padding-right: 6px;
+  padding-inline-start: 6px;
   color: #9a958b;
   border-right: 1px solid var(--line-strong);
 }

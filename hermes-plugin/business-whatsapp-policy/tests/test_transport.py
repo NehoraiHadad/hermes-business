@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from support import FakeAdapter, FakePlatformEntry, TempHomeCase, write_policy
 
 from business_whatsapp_policy.registry import cloud_configured, install_registry_guards
-from business_whatsapp_policy.transport import _guard_standalone, guard_adapter
+from business_whatsapp_policy.transport import guard_adapter, guard_standalone_sender
 
 
 class TransportBlocking(TempHomeCase, unittest.TestCase):
@@ -88,7 +88,7 @@ class TransportBlocking(TempHomeCase, unittest.TestCase):
             calls.append(chat_id)
             return {"success": True}
 
-        guarded = _guard_standalone(original, lambda: self.home)
+        guarded = guard_standalone_sender(original, lambda: self.home)
         write_policy(self.home, "selected_chats", ["15551234567"])
         self.assertIn("error", asyncio.run(guarded({}, "1555123456", "x")))
         self.assertEqual(calls, [])
@@ -104,7 +104,7 @@ class TransportBlocking(TempHomeCase, unittest.TestCase):
             calls.append((chat_id, message))
             return {"success": True}
 
-        guarded = _guard_standalone(original, lambda: self.home)
+        guarded = guard_standalone_sender(original, lambda: self.home)
         write_policy(self.home, "read_only", [])
         blocked = asyncio.run(guarded({}, "15551234567", "scheduled output"))
         self.assertIn("error", blocked)
@@ -121,7 +121,7 @@ class TransportBlocking(TempHomeCase, unittest.TestCase):
             calls.append((chat_id, message))
             return {"success": True}
 
-        guarded = _guard_standalone(original, lambda: self.home)
+        guarded = guard_standalone_sender(original, lambda: self.home)
         write_policy(self.home, "read_only", [])
         self.assertIn("error", guarded({}, "15551234567", "hi"))
         self.assertEqual(calls, [])

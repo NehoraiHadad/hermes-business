@@ -24,38 +24,6 @@
   box-shadow: 0 0 0 3px rgba(66, 161, 114, 0.12);
 }
 
-.profile-button {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  width: 100%;
-  padding: 9px;
-  cursor: pointer;
-  background: transparent;
-  border: 0;
-  border-radius: 9px;
-  text-align: right;
-}
-
-.profile-button:hover {
-  background: rgba(255, 255, 255, 0.55);
-}
-
-.profile-button > span:nth-child(2) {
-  display: grid;
-  flex: 1;
-}
-
-.profile-button strong {
-  font-size: 12.5px;
-}
-
-.profile-button small {
-  margin-top: 2px;
-  color: var(--muted);
-  font-size: 10.5px;
-}
-
 .avatar {
   display: grid;
   width: 32px;

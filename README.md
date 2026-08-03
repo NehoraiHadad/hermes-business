@@ -121,8 +121,8 @@ npm run dev:desktop        # isolated development home + Electron profile
 npm test
 npm run test:contract
 npm run test:evidence       # committed release evidence; part of verify:release
-npm run test:integration:isolated
-npm run test:e2e:app       # packaged app, strict throwaway QA home
+npm run test:e2e:hermes-shared-state
+npm run test:e2e:installed-isolated       # packaged app, strict throwaway QA home
 npm run test:plugin:policy
 npm run verify:plugin
 npm run verify:bootstrap

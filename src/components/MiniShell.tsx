@@ -1,5 +1,6 @@
-import { CheckCircle2 } from 'lucide-react'
+import { AlertCircle, CheckCircle2 } from 'lucide-react'
 import type { ReactNode } from 'react'
+import type { ToastMessage } from '../lib/toast'
 import { MiniHeader } from './layout/MiniHeader'
 
 // The mini companion surface: compact header, the shared chat screen and a small
@@ -16,7 +17,7 @@ export function MiniShell({
 }: {
   runtime: HermesRuntime | null
   pinned: boolean
-  toast: string
+  toast: ToastMessage | null
   chatScreen: ReactNode
   onNewSession: () => void
   onTogglePin: () => void
@@ -36,8 +37,8 @@ export function MiniShell({
       {chatScreen}
       <div className="mini-powered">מופעל באמצעות Hermes</div>
       {toast ? (
-        <div className="floating-toast floating-toast--mini">
-          <CheckCircle2 size={15} /> {toast}
+        <div className="floating-toast floating-toast--mini" role="status" aria-live="polite">
+          {toast.severity === 'error' ? <AlertCircle size={15} /> : <CheckCircle2 size={15} />} {toast.message}
         </div>
       ) : null}
     </div>

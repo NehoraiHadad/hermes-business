@@ -1,11 +1,18 @@
 # BusinessInstall.ps1 — the local install steps the bootstrap runs once a
 # compatible Hermes is detected: installing the business payload (plugin, skills
 # and reply-policy plugin) as one transaction, and ensuring the background
-# gateway is running and healthy. Dot-sourced by bootstrap.ps1, so these read
-# $PayloadRoot / $HermesHome from the script scope exactly as when inline.
+# gateway is running and healthy. Dot-sourced by bootstrap.ps1; every value a
+# function here needs (PayloadRoot, HermesHome, BootstrapVersion, HermesExe) is
+# an EXPLICIT parameter passed by the caller — nothing in this file relies on
+# reading a variable left behind in the caller's script scope.
 
 function Install-BusinessPayload {
-  param([Parameter(Mandatory)][string]$HermesExe)
+  param(
+    [Parameter(Mandatory)][string]$HermesExe,
+    [Parameter(Mandatory)][string]$PayloadRoot,
+    [Parameter(Mandatory)][string]$HermesHome,
+    [Parameter(Mandatory)][string]$BootstrapVersion
+  )
 
   $pluginSource = Join-Path $PayloadRoot 'plugin.js'
   $skillSource = Join-Path $PayloadRoot 'business-bootstrap.SKILL.md'
@@ -24,8 +31,12 @@ function Install-BusinessPayload {
   # so that a failure to *enable* it rolls back the plugin + skill too.
   $policySource = Join-Path $PayloadRoot 'whatsapp-policy'
   $policyPresent = Test-Path -LiteralPath $policySource -PathType Container
+  # Assigned unconditionally (not just inside the `if` below) so the obsolete-
+  # module prune near the end of this function never depends on a variable
+  # that only exists inside a sibling `if` block — both consumers still gate
+  # on $policyPresent, but the value itself is never in doubt.
+  $policyTargetDir = Join-Path $HermesHome 'plugins\business-whatsapp-policy'
   if ($policyPresent) {
-    $policyTargetDir = Join-Path $HermesHome 'plugins\business-whatsapp-policy'
     foreach ($name in @('__init__.py', 'policy.py', 'ingest.py', 'contract.py', 'surface.py', 'guards.py', 'transport.py', 'registry.py', 'guard_core.py', 'surface_core.py', 'dispatch.py', 'families.py', 'egress.py', 'tool_hook.py', 'tool_transport.py', 'tool_contract.py', 'guard_status.py', 'plugin.yaml')) {
       $files += @{ Source = (Join-Path $policySource $name); Target = (Join-Path $policyTargetDir $name) }
     }
@@ -109,7 +120,20 @@ function Ensure-Gateway {
   param([Parameter(Mandatory)][string]$HermesExe)
   Write-Step 'Checking the Hermes background gateway.'
   $statusOutput = (& $HermesExe gateway status 2>&1 | Out-String)
-  $running = $LASTEXITCODE -eq 0 -and $statusOutput -match 'running'
+  # `hermes gateway status` has no machine-readable --json flag (checked the
+  # installed CLI's hermes_cli/subcommands/gateway.py) and its exit code carries
+  # no state either: hermes_cli/gateway_windows.py's status() prints and returns
+  # normally (exit 0) even when nothing is installed or running. Only a positive
+  # TEXT match may decide state — this mirrors electron/gateway-status.cjs's
+  # fail-closed RUNNING_RE, anchored on "running (PID" (never a bare 'running'
+  # substring, which could also match unrelated log/status noise) so it matches
+  # every phrasing gateway_windows.py prints ("Gateway process running (PID: ..)",
+  # and the cross-platform "Gateway already running (PID: ..)"/"Gateway is
+  # running (PID: ..)"). PowerShell's -match is case-insensitive by default.
+  $running = $LASTEXITCODE -eq 0 -and $statusOutput -match 'gateway[^\r\n]*running \(pid'
+  # Both known positive phrasings from hermes_cli/gateway_windows.py status():
+  # "Windows login item installed: <path>" and "Scheduled Task registered:
+  # <name>". Tolerated together in case a future CLI version renames one.
   $startsOnLogin = $statusOutput -match 'login item installed|scheduled task (installed|registered)'
   if (-not ($running -and $startsOnLogin)) {
     Write-Step 'Installing and starting the official Hermes gateway service.'

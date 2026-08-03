@@ -49,7 +49,7 @@ export function SkillModal({
           <Sparkles size={17} />
           <span>העוזר יוכל לשפר את ה־Skill בהמשך לפי המשוב שלך.</span>
         </div>
-        {error ? <p className="form-error">{error}</p> : null}
+        {error ? <p className="form-error" role="alert">{error}</p> : null}
         <div className="modal__actions">
           <button type="button" className="ghost-button" onClick={onClose}>
             ביטול

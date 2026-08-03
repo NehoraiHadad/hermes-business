@@ -94,7 +94,8 @@ def _validate_target(module: Any, name: str) -> tuple[str, Callable]:
 
 
 def install_tool_guards(home_getter: Callable[[], Any]) -> dict:
-    """Wrap BOTH send_message transport chokepoints in place, fail-closed.
+    """Wrap every ``send_message`` transport chokepoint declared in
+    ``_FACTORIES`` (today, just ``_send_to_platform``) in place, fail-closed.
 
     Returns a ``{name: "bound"|"already"}`` binding result on success. Raises
     :class:`ToolTransportContractError` on any drift (engine not importable,

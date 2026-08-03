@@ -32,31 +32,6 @@
   font-size: 17px;
 }
 
-.onboarding__progress {
-  display: flex;
-  gap: 5px;
-  align-items: center;
-  margin: 24px 0 5px;
-}
-
-.onboarding__progress span {
-  height: 4px;
-  flex: 1;
-  background: #e7e3da;
-  border-radius: 5px;
-}
-
-.onboarding__progress span.active {
-  background: var(--indigo);
-}
-
-.onboarding__progress small {
-  margin-right: 8px;
-  color: var(--muted);
-  font-size: 9.5px;
-  white-space: nowrap;
-}
-
 .onboarding__content {
   min-height: 474px;
   padding: 52px 58px 25px;
@@ -99,45 +74,9 @@
 .onboarding-hero__spark {
   position: absolute;
   top: 5px;
-  left: 7px;
+  inset-inline-end: 7px;
   color: #bd8e3e;
   font-size: 20px;
-}
-
-.runtime-detection {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  max-width: 410px;
-  margin: 25px auto 0;
-  padding: 13px 15px;
-  color: var(--green);
-  background: var(--green-soft);
-  border-radius: 11px;
-  text-align: right;
-}
-
-.runtime-detection > div {
-  display: grid;
-}
-
-.runtime-detection strong {
-  font-size: 11.5px;
-}
-
-.runtime-detection small {
-  margin-top: 3px;
-  color: #6b7e72;
-  font-size: 9.5px;
-}
-
-.runtime-detection--error {
-  color: var(--red);
-  background: #f9e8e8;
-}
-
-.runtime-detection--error small {
-  color: #8d5555;
 }
 
 .onboarding__card--simple {

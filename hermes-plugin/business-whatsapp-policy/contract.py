@@ -101,7 +101,7 @@ REQUIRED_METHODS = {
 # tripwire. A public method that looks outbound but is not in OUTBOUND_METHODS
 # means the adapter grew a new sender we do not guard -> fail closed. Private
 # helpers ("_...") are exempt: plumbing reached only through guarded callers.
-_OUTBOUND_NAME_PREFIXES = (
+OUTBOUND_NAME_PREFIXES = (
     "send",
     "edit",
     "delete",

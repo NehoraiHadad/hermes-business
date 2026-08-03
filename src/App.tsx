@@ -10,6 +10,7 @@ import { useChat } from './hooks/useChat'
 import { useHermesData } from './hooks/useHermesData'
 import { useSupportActions } from './hooks/useSupportActions'
 import { useTaskActions } from './hooks/useTaskActions'
+import { useToasts } from './hooks/useToasts'
 import { hermesClient } from './lib/hermes-client'
 import { verifyBusinessContextPersisted } from './lib/business-context'
 import type { Connection, Screen } from './types'
@@ -19,16 +20,26 @@ type FullSurface = 'desktop' | 'dashboard' | 'logs' | 'settings'
 // flag alone — the durable, owned business-context skill is the only authority.
 type OnboardingGate = 'resolving' | 'onboarding' | 'ready'
 const ONBOARDING_CACHE_KEY = 'hermes-business-onboarding-v1'
+// Read once at module load rather than on every render — the query string never
+// changes for the lifetime of this window.
+const FORCE_ONBOARDING = new URLSearchParams(window.location.search).get('onboarding') === '1'
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('chat')
   const [modal, setModal] = useState<ModalKind>(null)
   const [connectionModal, setConnectionModal] = useState<Connection | null>(null)
-  const [toast, setToast] = useState('')
-  const forceOnboarding = new URLSearchParams(window.location.search).get('onboarding') === '1'
+  const { toast, notify: setToast } = useToasts()
   // Start resolving (not "skip") so we ALWAYS validate durable state before deciding.
+  //
+  // The one remaining `hermesClient.demo` outside the facade, and deliberately so: this
+  // is not renderer I/O but a WHICH-SURFACE decision. Onboarding completion is proven by
+  // a durable, ownership- and checksum-verified business-context Skill in the user's
+  // Hermes profile. A fixture session has no such profile, and making the demo backend
+  // "pass" would mean forging an integrity-verified proof of ownership — fabricating
+  // EVIDENCE, not content, which is the one thing the demo boundary must never do. So a
+  // fixture session starts on the app surface, and `?onboarding=1` still shows the flow.
   const [gate, setGate] = useState<OnboardingGate>(
-    forceOnboarding ? 'onboarding' : hermesClient.demo ? 'ready' : 'resolving'
+    FORCE_ONBOARDING ? 'onboarding' : hermesClient.demo ? 'ready' : 'resolving'
   )
   const showOnboarding = gate === 'onboarding'
 
@@ -68,17 +79,22 @@ export default function App() {
     return () => {
       alive = false
     }
-  }, [gate, data.runtime, data.skills])
+  }, [gate, data.runtime])
   const windowControls = useAssistantWindow(showOnboarding)
   const chat = useChat({ setScreen, setToast })
 
   const openFull = useCallback((surface: FullSurface) => {
-    if (window.hermesDesktop) void window.hermesDesktop.openFull(surface)
-    else {
-      setToast(`ביישום המותקן ייפתח כעת ${surface}`)
-      window.setTimeout(() => setToast(''), 2500)
-    }
-  }, [])
+    // The facade answers for every mode: a real window in the desktop build, an honest
+    // "not here" message in a fixture session, and a surfaced failure with no bridge.
+    void hermesClient
+      .openFullSurface(surface)
+      .then(result => (result.ok ? '' : result.message || `לא ניתן לפתוח ${surface}`))
+      .catch(() => `לא ניתן לפתוח ${surface} — גשר שולחן העבודה של Hermes אינו זמין`)
+      .then(message => {
+        if (!message) return
+        setToast(message, 'error')
+      })
+  }, [setToast])
   const support = useSupportActions({ setRuntime: data.setRuntime, setToast, openFull })
   const openConnection = useCallback(
     (id: string) => {

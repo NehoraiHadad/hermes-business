@@ -6,7 +6,7 @@ import { describeOnboarding } from '../../../lib/hermes/whatsapp-onboarding'
 // Unofficial WhatsApp Web (Baileys) QR pairing, driven entirely from the shell
 // through the official Hermes onboarding REST endpoints.
 export function WhatsappQrConnect({ onConnected }: { onConnected: () => void }) {
-  const { onboarding, error, busy, start, apply, cancel } = useWhatsappOnboarding('bot', '')
+  const { onboarding, error, busy, start, apply, cancel } = useWhatsappOnboarding('bot')
   const status = onboarding?.status
   const qr = onboarding?.qr_payload || ''
 
@@ -46,7 +46,7 @@ export function WhatsappQrConnect({ onConnected }: { onConnected: () => void }) 
         </button>
       ) : null}
 
-      {error ? <p className="form-error">{error}</p> : null}
+      {error ? <p className="form-error" role="alert">{error}</p> : null}
     </div>
   )
 }

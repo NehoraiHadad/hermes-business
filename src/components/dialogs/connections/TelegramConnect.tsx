@@ -55,7 +55,7 @@ export function TelegramConnect({
           <span>Telegram user ID</span>
           <input dir="ltr" value={userId} onChange={event => setUserId(event.target.value)} placeholder="123456789" />
         </label>
-        {error ? <p className="form-error">{error}</p> : null}
+        {error ? <p className="form-error" role="alert">{error}</p> : null}
         <div className="modal__actions">
           <button className="ghost-button" onClick={onClose}>
             ביטול

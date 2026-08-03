@@ -62,7 +62,7 @@
 .mini-status {
   position: relative;
   margin-top: 2px;
-  padding-right: 10px;
+  padding-inline-start: 10px;
   color: var(--muted);
   font-size: 10px;
 }
@@ -70,7 +70,7 @@
 .mini-status::before {
   position: absolute;
   top: 50%;
-  right: 0;
+  inset-inline-start: 0;
   width: 6px;
   height: 6px;
   background: #aaa399;

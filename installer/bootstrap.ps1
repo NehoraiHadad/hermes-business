@@ -1,3 +1,4 @@
+#Requires -Version 5.1
 [CmdletBinding()]
 param(
   [Parameter(Mandatory = $false)]
@@ -23,6 +24,16 @@ param(
 # file only wires those modules together and sequences the install.
 
 $ErrorActionPreference = 'Stop'
+# Uninitialized-variable reads (a typo'd $variable name silently evaluating to
+# $null) fail loudly instead of drifting into a wrong path/URL/comparison. Only
+# THIS entry point sets it: bootstrap-companion.ps1 is also dot-sourced by the
+# offline unit-test runner (scripts/test-bootstrap-lib.ps1) directly, and
+# Set-StrictMode set inside a dot-sourced file mutates the CALLER's scope too —
+# turning it on there would silently flip strict mode on for that unrelated
+# harness. Every module dot-sourced below (including bootstrap-companion.ps1)
+# still runs under strict mode when reached through THIS script, because
+# dot-sourcing executes in the current scope.
+Set-StrictMode -Version Latest
 $ProgressPreference = 'SilentlyContinue'
 
 $MinimumHermesVersion = [version]'0.19.0'
@@ -38,7 +49,7 @@ if ([string]::IsNullOrWhiteSpace($BootstrapVersion)) {
 
 # --- Load the shared library (single source of truth for every primitive). ---
 $LibraryRoot = Join-Path $PSScriptRoot 'lib'
-foreach ($module in @('Logging.ps1', 'Hashing.ps1', 'HttpRetry.ps1', 'HttpDownload.ps1', 'FileOps.ps1', 'ZipPolicy.ps1', 'SafeZip.ps1', 'HermesEnv.ps1', 'Release.ps1', 'Payload.ps1', 'VerifyMode.ps1', 'BackendEnable.ps1', 'BusinessInstall.ps1')) {
+foreach ($module in @('Logging.ps1', 'Hashing.ps1', 'HttpRetry.ps1', 'HttpDownload.ps1', 'FileOps.ps1', 'ZipPolicy.ps1', 'SafeZip.ps1', 'SemVer.ps1', 'HermesEnv.ps1', 'Release.ps1', 'Payload.ps1', 'VerifyMode.ps1', 'BackendEnable.ps1', 'BusinessInstall.ps1')) {
   $modulePath = Join-Path $LibraryRoot $module
   if (-not (Test-Path -LiteralPath $modulePath -PathType Leaf)) {
     throw "Required installer module is missing: $modulePath"
@@ -103,10 +114,13 @@ try {
   # Fail closed on an out-of-range version; a compatible existing install is
   # preserved and used as-is.
   Assert-CompatibleVersion -Version $version -Minimum $MinimumHermesVersion -Maximum $MaximumHermesVersion
-  Write-Step "Compatible Hermes $version detected at $hermesExe."
+  # $version is a SemVer.ps1 object (ConvertTo-BusinessSemVer); interpolating it
+  # directly would print PowerShell's default @{...} property dump, so use the
+  # normalized display string explicitly.
+  Write-Step "Compatible Hermes $($version.raw) detected at $hermesExe."
 
   Assert-PluginSdkContract -HermesHome $HermesHome
-  Install-BusinessPayload -HermesExe $hermesExe
+  Install-BusinessPayload -HermesExe $hermesExe -PayloadRoot $PayloadRoot -HermesHome $HermesHome -BootstrapVersion $BootstrapVersion
   if (-not $SkipGatewaySetup) {
     Ensure-Gateway -HermesExe $hermesExe
   }

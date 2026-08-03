@@ -1,4 +1,4 @@
-import { ChevronDown, MessageSquarePlus } from 'lucide-react'
+import { MessageSquarePlus } from 'lucide-react'
 import { memo } from 'react'
 import { NAV_ITEMS } from '../../constants'
 import { hermesClient } from '../../lib/hermes-client'
@@ -99,11 +99,6 @@ export function Sidebar({
 
       <div className="sidebar__footer">
         <StatusPill runtime={runtime} demo={hermesClient.demo} />
-        <button className="profile-button">
-          <span className="avatar">ע</span>
-          <span><strong>העסק שלך</strong><small>הידע נשמר ב־Hermes</small></span>
-          <ChevronDown size={16} />
-        </button>
       </div>
     </aside>
   )

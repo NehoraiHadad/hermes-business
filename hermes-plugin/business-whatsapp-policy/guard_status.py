@@ -41,10 +41,23 @@ from typing import Any, Callable, Iterable, Mapping, Optional
 logger = logging.getLogger(__name__)
 
 GUARD_STATUS_SCHEMA = 1
-# The two enforcement doors that must be live for "enforcing" to be true.
+# "enforcing" is true only when BOTH of these hold: the transport chokepoint
+# below is bound in this process, AND this hook is registered. This is
+# deliberately narrower than "every hook __init__.py registers": ``register()``
+# also registers ``pre_tool_call``, but (per ``tool_hook.py``'s module
+# docstring) ``send_message`` is NOT a registered model tool in the installed
+# Hermes, so ``pre_tool_call`` is defense-in-depth for a hypothetical future
+# tool rather than a door anything currently dispatches through. Keying
+# "enforcing" off it too would make the heartbeat go false whenever that
+# dormant hook fails to register, without reflecting any real change in
+# whether outbound WhatsApp sends are actually gated. ``pre_gateway_dispatch``
+# (inbound dispatch) and the transport chokepoint below (outbound send) are the
+# two doors real traffic passes through, so those are what "enforcing" proves.
 REQUIRED_HOOK = "pre_gateway_dispatch"
 GUARD_FAMILIES = ("whatsapp", "whatsapp_cloud")
-# The transport chokepoints the monkeypatch must have bound in THIS process.
+# The transport chokepoint(s) the monkeypatch must have bound in THIS process.
+# Currently a single chokepoint (``_send_to_platform``); kept as a tuple so a
+# future second chokepoint only needs an entry here, not a signature change.
 TRANSPORT_CHOKEPOINTS = ("_send_to_platform",)
 # The reader treats a heartbeat older than this (no refresh) as dead → BLOCKED.
 HEARTBEAT_TTL_SECONDS = 90
@@ -88,8 +101,9 @@ def plugin_version(default: str = "0.0.0") -> str:
 
 
 def transport_bound() -> bool:
-    """LIVE introspection: are BOTH send_message chokepoints wrapped by OUR guard in
-    this process? Reads the guard flag the monkeypatch stamps. Fail-closed on any error."""
+    """LIVE introspection: is every chokepoint in ``TRANSPORT_CHOKEPOINTS`` (today,
+    just ``_send_to_platform``) wrapped by OUR guard in this process? Reads the
+    guard flag the monkeypatch stamps. Fail-closed on any error."""
     try:
         from .tool_contract import GUARD_FLAG
         import tools.send_message_tool as smt  # type: ignore

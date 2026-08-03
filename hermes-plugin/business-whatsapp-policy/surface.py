@@ -13,9 +13,9 @@ from typing import Any
 
 from .contract import (
     OUTBOUND_METHODS,
+    OUTBOUND_NAME_PREFIXES,
     REQUIRED_METHODS,
     REQUIRED_PLATFORM_ENTRY_FIELDS,
-    _OUTBOUND_NAME_PREFIXES,
     AdapterContractError,
 )
 from .surface_core import concrete_public_methods, verify_entry, verify_surface
@@ -34,7 +34,7 @@ def verify_adapter_surface(adapter: Any, family: str) -> None:
         adapter,
         guarded=OUTBOUND_METHODS.get(family),
         required=REQUIRED_METHODS.get(family, frozenset()),
-        prefixes=_OUTBOUND_NAME_PREFIXES,
+        prefixes=OUTBOUND_NAME_PREFIXES,
         skip_bases=_SKIP_BASES,
         error_cls=AdapterContractError,
         label=family,

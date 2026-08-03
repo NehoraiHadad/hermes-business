@@ -14,8 +14,8 @@ from typing import Any, Callable
 
 from .transport import (
     AdapterContractError,
-    _guard_standalone,
     guard_adapter,
+    guard_standalone_sender,
     verify_platform_entry,
 )
 
@@ -82,7 +82,7 @@ def _guard_native(home_getter: Callable[[], Any]) -> None:
             adapter_factory=_guarded_factory(
                 whatsapp.adapter_factory, "whatsapp", home_getter
             ),
-            standalone_sender_fn=_guard_standalone(
+            standalone_sender_fn=guard_standalone_sender(
                 whatsapp.standalone_sender_fn, home_getter
             ),
         )
@@ -93,7 +93,7 @@ def _guard_cloud(home_getter: Callable[[], Any]) -> None:
     from gateway.platform_registry import PlatformEntry, platform_registry
 
     existing_cloud = platform_registry.get("whatsapp_cloud")
-    cloud_standalone = _guard_standalone(
+    cloud_standalone = guard_standalone_sender(
         getattr(existing_cloud, "standalone_sender_fn", None), home_getter
     )
 

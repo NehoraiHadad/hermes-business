@@ -97,9 +97,7 @@ async function ensureGatewayBackground(command = findHermes()) {
   return { ok: true, installed: true, running: true, startedFresh: true }
 }
 
-// Second arg kept for renderer back-compat only; v0.19.1 offers no service
-// selection, so it is intentionally ignored (see serviceSelectionAvailable).
-async function startGoogleSetup(clientSecretPath, _services) {
+async function startGoogleSetup(clientSecretPath) {
   const { python, script } = await googleSetupPaths()
   requireScript(python, script)
   const contract = await readContract(python, script)
@@ -159,17 +157,4 @@ async function getGoogleStatus() {
   }
 }
 
-// Optional stronger confirmation: --check-live makes a real API call, catching
-// disabled_client / disabled-account cases that a plain --check cannot.
-async function verifyGoogleLive() {
-  const { python, script } = await googleSetupPaths()
-  if (!script || !python || !fs.existsSync(python)) return { available: false, live: false }
-  try {
-    const result = await runCaptured(python, [script, '--check-live'], 60_000, setupEnv())
-    return { available: true, live: parseCheckStatus(result.stdout).liveOk }
-  } catch {
-    return { available: true, live: false }
-  }
-}
-
-module.exports = { startGoogleSetup, finishGoogleSetup, getGoogleStatus, verifyGoogleLive, ensureGatewayBackground }
+module.exports = { startGoogleSetup, finishGoogleSetup, getGoogleStatus, ensureGatewayBackground }

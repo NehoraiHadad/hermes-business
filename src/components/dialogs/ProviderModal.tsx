@@ -77,7 +77,7 @@ export function ProviderModal({
               dir="ltr"
             />
           </label>
-          {error ? <p className="form-error">{error}</p> : null}
+          {error ? <p className="form-error" role="alert">{error}</p> : null}
           <div className="info-inline">
             <ShieldCheck size={17} />
             <span>המפתח מאומת מול הספק לפני ש־Hermes שומר אותו.</span>

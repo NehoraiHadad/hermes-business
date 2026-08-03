@@ -1,5 +1,5 @@
 import { CalendarClock, CircleHelp, MessageCircle, PlugZap, WandSparkles } from 'lucide-react'
-import type { ChatMessage, Connection, Screen } from './types'
+import type { Connection, Screen } from './types'
 
 // Canonical onboarding defaults live in the shared contract so React, Electron and
 // the Hermes plugin cannot drift. Re-exported here to keep existing import sites.
@@ -19,8 +19,6 @@ export const NAV_ITEMS = ALL_NAV_ITEMS
   .map(item => item.id === 'chat'
     ? { ...item, label: 'שיחה' }
     : { ...item, label: 'פעילות ומשימות' })
-
-export const INITIAL_MESSAGES: ChatMessage[] = []
 
 export const CONNECTIONS: Connection[] = [
   {

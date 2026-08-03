@@ -29,11 +29,11 @@
 .modal__close {
   position: absolute;
   top: 17px;
-  left: 17px;
+  inset-inline-end: 17px;
 }
 
 .modal__heading {
-  padding-left: 40px;
+  padding-inline-end: 40px;
 }
 
 .modal__heading h2 {

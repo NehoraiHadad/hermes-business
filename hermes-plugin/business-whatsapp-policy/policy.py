@@ -93,6 +93,18 @@ def can_process(policy: dict[str, Any], *identifiers: Any, platform: str | None 
         if not platform or item.get("platform") == platform
     }
     if not sources:
+        # Legacy back-compat fallback: a policy file written before the
+        # ``sources`` schema (version < 2, or a version-2 file that never
+        # populated ``sources``) only has flat ``reply_chats``/``reply_groups``
+        # lists with no per-entry platform tag. Those lists are unioned here
+        # WITHOUT filtering by the ``platform`` argument -- intentionally: the
+        # legacy schema predates multi-platform (native + Cloud) WhatsApp, so
+        # an old allowlist entry authorizes a chat id on either platform
+        # rather than being silently dropped because it lacks a platform tag.
+        # ``load_policy`` normalizes ``sources`` from these same lists on read
+        # (see the fallback there), so in practice this branch is only reached
+        # when ``sources`` itself was explicitly written empty; it is kept for
+        # defense-in-depth against any policy file that predates that migration.
         allowed = set(policy.get("reply_chats") or []) | set(policy.get("reply_groups") or [])
     return any(normalize_identifier(value) in allowed for value in identifiers)
 

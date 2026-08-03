@@ -4,12 +4,15 @@
   }
 
   .topbar__actions {
+    /* Physically anchored, not direction-relative: clears the Electron
+       titleBarOverlay window controls (electron/window-create.cjs), which sit
+       on the left regardless of text direction. Keep as a physical offset. */
     margin-left: 100px;
   }
 
   .content-screen {
-    padding-right: 28px;
-    padding-left: 28px;
+    padding-inline-start: 28px;
+    padding-inline-end: 28px;
   }
 
   .skills-grid {

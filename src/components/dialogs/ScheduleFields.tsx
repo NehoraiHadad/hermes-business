@@ -93,7 +93,7 @@ export function ScheduleFields({
       {value.mode !== 'advanced' ? (
         <small className="field-hint field-hint--tz">{describeScheduleTimezone(zone)}</small>
       ) : null}
-      {dstWarning ? <small className="form-error">{dstWarning}</small> : null}
+      {dstWarning ? <small className="form-error" role="alert">{dstWarning}</small> : null}
     </div>
   )
 }

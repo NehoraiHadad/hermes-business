@@ -1,4 +1,4 @@
-import { Paperclip, Plus, Send, Sparkles, Square } from 'lucide-react'
+import { Paperclip, Send, Sparkles, Square } from 'lucide-react'
 import { FormEvent, useEffect, useRef, useState } from 'react'
 import type { Activity, Approval, ChatMessage, ClarifyRequest } from '../../types'
 import type { PendingAttachment } from '../../lib/hermes/attachments'
@@ -125,9 +125,6 @@ export function ChatScreen({
                 disabled={busy}
               >
                 <Paperclip size={18} />
-              </button>
-              <button type="button" className="composer-icon" aria-label="פעולות נוספות">
-                <Plus size={18} />
               </button>
             </div>
             {busy ? (

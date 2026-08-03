@@ -1,8 +1,9 @@
-import { CheckCircle2 } from 'lucide-react'
+import { AlertCircle, CheckCircle2 } from 'lucide-react'
 import type { Dispatch, ReactNode, SetStateAction } from 'react'
 import type { useChat } from '../hooks/useChat'
 import type { useHermesData } from '../hooks/useHermesData'
 import type { useSupportActions } from '../hooks/useSupportActions'
+import type { ToastMessage } from '../lib/toast'
 import type { Connection, Screen, TaskActions } from '../types'
 import { MainScreen } from './MainScreen'
 import { Sidebar } from './layout/Sidebar'
@@ -33,7 +34,7 @@ export function FullAppShell({
   data: ReturnType<typeof useHermesData>
   chat: ReturnType<typeof useChat>
   support: ReturnType<typeof useSupportActions>
-  toast: string
+  toast: ToastMessage | null
   chatScreen: ReactNode
   modalLayer: ReactNode
   onOpenFull: (surface: FullSurface) => void
@@ -74,7 +75,7 @@ export function FullAppShell({
           provider={data.providerStatus}
           loadErrors={data.loadErrors}
           support={support}
-          toast={toast}
+          toast={toast?.message ?? ''}
           onAddTask={onAddTask}
           taskActions={taskActions}
           onAddSkill={onAddSkill}
@@ -82,8 +83,10 @@ export function FullAppShell({
         />
       </div>
       {modalLayer}
-      {toast && screen !== 'support' ? (
-        <div className="floating-toast"><CheckCircle2 size={17} /> {toast}</div>
+      {toast ? (
+        <div className="floating-toast" role="status" aria-live="polite">
+          {toast.severity === 'error' ? <AlertCircle size={17} /> : <CheckCircle2 size={17} />} {toast.message}
+        </div>
       ) : null}
     </div>
   )

@@ -1,8 +1,4 @@
-.new-chat-button,
-.primary-button,
-.outline-button,
-.ghost-button,
-.connected-button {
+.new-chat-button {
   display: inline-flex;
   gap: 8px;
   align-items: center;
@@ -17,9 +13,6 @@
     background 140ms ease,
     border-color 140ms ease,
     transform 140ms ease;
-}
-
-.new-chat-button {
   width: 100%;
   height: 46px;
   margin-bottom: 17px;
@@ -29,8 +22,7 @@
   box-shadow: 0 5px 14px rgba(76, 74, 143, 0.2);
 }
 
-.new-chat-button:hover,
-.primary-button:hover:not(:disabled) {
+.new-chat-button:hover {
   background: var(--indigo-dark);
   transform: translateY(-1px);
 }

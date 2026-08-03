@@ -1,7 +1,6 @@
 .whatsapp-connect {
   display: grid;
   gap: 14px;
-  text-align: right;
 }
 
 .whatsapp-connect__head {
@@ -54,14 +53,6 @@
   font-size: 11px;
   line-height: 1.6;
   text-align: center;
-}
-
-.whatsapp-cloud__steps {
-  margin: 0;
-  padding-inline-start: 18px;
-  color: var(--muted);
-  font-size: 11px;
-  line-height: 1.8;
 }
 
 .cloud-field {

@@ -13,7 +13,6 @@ the installed-contract tests keep working unchanged.
 
 from __future__ import annotations
 
-import inspect
 from typing import Any, Callable
 
 from .contract import (
@@ -28,12 +27,7 @@ from .contract import (
     is_supported_version,
     platform_family,
 )
-from .guards import (
-    _guard_interactive_auth,
-    _guard_standalone,
-    _make_async_guard,
-    _make_sync_guard,
-)
+from .guards import guard_interactive_auth, guard_standalone_sender, make_outbound_guard
 from .surface import verify_adapter_surface, verify_platform_entry
 
 __all__ = [
@@ -50,7 +44,7 @@ __all__ = [
     "verify_adapter_surface",
     "verify_platform_entry",
     "guard_adapter",
-    "_guard_standalone",
+    "guard_standalone_sender",
 ]
 
 
@@ -76,10 +70,10 @@ def guard_adapter(adapter: Any, platform: str, home_getter: Callable[[], Any]) -
             continue
         # Async and synchronous mutating methods must both fail closed: a plain
         # ``def send(...)`` would otherwise bypass the policy entirely.
-        if inspect.iscoroutinefunction(original):
-            setattr(adapter, name, _make_async_guard(name, original, home_getter, platform))
-        else:
-            setattr(adapter, name, _make_sync_guard(name, original, home_getter, platform))
+        # ``guard_core.make_guard`` (reached via ``make_outbound_guard``) already
+        # branches on ``inspect.iscoroutinefunction`` internally, so one call
+        # covers both cases.
+        setattr(adapter, name, make_outbound_guard(name, original, home_getter, platform))
 
-    _guard_interactive_auth(adapter, home_getter, platform)
+    guard_interactive_auth(adapter, home_getter, platform)
     return adapter

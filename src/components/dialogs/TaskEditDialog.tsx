@@ -67,7 +67,7 @@ export function TaskEditDialog({
           />
         </label>
         <ScheduleFields value={schedule} onChange={setSchedule} />
-        {error ? <p className="form-error">{error}</p> : null}
+        {error ? <p className="form-error" role="alert">{error}</p> : null}
         <div className="modal__actions">
           <button type="button" className="ghost-button" onClick={onClose}>
             ביטול

@@ -1,4 +1,5 @@
 @import './styles/base.css';
+@import './styles/buttons.css';
 @import './styles/shell.css';
 @import './styles/sidebar.css';
 @import './styles/sidebar-nav.css';
@@ -24,5 +25,4 @@
 @import './styles/modal-provider.css';
 @import './styles/onboarding-shell.css';
 @import './styles/onboarding-form.css';
-@import './styles/onboarding-approval.css';
 @import './styles/responsive.css';
