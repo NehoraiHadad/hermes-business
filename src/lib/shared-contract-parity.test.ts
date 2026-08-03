@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 import path from 'node:path'
 
@@ -22,8 +22,12 @@ import path from 'node:path'
 
 const sharedDir = path.resolve(__dirname, '../../shared')
 
-// Every hand-written JS+.d.ts pair under shared/. Add new pairs here as they're created.
-const MODULES = ['onboarding-contract', 'onboarding-bootstrap', 'provider-readiness', 'cron-identity-contract']
+// Every hand-written JS+.d.ts pair under shared/ — discovered from disk so a new
+// module can never ship without parity coverage (a forgotten manual entry here
+// would silently exempt it).
+const MODULES = readdirSync(sharedDir)
+  .filter(f => f.endsWith('.js'))
+  .map(f => f.replace(/\.js$/, ''))
 
 interface DeclaredExports {
   /** Names declared via `export (declare)? const|function|let|class NAME` or a grouped `export { NAME }`. */

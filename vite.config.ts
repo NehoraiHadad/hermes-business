@@ -1,4 +1,6 @@
+/// <reference types="vitest/config" />
 import { defineConfig } from 'vite'
+import { configDefaults } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import { stripDemoFixtures } from './scripts/strip-demo-fixtures.mjs'
 
@@ -24,6 +26,14 @@ export default defineConfig(({ mode, command }) => {
     build: {
       outDir: 'dist',
       sourcemap: true
+    },
+    test: {
+      // Concurrent Claude Code sessions run in worktrees under .claude/ — their
+      // test copies must never be collected by this checkout's vitest run.
+      exclude: [...configDefaults.exclude, '**/.claude/**', '**/promo-video/**'],
+      // Spawn-heavy suites (PowerShell/zip/python probes) exceed the 5s default
+      // under parallel machine load; they pass in isolation well under this cap.
+      testTimeout: 15000
     }
   }
 })
