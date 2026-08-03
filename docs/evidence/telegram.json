@@ -1,49 +1,49 @@
 {
   "schema_version": 1,
   "category": "telegram",
-  "status": "passed",
+  "status": "blocked",
   "app_version": "0.4.0-alpha.1",
   "hermes_range": ">=0.19.0 <0.20.0",
-  "git_head": "e79519d03ebada2389381f08bc1abd8c81636cca",
+  "git_head": "d32111814fd0877c4692e0be4619e6cce75198b3",
   "git_state": "working-tree",
   "subject_scheme": 3,
-  "subject_fingerprint": "ce0f4a004b9aaa4cb0e21bdd629b759abae941e955eba205fa252ce33cbe41ec",
-  "captured_at": "2026-08-02T06:01:17.613Z",
+  "subject_fingerprint": "b7e6627693e1873a579102f07e7dbf9460a657f9276111a626f3adb8c517ad09",
+  "captured_at": "2026-08-03T18:08:26.301Z",
   "tool": "manual-live-probe:hermes-native-gateway (redacted reduction)",
   "redacted": true,
   "summary": {
     "diagnosis": {
-      "connection_mode": "polling",
-      "webhook_present": false,
-      "sole_poller_owner": true,
-      "external_owner_conflict": false,
-      "bot_token_valid": true,
-      "is_bot": true,
-      "inbound_reached_hermes": true,
-      "prior_no_reply_cause": "duplicate_wrapper_policy",
-      "allowlist_now_authorizes_sender": true,
-      "pending_update_count": 0
+      "connection_mode": null,
+      "webhook_present": null,
+      "sole_poller_owner": null,
+      "external_owner_conflict": null,
+      "bot_token_valid": null,
+      "is_bot": null,
+      "inbound_reached_hermes": null,
+      "prior_no_reply_cause": null,
+      "allowlist_now_authorizes_sender": null,
+      "pending_update_count": null
     },
     "fix": {
-      "method": "removed_competing_wrapper_policy",
-      "config_mutated": false,
-      "env_mutated": false,
-      "whatsapp_untouched": true,
-      "google_untouched": true,
-      "gateway_restarted": true,
-      "gateway_alive": true
+      "method": null,
+      "config_mutated": null,
+      "env_mutated": null,
+      "whatsapp_untouched": null,
+      "google_untouched": null,
+      "gateway_restarted": null,
+      "gateway_alive": null
     },
     "roundtrip": {
-      "outbound_delivered": true,
-      "target_home_channel": true,
-      "other_chats_touched": 0,
-      "official_mechanism": "hermes_native_gateway",
-      "agent_originated_inbound": true,
-      "inbound_historically_processed": true,
-      "inbound_path_ready": true,
-      "identifies_as_connectivity_test": true
+      "outbound_delivered": null,
+      "target_home_channel": null,
+      "other_chats_touched": null,
+      "official_mechanism": null,
+      "agent_originated_inbound": null,
+      "inbound_historically_processed": null,
+      "inbound_path_ready": null,
+      "identifies_as_connectivity_test": null
     },
-    "runtime_state": "connected",
-    "gateway_running": true
+    "runtime_state": null,
+    "gateway_running": null
   }
 }
