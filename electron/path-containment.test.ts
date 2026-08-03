@@ -38,17 +38,16 @@ describe('isUnder', () => {
     expect(isUnder(child, parent)).toBe(true)
   })
 
-  // NOTE: qa-runtime-policy.cjs's isUnder always appended a separator boundary via
-  // `p + normCompare(path.sep)`, but normCompare trims ALL trailing separators —
-  // including a lone path.sep — down to '', so that append is actually a no-op.
-  // A sibling directory sharing a path PREFIX (not a real ancestor) is therefore
-  // reported as "under" the parent. This is a latent gap in the ORIGINAL
-  // qa-runtime-policy.cjs logic, ported here byte-for-byte per the consolidation's
-  // instruction to preserve that file's exact semantics (security-critical,
-  // existing tests must stay green) — flagged separately, not fixed here.
-  it('a sibling sharing only a path PREFIX is (incorrectly) reported as under — documents the inherited gap, not desired behavior', () => {
+  // Regression: the implementation inherited from qa-runtime-policy.cjs appended
+  // the boundary via `p + normCompare(path.sep)`, but normCompare trims a lone
+  // path.sep down to '', so the append was a no-op and isUnder degenerated to a
+  // raw string-prefix check that accepted siblings sharing only a name prefix
+  // (security-relevant: a `<tmpdir>-evil` sibling passed the fail-closed QA-home
+  // must-be-under-TEMP validation). The separator is now appended un-normalized.
+  it('a sibling sharing only a path PREFIX is NOT under the parent', () => {
     const sibling = `${parent}-other`
-    expect(isUnder(sibling, parent)).toBe(true)
+    expect(isUnder(sibling, parent)).toBe(false)
+    expect(isUnder(path.join(sibling, 'payload'), parent)).toBe(false)
   })
 
   it('false for an unrelated path', () => {

@@ -17,10 +17,15 @@ function normalizePathForCompare(value) {
   return winCI ? trimmed.toLowerCase() : trimmed
 }
 
+// True when `child` IS `parent` or lives strictly under it. The boundary
+// separator is appended un-normalized: normalizePathForCompare would trim a
+// lone path.sep down to '' (its trailing-separator regex matches it), which
+// would degrade this to a raw string-prefix check that accepts a SIBLING
+// sharing the parent's name as a prefix (e.g. `${parent}-evil/payload`).
 function isUnder(child, parent) {
   const c = normalizePathForCompare(child)
   const p = normalizePathForCompare(parent)
-  return c === p || c.startsWith(p + normalizePathForCompare(path.sep))
+  return c === p || c.startsWith(p + path.sep)
 }
 
 module.exports = { normalizePathForCompare, isUnder }
