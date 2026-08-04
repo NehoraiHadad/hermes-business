@@ -1,7 +1,10 @@
 ---
 name: business-partner
-description: Use when the owner has enabled Business Partner mode and wants a concise, proactive business partner that clarifies the outcome, works from business context, drafts freely, and never sends, spends, or deletes without explicit approval.
-version: 2.0.0
+# Routing budget: Hermes' skill index truncates descriptions to 60 chars
+# (agent/skill_utils.py SKILL_PROMPT_DESC_LIMIT) — the full "when to use"
+# detail lives in the body below; the description carries only the trigger.
+description: 'מצב שותף עסקי: עבודה יזומה על העסק; פעולה חיצונית רק באישור'
+version: 2.0.1
 author: Hermes Business
 license: MIT
 metadata:

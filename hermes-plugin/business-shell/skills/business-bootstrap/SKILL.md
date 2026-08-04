@@ -1,7 +1,9 @@
 ---
 name: business-bootstrap
-description: Use when a business owner starts a new installation or wants to continue getting set up. Conversation-first; no questionnaire.
-version: 2.0.0
+# Routing budget: Hermes' skill index truncates descriptions to 60 chars
+# (agent/skill_utils.py SKILL_PROMPT_DESC_LIMIT) — trigger only; detail below.
+description: 'התקנה חדשה או המשך הקמת העסק: שיחה מודרכת, לא שאלון'
+version: 2.0.1
 author: Hermes Business
 license: MIT
 metadata:

@@ -799,7 +799,13 @@ const LINES = [
   'המלץ בכל פעם על אינטגרציה/חיבור רשמי אחד בעל הערך המיידי הגבוה ביותר, הסבר את הערך, ואשר עם המשתמש לפני כל פעולה רגישה.',
   'אין לבצע פעולה חיצונית ואין לבקש secret בצ׳אט.',
   'אל תסמן סיום אם אין ספק/מודל זמין או שחיבור שהוצהר לא עבר בדיקת קריאה בטוחה; אפשר להשהות ולחזור להשלים.',
-  'provider_state semantics: usable=proven live; configured=a model/provider is selected but the wrapper did not observe a round-trip — YOUR own successful reply in this session IS that usability proof, so treat configured+a real answer as usable and proceed (never a false-negative deadlock); runtime_only/unavailable=no provider found (all official sources inspected); unknown=an official source (see provider_sources) failed/was not inspected — pause and re-verify, never falsely complete NOR falsely fail.'
+  // provider_state glossary — short sentences on purpose: this is prompt text
+  // the model must actually parse, not a machine note.
+  'משמעות provider_state בתמונת המצב:',
+  'usable — הספק הוכח חי; המשך כרגיל.',
+  'configured — נבחר ספק/מודל אך המעטפת לא צפתה בסיבוב חי. התשובה המוצלחת שלך בשיחה הזו היא בעצמה ההוכחה — התייחס למצב הזה כ־usable והמשך.',
+  'runtime_only או unavailable — לא נמצא ספק, אחרי שכל המקורות הרשמיים נבדקו.',
+  'unknown — מקור רשמי (ראה provider_sources) נכשל או לא נבדק. עצור ואמת מחדש; אל תסמן סיום כוזב ואל תיכשל כוזב.'
 ];
 
 function buildBootstrapPrompt(input = {}) {
