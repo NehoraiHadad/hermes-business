@@ -31,7 +31,7 @@ export const PASS_PROOF = {
   'packaged-e2e': [
     'artifact_attested', 'qa_namespace_applied', 'isolated_runtime',
     'ws_on_isolated_port', 'isolated_home_populated', 'live_home_untouched',
-    'live_config_unchanged', 'live_marker_stable_equal', 'no_residual'
+    'live_config_unchanged', 'live_cron_jobs_unchanged', 'live_marker_stable_equal', 'no_residual'
   ],
   approval: [
     'live_ui_denial_probe.artifact_attested', 'live_ui_denial_probe.qa_namespace_applied',

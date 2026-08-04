@@ -41,6 +41,7 @@ export const passingPackaged = () => ({
   isolated_home_populated: true,
   live_home_untouched: true,
   live_config_unchanged: true,
+  live_cron_jobs_unchanged: true,
   live_marker_stable_equal: true,
   live_structural_additions: 0,
   live_content_rewrites: 0,

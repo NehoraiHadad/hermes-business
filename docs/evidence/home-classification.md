@@ -72,7 +72,7 @@ from an unreadable/unsafe one, which fails.
 | Entry | Rule | Source |
 | --- | --- | --- |
 | `config.yaml` | Byte hash (approvals.mode etc.). | Profile config. |
-| `cron/` **name-set** | A new/removed cron **job file** is a mutation; its file **size** is volatile. | `gateway/delivery.py:315`. |
+| `cron/jobs.json` **job definitions** | Every job's definition — id, name, prompt/script, schedule, enabled, delivery — hashed as an order-independent set; an added, removed or redefined job is a mutation. Execution bookkeeping the runner rewrites by itself (`last_run_at`, `next_run_at`, `last_status`/`last_error`, `state`, `fire_claim`, `paused_at`, provider/model snapshots, `repeat.completed`) is excluded; any **unrecognised** field counts as definition, so a new one fails closed. An unreadable `jobs.json` fails closed. | `scripts/lib/isolated-marker-cron.mjs`, live `cron/jobs.json` (0.19.1). |
 
 ## VOLATILE — excluded from the stable digest
 
@@ -81,7 +81,7 @@ Disclosed as counts only; never blocks a pass.
 | Entry | Why volatile | Source |
 | --- | --- | --- |
 | `sessions/` | Gateway continuously writes transcripts; our isolated session count is independently proven 0. | `gateway/config.py:894`, `gateway/mirror.py:21` |
-| `cron/` file **size** | next-run / heartbeat persistence. | `gateway/delivery.py` |
+| `cron/` directory **name-set + sizes** | The ticker's own files (`.tick.lock`, `.jobs.lock`, `ticker_heartbeat`, `ticker_last_success`, `catch_up_occurrences`, `output/`, and the atomically-replaced `jobs.json` itself) appear, vanish and resize whenever the operator's gateway ticks — a live run created `catch_up_occurrences` mid-E2E. The **jobs** are protected above; the directory is churn. | `gateway/delivery.py`, live `cron/` listing |
 | `memories/` | **Runtime-mutated** by the agent's memory tool (`USER.md`/`MEMORY.md` rewritten in place under `USER.md.lock`). Persisted user data, but NOT stable-during-a-run. | `tools/memory_tool.py:54-55,315-360` |
 | `state.db`, `kanban.db`, `projects.db` (+`-wal`/`-shm`), `cron/executions.db` | Runtime SQLite; Hermes' own backup snapshots them and excludes the `-wal`/`-shm`/`-journal` sidecars as **transient**. | `hermes_cli/backup.py:72-89` |
 | `state/`, `platforms/`, `pairing/`, `sandboxes/`, `pending_messages/`, `logs/`, `cache/`, `audio_cache/`, `image_cache/`, `gateway-service/`, `desktop/` | Gateway/platform runtime state, heartbeats, caches, logs. | live listing + `state (gateway.heartbeat/lifecycle)` |

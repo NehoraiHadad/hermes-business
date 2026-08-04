@@ -50,6 +50,10 @@ export function preserveForensicsIfMutated({ forensicDir, delta, liveUntouched, 
       stable_marker_after: liveMarkerAfter.digest,
       stable_marker_equal: delta.digest_equal,
       profile_defining_unchanged: delta.profile_defining_unchanged,
+      cron_jobs_changed: delta.cron_jobs_changed,
+      cron_jobs_unreadable: delta.cron_jobs_unreadable,
+      cron_jobs_before: delta.cron_jobs_before,
+      cron_jobs_after: delta.cron_jobs_after,
       structural_added_removed: delta.added_removed,
       stable_structural_changed: delta.stable_structural_changed,
       stable_content_changed: delta.stable_content_changed,
@@ -154,10 +158,10 @@ export async function finalizeTeardown({
   const liveMarkerAfter = hermesHomeMarker(liveHome)
   const delta = markerDelta(liveMarkerBefore, liveMarkerAfter)
   // `live_home_untouched` and `live_marker_exact_equal` are the STABLE invariant
-  // (config + protected name-sets + stable-content sizes) — equal by construction.
-  // Volatile live-gateway churn (session/cron runtime bookkeeping) is disclosed
-  // separately and never blocks a pass; a stable/config/session-structural/skills
-  // mutation fails both, and unknown drift fails closed via the stable digest.
+  // (config + cron JOB DEFINITIONS + recursive tree content) — equal by
+  // construction. Volatile live-gateway churn (session files, the cron ticker's own
+  // runtime files) is disclosed separately and never blocks a pass; a config, job-set
+  // or tree mutation fails both, and unknown drift fails closed via the stable digest.
   const liveUntouched = delta.profile_defining_unchanged
   report.teardown = {
     isolated_gateway_pid_found: gateway.pid !== null,
@@ -174,6 +178,9 @@ export async function finalizeTeardown({
     live_home_untouched: liveUntouched,
     live_marker_exact_equal: delta.digest_equal,
     live_config_unchanged: !delta.config_changed,
+    live_cron_jobs_unchanged: !delta.cron_jobs_changed && !delta.cron_jobs_unreadable,
+    live_cron_jobs_before: delta.cron_jobs_before,
+    live_cron_jobs_after: delta.cron_jobs_after,
     live_added_removed: delta.added_removed,
     live_stable_structural_changed: delta.stable_structural_changed,
     live_stable_content_changed: delta.stable_content_changed,

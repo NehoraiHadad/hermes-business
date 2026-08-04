@@ -24,6 +24,28 @@ function put(home, rel, body) {
   mkdirSync(path.dirname(abs), { recursive: true })
   writeFileSync(abs, body)
 }
+// Shaped like a real Hermes 0.19.1 job: a definition plus the run bookkeeping the
+// gateway rewrites under us every tick.
+function job(id, overrides = {}) {
+  return {
+    id,
+    name: `job-${id}`,
+    prompt: 'daily summary',
+    schedule: { kind: 'cron', expr: '0 8 * * *' },
+    enabled: true,
+    repeat: { times: null, completed: 3 },
+    state: 'scheduled',
+    last_run_at: '2026-08-04T15:47:15+03:00',
+    next_run_at: '2026-08-05T08:00:00+03:00',
+    last_status: 'ok',
+    provider_snapshot: 'openai-codex',
+    model_snapshot: 'gpt-5.6-sol',
+    ...overrides
+  }
+}
+function putJobs(home, jobs) {
+  put(home, 'cron/jobs.json', JSON.stringify({ jobs, updated_at: '2026-08-04T15:47:15+03:00' }))
+}
 
 describe('hermesHomeMarker — stable recursive fingerprint', () => {
   it('digest moves when config.yaml changes (approvals.mode toggle proxy)', () => {
@@ -72,6 +94,44 @@ describe('markerDelta — volatile runtime churn PASSES with disclosure', () => 
     expect(delta.profile_defining_unchanged).toBe(true)
     expect(delta.digest_equal).toBe(true)
     expect(delta.volatile_runtime_changes).toEqual({ cron: 1 })
+  })
+
+  it("the ticker's own runtime files appearing in cron/ are churn, not a mutation", () => {
+    // What actually happened during the 0.4.0-alpha.4 packaged E2E: the operator's
+    // live gateway ticked mid-run and created catch_up_occurrences for the first
+    // time. No job was added — protecting the cron NAME-SET failed the release for
+    // the gateway simply doing its job.
+    const home = seededHome()
+    putJobs(home, [job('a')])
+    const before = hermesHomeMarker(home)
+    put(home, 'cron/catch_up_occurrences', '1')
+    put(home, 'cron/.tick.lock', '')
+    const delta = markerDelta(before, hermesHomeMarker(home))
+    expect(delta.added_removed.cron.added).toBe(2)
+    expect(delta.volatile_runtime_changes.cron).toBe(2)
+    expect(delta.cron_jobs_changed).toBe(false)
+    expect(delta.profile_defining_unchanged).toBe(true)
+    expect(delta.digest_equal).toBe(true)
+  })
+
+  it('a job RUN (last_run_at/next_run_at/status/counter rewrite) is churn, not a mutation', () => {
+    const home = seededHome()
+    putJobs(home, [job('a')])
+    const before = hermesHomeMarker(home)
+    putJobs(home, [
+      job('a', {
+        last_run_at: '2026-08-04T16:47:15+03:00',
+        next_run_at: '2026-08-06T08:00:00+03:00',
+        last_status: 'error',
+        state: 'running',
+        fire_claim: 'pid-49104',
+        repeat: { times: null, completed: 4 }
+      })
+    ])
+    const delta = markerDelta(before, hermesHomeMarker(home))
+    expect(delta.cron_jobs_changed).toBe(false)
+    expect(delta.profile_defining_unchanged).toBe(true)
+    expect(delta.digest_equal).toBe(true)
   })
 
   it('concurrent live-gateway session create + growth is disclosed volatility', () => {
@@ -127,15 +187,38 @@ describe('markerDelta — stable/profile mutations FAIL closed', () => {
     expect(delta.digest_equal).toBe(false)
   })
 
-  it('a NEW named cron JOB (name-set protected, unlike cron file size) fails', () => {
+  it('a NEW cron JOB in jobs.json fails (it is only a few bytes of one file)', () => {
     const home = seededHome()
-    mkdirSync(path.join(home, 'cron'))
+    putJobs(home, [job('a')])
     const before = hermesHomeMarker(home)
-    put(home, 'cron/new-job.json', '{"next":1}')
+    putJobs(home, [job('a'), job('b')])
     const delta = markerDelta(before, hermesHomeMarker(home))
-    expect(delta.added_removed.cron.added).toBe(1)
+    expect(delta.cron_jobs_changed).toBe(true)
+    expect(delta.cron_jobs_before).toBe(1)
+    expect(delta.cron_jobs_after).toBe(2)
     expect(delta.profile_defining_unchanged).toBe(false)
     expect(delta.digest_equal).toBe(false)
+  })
+
+  it("a REDEFINED job (same id, new prompt/schedule) fails — the count alone would miss it", () => {
+    const home = seededHome()
+    putJobs(home, [job('a', { prompt: 'summarize sales' })])
+    const before = hermesHomeMarker(home)
+    putJobs(home, [job('a', { prompt: 'message every contact' })])
+    const delta = markerDelta(before, hermesHomeMarker(home))
+    expect(delta.cron_jobs_before).toBe(delta.cron_jobs_after)
+    expect(delta.cron_jobs_changed).toBe(true)
+    expect(delta.profile_defining_unchanged).toBe(false)
+  })
+
+  it('an UNREADABLE jobs.json fails closed even though the fingerprint is stable', () => {
+    const home = seededHome()
+    putJobs(home, [job('a')])
+    const before = hermesHomeMarker(home)
+    put(home, 'cron/jobs.json', '{ truncated mid-writ')
+    const delta = markerDelta(before, hermesHomeMarker(home))
+    expect(delta.cron_jobs_unreadable).toBe(true)
+    expect(delta.profile_defining_unchanged).toBe(false)
   })
 
   it('profile_defining_unchanged and digest_equal never disagree', () => {

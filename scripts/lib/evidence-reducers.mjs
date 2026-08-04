@@ -4,7 +4,9 @@
 import { machineCaptureBinding } from './release/evidence-capture.mjs'
 const bool = v => (v == null ? null : Boolean(v))
 const sumCounts = obj => Object.values(obj || {}).reduce((a, b) => a + (Number(b) || 0), 0)
-const cronNameAdds = ar => Number(ar?.cron?.added) || 0 // cron adds are a protected mutation
+// A job appearing in the operator's live profile is a protected mutation. (The
+// cron DIRECTORY's own churn is the ticker's, and is disclosed as volatile.)
+const cronJobAdds = td => Math.max(0, (Number(td?.live_cron_jobs_after) || 0) - (Number(td?.live_cron_jobs_before) || 0))
 const present = (obj, omit = []) =>
   Object.fromEntries(
     Object.entries(obj || {})
@@ -60,13 +62,16 @@ export function reduceIsolatedPackaged(r) {
     isolated_home_populated: bool(iso.isolated_home_populated),
     live_home_untouched: bool(td.live_home_untouched),
     live_config_unchanged: bool(td.live_config_unchanged),
-    // Stable marker equality: config + cron name-set + RECURSIVE content
+    // The operator's own scheduled jobs: identical definitions before and after,
+    // and readable on both sides. Reports predating the field skip the term.
+    live_cron_jobs_unchanged: 'live_cron_jobs_unchanged' in td ? bool(td.live_cron_jobs_unchanged) : null,
+    // Stable marker equality: config + cron JOB DEFINITIONS + RECURSIVE content
     // fingerprints of the durable trees; a nested edit or same-size byte rewrite
     // flips it. Equal to live_home_untouched by construction.
     live_marker_stable_equal: bool(td.live_marker_exact_equal),
     // Structural (path add/remove/type-change) vs content (same-path byte rewrite)
     // drift, kept separate; both 0 on a real pass. Counts only — never names/paths.
-    live_structural_additions: sumCounts(td.live_stable_structural_changed) + cronNameAdds(td.live_added_removed),
+    live_structural_additions: sumCounts(td.live_stable_structural_changed) + cronJobAdds(td),
     live_content_rewrites: sumCounts(td.live_stable_content_changed),
     live_unsafe_entries: Number(td.live_stable_unsafe_entries) || 0,
     live_volatile_runtime_changes: sumCounts(td.live_volatile_runtime_changes),
