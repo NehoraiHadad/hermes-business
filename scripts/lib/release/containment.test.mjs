@@ -110,6 +110,19 @@ describe('decideContainment — report boolean is never trusted (CRITICAL 1)', (
     expect(v.code).toBe('containment-app-not-covered')
   })
 
+  it('pilot is full-rigor: passes exactly like public when containment is proven', () => {
+    const v = decideContainment({ report: honestReport, independent: good, channel: 'pilot' })
+    expect(v.ok).toBe(true)
+  })
+
+  it('pilot ALSO requires the app.asar to have been extracted & hashed (full rigor, no exemption)', () => {
+    const noApp = proveContainmentBound({ installerPath: 'x.exe', expected: { manifestJson: MANIFEST, attestationJson: ATTEST }, tool: '7z', extractEntry: goodExtract, extractBinary: goodBinary })
+    const rep = { payload_binding: { proven: true, containment_digest: noApp.digest } }
+    const v = decideContainment({ report: rep, independent: noApp, channel: 'pilot' })
+    expect(v.ok).toBe(false)
+    expect(v.code).toBe('containment-app-not-covered')
+  })
+
   it('no report at all fails closed', () => {
     expect(decideContainment({ report: null, independent: good }).code).toBe('containment-no-report')
   })

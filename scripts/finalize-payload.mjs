@@ -2,7 +2,7 @@
 // VERIFY each immediately, then embed the release manifest — all AFTER the `--win
 // dir` build (afterPack's rcedit was the last PE mutation) and BEFORE NSIS packs.
 //
-//   node scripts/finalize-payload.mjs --channel public|qa
+//   node scripts/finalize-payload.mjs --channel public|qa|pilot
 //
 // public: requires a real cert (HERMES_SIGN_THUMBPRINT) + a resolved signtool +
 //   an approved-publisher allowlist. Signs helpers/DLLs first, product exe last,
@@ -11,6 +11,12 @@
 //   unsigned build can never reach NSIS. Nothing is ever faked.
 // qa: intentionally UNSIGNED — a labeled no-op; the manifest is still embedded so the
 //   containment proof works, but the build stays NON-DISTRIBUTABLE downstream.
+// pilot: ALSO intentionally UNSIGNED (no code-signing certificate exists yet) —
+//   same no-op mechanics as qa, but the log line says so honestly as a Pilot/
+//   Alpha statement, not a "non-distributable" one: pilot IS distributable
+//   despite being unsigned (docs/specs/versioning.md §13 stage 5; the preflight
+//   gate — scripts/lib/release/preflight.mjs — is what actually decides
+//   distributability, not this script).
 
 import { createHash } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
@@ -25,6 +31,7 @@ import { verifySigntool } from './lib/release/signtool.mjs'
 import { classifySignature, signerApproved } from './lib/release/signing.mjs'
 import { resolveReleaseTools } from './lib/release/tool-discovery.mjs'
 import { parseChannel } from './lib/parse-channel.mjs'
+import { isSigningTolerant } from './lib/release/channel-policy.mjs'
 
 const root = repoRoot()
 const channel = parseChannel()
@@ -48,11 +55,15 @@ const listing = []
 const allowlist = readJson(path.join(root, 'build', 'sign-allowlist.json')) || { subjects: [], thumbprints: [], exclusions: [] }
 const resolve = rel => path.join(dir, rel)
 
-if (channel === 'qa') {
+if (isSigningTolerant(channel)) {
   const plan = signPayload({ listing, resolve, signOne: null, exclusions: allowlist.exclusions || [] })
-  console.log(`QA channel: leaving ${plan.order.length} shipped PE(s) UNSIGNED (non-distributable). Embedding manifest.`)
+  if (channel === 'pilot') {
+    console.log(`Pilot channel (Alpha prerelease): leaving ${plan.order.length} shipped PE(s) UNSIGNED — no code-signing certificate yet. This build IS distributable; Windows SmartScreen will warn on install and users should verify SHA256SUMS.txt (see docs/RELEASING.md). Embedding manifest.`)
+  } else {
+    console.log(`QA channel: leaving ${plan.order.length} shipped PE(s) UNSIGNED (non-distributable). Embedding manifest.`)
+  }
   embedReleaseManifest(dir, root)
-  console.log('finalize-payload(qa): manifest embedded over unsigned payload.')
+  console.log(`finalize-payload(${channel}): manifest embedded over unsigned payload.`)
   process.exit(0)
 }
 

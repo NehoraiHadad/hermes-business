@@ -12,9 +12,19 @@
 //     and they must MATCH the artifact being released — an envelope captured
 //     against a different build is stale, never an auto-pass.
 
+import { assertKnownChannel, isSigningTolerant } from './channel-policy.mjs'
+
 export const DECLARED_CATEGORIES = ['packaged-e2e', 'approval', 'shared-state', 'thin-installer', 'telegram']
 export const PUBLIC_REQUIRED = ['packaged-e2e', 'approval', 'shared-state', 'thin-installer', 'telegram']
 export const QA_REQUIRED = ['packaged-e2e', 'approval', 'shared-state']
+// pilot requires the SAME machine-bound packaged-e2e + approval (+ shared-state)
+// evidence as qa — the exact-artifact stage that produces them already runs
+// against the real production transport (no demo/VITE_ALLOW_DEMO dependency; see
+// scripts/e2e-exact-artifact.mjs / scripts/e2e-installed-isolated.mjs), so pilot
+// gets no exemption there. It DOES get qa's tolerance on the two hosted-service
+// external gates (thin-installer, telegram) — see channel-policy.mjs.
+export const PILOT_REQUIRED = QA_REQUIRED
+export const REQUIRED_BY_CHANNEL = { public: PUBLIC_REQUIRED, qa: QA_REQUIRED, pilot: PILOT_REQUIRED }
 
 /** Exactly one envelope per declared category. `counts` maps category→file count. */
 export function checkCardinality(counts = {}, categories = DECLARED_CATEGORIES) {
@@ -29,17 +39,21 @@ export function checkCardinality(counts = {}, categories = DECLARED_CATEGORIES) 
 
 /** Which categories must be `passed` for a channel, and the honest blockers. */
 export function checkGateStatuses(channel, statuses = {}) {
-  const required = channel === 'public' ? PUBLIC_REQUIRED : QA_REQUIRED
+  // An unknown channel must never inherit qa's (weakest) requirement set — the
+  // old `|| QA_REQUIRED` fallback was exactly that fail-open.
+  assertKnownChannel(channel)
+  const required = REQUIRED_BY_CHANNEL[channel]
   const failures = []
   for (const cat of required) {
     if (statuses[cat] !== 'passed') {
       failures.push({ code: 'evidence-not-passed', detail: `required gate "${cat}" is ${statuses[cat] || 'absent'} (must be passed for ${channel})` })
     }
   }
-  // For qa, thin-installer/telegram may be left non-passed: report them honestly.
-  const externalBlockers = channel === 'public'
-    ? []
-    : ['thin-installer', 'telegram'].filter(c => statuses[c] && statuses[c] !== 'passed')
+  // Signing-tolerant channels (qa, pilot) may leave the two hosted-service gates
+  // non-passed: report them honestly. For public they are hard failures above.
+  const externalBlockers = isSigningTolerant(channel)
+    ? ['thin-installer', 'telegram'].filter(c => statuses[c] && statuses[c] !== 'passed')
+    : []
   return { failures, externalBlockers }
 }
 

@@ -60,4 +60,9 @@ describe('unsigned-inside / signed-loose rejection (CRITICAL 2)', () => {
     const r = rejectUnsignedInsideSignedLoose({ channel: 'qa', loose: { installer: valid }, inside: [{ path: 'x.dll', signature: null }] })
     expect(r.ok).toBe(true)
   })
+
+  it('pilot is never blocked either (unsigned is expected, disclosed, still distributable)', () => {
+    const r = rejectUnsignedInsideSignedLoose({ channel: 'pilot', loose: { installer: valid }, inside: [{ path: 'x.dll', signature: null }] })
+    expect(r.ok).toBe(true)
+  })
 })

@@ -20,6 +20,21 @@ describe('checkVersionImmutability — durable ledger (finding 5)', () => {
     expect(r.label).toMatch(/UNVERIFIED/)
   })
 
+  it('pilot is a FULL-RIGOR channel: it FAILS closed with no durable ledger, same as public', () => {
+    const r = checkVersionImmutability({ channel: 'pilot', version: '0.3.3', installerSha256: SHA_A, ledger: null })
+    expect(r.ok).toBe(false)
+    expect(r.code).toBe('version-ledger-unavailable')
+    expect(r.verified).toBe(false)
+  })
+
+  it('pilot honors a real ledger exactly like public (idempotent / reuse)', () => {
+    const ok = checkVersionImmutability({ channel: 'pilot', version: '0.3.3', installerSha256: SHA_A, ledger: signedLedger({ '0.3.3': { sha256: SHA_A } }) })
+    expect(ok.ok).toBe(true)
+    const reuse = checkVersionImmutability({ channel: 'pilot', version: '0.3.3', installerSha256: SHA_B, ledger: signedLedger({ '0.3.3': { sha256: SHA_A } }) })
+    expect(reuse.ok).toBe(false)
+    expect(reuse.code).toBe('version-reuse')
+  })
+
   it('an UNTRUSTED ledger source is treated as no ledger', () => {
     const r = checkVersionImmutability({ channel: 'public', version: '0.3.3', installerSha256: SHA_A, ledger: { source: 'local-guess', entries: { '0.3.3': { sha256: SHA_A } } } })
     expect(r.ok).toBe(false)

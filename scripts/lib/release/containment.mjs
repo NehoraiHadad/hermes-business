@@ -17,10 +17,12 @@
 // Any gap → { ok:false } with an honest code, and the public gate fails closed.
 // Off-box (no extractor) → independent.proven is false → fail closed, never faked.
 
+import { requiresFullRigor } from './channel-policy.mjs'
+
 /**
  * @param report      release-report.json (or null)
  * @param independent result of proveContainmentBound() over the installer on disk
- * @param channel     'public' | 'qa'
+ * @param channel     'public' | 'qa' | 'pilot'
  * Returns { ok, code?, detail, proven, digest }.
  */
 export function decideContainment({ report, independent, channel = 'public' } = {}) {
@@ -59,10 +61,11 @@ export function decideContainment({ report, independent, channel = 'public' } = 
       independent)
   }
 
-  // Public additionally requires the app.asar to have been part of the extraction,
-  // so the manifest's app hash is proven against the archive really shipped.
-  if (channel === 'public' && !independent.extracted?.app_asar_sha256) {
-    return fail('containment-app-not-covered', 'containment proof did not extract & hash the payload app.asar (public requires it)', independent)
+  // Public AND pilot (full-rigor channels) additionally require the app.asar to
+  // have been part of the extraction, so the manifest's app hash is proven
+  // against the archive really shipped.
+  if (requiresFullRigor(channel) && !independent.extracted?.app_asar_sha256) {
+    return fail('containment-app-not-covered', `containment proof did not extract & hash the payload app.asar (${channel} requires it)`, independent)
   }
 
   return { ok: true, proven: true, digest: independent.digest, detail: 'installer↔payload containment independently re-proven and digest-bound' }

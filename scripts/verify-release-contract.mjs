@@ -1,6 +1,6 @@
 // Read-only release-contract verifier / dry run.
 //
-//   node scripts/verify-release-contract.mjs [--channel public|qa] [--no-probe]
+//   node scripts/verify-release-contract.mjs [--channel public|qa|pilot] [--no-probe]
 //
 // Gathers the current workspace + release/ output and runs the fail-closed
 // preflight. Prints every honest reason a release is NOT ready (dirty inputs,

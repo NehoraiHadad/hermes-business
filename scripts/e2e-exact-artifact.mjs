@@ -1,6 +1,16 @@
 // AUTOMATED EXACT-ARTIFACT E2E CAPTURE — the single orchestrator lifecycle.
 //
-//   node scripts/e2e-exact-artifact.mjs [--channel public|qa]
+//   node scripts/e2e-exact-artifact.mjs [--channel public|qa|pilot]
+//
+// Channel-AGNOSTIC by design: the lifecycle it drives (scripts/e2e-installed-
+// isolated.mjs — boot proof +, opt-in via HERMES_BUSINESS_E2E_APPROVAL=1, a real
+// denied-approval probe over the official gateway RPC) runs against the REAL
+// production transport with the isolated main-process QA-runtime override
+// (electron/qa-runtime-policy.cjs — HERMES_HOME/port isolation only). It has NO
+// dependency on the renderer demo transport / VITE_ALLOW_DEMO / `?demo=1`
+// (grep confirms zero references anywhere under scripts/lib/isolated-e2e/ or
+// scripts/lib/probes/installed/boot.mjs), so this stage needs no pilot-specific
+// variant — it already proves exactly what a real production/pilot build needs.
 //
 // 1. Fingerprint the IMMUTABLE candidate package: installer sha256 (measured from the
 //    packaged .exe bytes), build_nonce (from the embedded attestation) and the staged

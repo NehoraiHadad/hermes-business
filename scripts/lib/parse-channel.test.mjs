@@ -10,13 +10,14 @@ describe('parseChannel', () => {
   it('defaults to the public channel', () => {
     expect(parseChannel([])).toBe('public')
     expect(DEFAULT_CHANNEL).toBe('public')
-    expect(CHANNELS).toEqual(['public', 'qa'])
+    expect(CHANNELS).toEqual(['public', 'qa', 'pilot'])
   })
 
   it('reads an explicit channel from anywhere in argv', () => {
     expect(parseChannel(['--channel', 'qa'])).toBe('qa')
     expect(parseChannel(['--no-probe', '--channel', 'public'])).toBe('public')
     expect(parseChannel(['--channel', 'qa', '--no-probe'])).toBe('qa')
+    expect(parseChannel(['--channel', 'pilot'])).toBe('pilot')
   })
 
   it('rejects a trailing --channel instead of silently yielding undefined', () => {
@@ -39,6 +40,11 @@ describe('parseChannel', () => {
     expect(parseChannel(['--qa'], { allowShorthand: true })).toBe('qa')
     expect(parseChannel(['--qa'])).toBe('public')
     expect(() => parseChannel(['--qa', '--channel', 'public'], { allowShorthand: true })).toThrow(/conflicting/)
+  })
+
+  it('supports the --pilot shorthand only when asked', () => {
+    expect(parseChannel(['--pilot'], { allowShorthand: true })).toBe('pilot')
+    expect(parseChannel(['--pilot'])).toBe('public')
   })
 
   it('honours an explicit default', () => {

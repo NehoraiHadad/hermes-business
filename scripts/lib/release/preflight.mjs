@@ -14,6 +14,8 @@ import { checkCardinality, checkGateStatuses, checkPackagedBinding } from './evi
 import { decideContainment } from './containment.mjs'
 import { verifyLockAttestation } from './lock-attest.mjs'
 import { verifyIdentityChain } from './identity-chain.mjs'
+import { requiresFullRigor } from './channel-policy.mjs'
+import { ATTESTATION_SCHEMA } from '../build-attestation.mjs'
 
 export function preflightRelease(state) {
   const F = []
@@ -29,6 +31,10 @@ export function preflightRelease(state) {
   const at = state.attestation
   if (!at) add('attestation-missing', 'resources/build-attestation.json absent')
   else {
+    // First-class schema gate (all channels): a stale attestation written by an
+    // older toolchain must fail HERE, not by the accident of a field it happens
+    // to lack (e.g. schema-1 files have no build_mode — only pilot noticed).
+    if (at.schema !== ATTESTATION_SCHEMA) add('attestation-schema-mismatch', `attestation schema ${JSON.stringify(at.schema ?? null)} != current ${ATTESTATION_SCHEMA} — regenerate via gen-build-attestation.mjs`)
     if (at.artifact_kind !== 'win-unpacked-current') add('attestation-kind', `artifact_kind ${JSON.stringify(at.artifact_kind)}`)
     if (at.app_version !== state.packageVersion) add('attestation-version', `attested ${at.app_version} != package.json ${state.packageVersion}`)
     if (at.source_fingerprint !== state.currentFingerprint) add('attestation-fingerprint-stale', `attested fingerprint ${short(at.source_fingerprint)} != current ${short(state.currentFingerprint)}`)
@@ -36,6 +42,16 @@ export function preflightRelease(state) {
       || (at.source_head === state.currentHead ? 'equal' : 'unknown')
     if (!['equal', 'evidence-descendant'].includes(provenance)) {
       add('attestation-head-stale', `attested head ${short(at.source_head)} has ${provenance} relation to HEAD ${short(state.currentHead)}`)
+    }
+    // PILOT ONLY (never public — the public gate is untouched by design): the
+    // renderer must be the REAL production build (`npm run build`, demo fixtures
+    // physically stripped), never `build:qa` (VITE_ALLOW_DEMO baked in). This is
+    // independently detected on disk by gen-build-attestation.mjs (scanning the
+    // built dist/ bundle for the demo-strip stub), never trusted from an argument
+    // — a qa-mode artifact can never pass under --channel pilot. See
+    // docs/specs/versioning.md §13 stage 5.
+    if (channel === 'pilot' && at.build_mode !== 'production') {
+      add('pilot-qa-mode-build', `pilot requires a REAL production renderer build; attestation records build_mode=${JSON.stringify(at.build_mode ?? null)} (expected "production")`)
     }
   }
 
@@ -61,7 +77,7 @@ export function preflightRelease(state) {
   //    committed GitHub asset digest); state.ledger is null unless authentic. An
   //    unauthenticated ledger present on disk is surfaced explicitly and treated as
   //    absent, so a forged label can never grant immutability.
-  if (channel === 'public' && state.rawLedger && state.ledgerAuth && state.ledgerAuth.authenticated !== true) {
+  if (requiresFullRigor(channel) && state.rawLedger && state.ledgerAuth && state.ledgerAuth.authenticated !== true) {
     add('ledger-unauthenticated', `release-ledger.json is not authenticated (${state.ledgerAuth.reason}); a self-applied "source" label is never trusted`)
   }
   const imm = checkVersionImmutability({ channel, version: state.packageVersion, installerSha256: installers[0]?.sha256, ledger: state.ledger })
@@ -85,11 +101,11 @@ export function preflightRelease(state) {
   //    in this installer fails closed.
   if (state.releaseReport) {
     for (const e of verifyReleaseReport(state.releaseReport, state.observed || {}).errors) add('release-report', e)
-  } else if (channel === 'public') {
+  } else if (requiresFullRigor(channel)) {
     add('release-report', 'release/release-report.json missing; installer not bound to packaged manifest')
   }
   const containment = decideContainment({ report: state.releaseReport, independent: state.independentContainment, channel })
-  if (channel === 'public' && !containment.ok) {
+  if (requiresFullRigor(channel) && !containment.ok) {
     add(containment.code || 'payload-binding-unproven', `installer↔payload containment not independently proven: ${containment.detail}`)
   }
 

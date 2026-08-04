@@ -55,6 +55,18 @@ describe('evaluateSigning — public gate (finding 8)', () => {
     expect(v.distributable).toBe(false)
     expect(v.label).toMatch(/NON-DISTRIBUTABLE/)
   })
+  it('pilot unsigned → allowed AND labeled DISTRIBUTABLE (honest Alpha, no cert yet)', () => {
+    const v = evaluateSigning({ channel: 'pilot', installer: null, app: null })
+    expect(v.failures).toEqual([])
+    expect(v.distributable).toBe(true)
+    expect(v.label).toMatch(/DISTRIBUTABLE \(pilot/)
+    expect(v.signed).toBe(false)
+  })
+  it('pilot ignores an allowlist / real signature — never blocked, never required', () => {
+    const v = evaluateSigning({ channel: 'pilot', installer: sig, app: sig, allowlist: APPROVED })
+    expect(v.failures).toEqual([])
+    expect(v.distributable).toBe(true)
+  })
   it('unknown channel fails closed', () => {
     const v = evaluateSigning({ channel: 'nightly', installer: null, app: null })
     expect(v.failures.map(f => f.code)).toContain('unknown-channel')

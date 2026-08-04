@@ -58,14 +58,16 @@ describe('two-phase signing order (CRITICAL 2) is pinned in the packaging orches
   const win = pkg.build.win as Record<string, unknown>
   // The order used to live twice, as substring positions inside two ~400-char
   // package.json one-liners — so only the public channel was ever asserted. It is
-  // now one declarative plan (scripts/package-win.mjs), asserted for BOTH channels.
-  const plan = (channel: 'public' | 'qa') => packagingStages(channel).map(stage => stage.id)
-  const at = (channel: 'public' | 'qa', id: string) => plan(channel).indexOf(id)
-  const channels: Array<'public' | 'qa'> = ['public', 'qa']
+  // now one declarative plan (scripts/package-win.mjs), asserted for ALL channels.
+  type Channel = 'public' | 'qa' | 'pilot'
+  const plan = (channel: Channel) => packagingStages(channel).map(stage => stage.id)
+  const at = (channel: Channel, id: string) => plan(channel).indexOf(id)
+  const channels: Channel[] = ['public', 'qa', 'pilot']
 
-  it('package.json delegates both channels to the single orchestrator', () => {
+  it('package.json delegates all three channels to the single orchestrator', () => {
     expect(String(pkg.scripts['package:win'])).toBe('node scripts/package-win.mjs --channel public')
     expect(String(pkg.scripts['package:win:qa'])).toBe('node scripts/package-win.mjs --channel qa')
+    expect(String(pkg.scripts['package:win:pilot'])).toBe('node scripts/package-win.mjs --channel pilot')
   })
 
   it('skips ONLY code signing (signExecutable:false) while keeping native resedit enabled', () => {
@@ -123,7 +125,7 @@ describe('two-phase signing order (CRITICAL 2) is pinned in the packaging orches
     )
   })
 
-  it('differs between channels in EXACTLY the build script and the channel arguments', () => {
+  it('differs between public/qa in EXACTLY the build script and the channel arguments', () => {
     expect(at('public', 'npm:build')).toBe(1)
     expect(at('qa', 'npm:build:qa')).toBe(1)
     expect(plan('public')).not.toContain('npm:build:qa')
@@ -143,6 +145,25 @@ describe('two-phase signing order (CRITICAL 2) is pinned in the packaging orches
     }
   })
 
+  it('pilot uses the REAL `build` (never `build:qa`) — identical stage sequence to public', () => {
+    // The whole point of the pilot channel (docs/specs/versioning.md §13 stage 5)
+    // is that it ships a real, fixtures-stripped renderer. Its plan must be
+    // byte-for-byte public's plan with only the --channel argument swapped.
+    expect(at('pilot', 'npm:build')).toBe(1)
+    expect(plan('pilot')).not.toContain('npm:build:qa')
+    // Stage IDs never encode the channel (only stage.args does), so an identical
+    // plan for public and pilot is exactly the assertion we want here.
+    expect(plan('pilot')).toEqual(plan('public'))
+    for (const channel of ['public', 'pilot'] as const) {
+      const stages = packagingStages(channel)
+      for (const stage of stages) {
+        if (Array.isArray(stage.args) && stage.args.includes('--channel')) {
+          expect(stage.args).toEqual(['--channel', channel])
+        }
+      }
+    }
+  })
+
   it('rejects an unknown channel instead of packaging something undefined', () => {
     expect(() => packagingStages('prod' as 'public')).toThrow(/unknown channel/)
   })
@@ -153,7 +174,7 @@ describe('two-phase signing order (CRITICAL 2) is pinned in the packaging orches
   })
 
   it('afterPack embeds the icon but hands NO version string to rcedit (native pass owns it)', () => {
-    // Passing the 0.4.0-alpha.1 prerelease to rcedit file-version would be a non-numeric hazard;
+    // Passing a prerelease like 0.4.0-alpha.2 to rcedit file-version would be a non-numeric hazard;
     // afterPack embeds icon-only, and electron-builder's native resedit renders the numeric form.
     const afterPack = readFileSync(new URL('./after-pack.cjs', import.meta.url), 'utf8')
     expect(afterPack).toMatch(/rcedit\([^)]*\{\s*icon\s*\}/)

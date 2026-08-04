@@ -13,17 +13,23 @@
 //     entries: { [version]: { sha256, released_at? } } }
 // `source: null` (or a null ledger) means we have NO durable prior-release record.
 
+import { requiresFullRigor } from './channel-policy.mjs'
+
 export const TRUSTED_SOURCES = new Set(['signed-ledger', 'github-asset'])
 
 /**
  * Decide whether shipping `installerSha256` under `version` is immutability-safe.
- *   channel        : 'public' | 'qa'
+ *   channel        : 'public' | 'qa' | 'pilot'
  *   version        : package.json version being released
  *   installerSha256: sha256 of the candidate installer
  *   ledger         : durable prior-release ledger (see above) | null
  * Returns { ok, verified, code?, detail, label }.
- *   - No trusted ledger  → public FAILS closed (can't prove immutability);
- *                          qa is allowed but labeled `unverified`.
+ *   - No trusted ledger  → public/pilot (full-rigor channels, channel-policy.mjs)
+ *                          FAIL closed (can't prove immutability); qa is allowed
+ *                          but labeled `unverified`. pilot is a distributed,
+ *                          published channel exactly like public (D7 extends to
+ *                          it once pilot releases populate the same ledger via
+ *                          `github-asset`), so it earns no exemption here.
  *   - Version present, SAME sha → idempotent re-release (ok, verified).
  *   - Version present, DIFFERENT sha → hard `version-reuse` collision.
  *   - Version absent → a genuinely new version (ok, verified).
@@ -31,14 +37,14 @@ export const TRUSTED_SOURCES = new Set(['signed-ledger', 'github-asset'])
 export function checkVersionImmutability({ channel = 'public', version, installerSha256, ledger } = {}) {
   const trusted = !!(ledger && TRUSTED_SOURCES.has(ledger.source) && ledger.entries && typeof ledger.entries === 'object')
   if (!trusted) {
-    if (channel === 'public') {
+    if (requiresFullRigor(channel)) {
       return {
         ok: false, verified: false, code: 'version-ledger-unavailable',
-        detail: `no durable signed/GitHub prior-release ledger to prove v${version} was not already published; public fails closed`,
+        detail: `no durable signed/GitHub prior-release ledger to prove v${version} was not already published; ${channel} fails closed`,
         label: 'UNVERIFIED (no durable ledger)'
       }
     }
-    return { ok: true, verified: false, detail: `v${version} immutability UNVERIFIED (no durable ledger; allowed for qa)`, label: 'UNVERIFIED (qa)' }
+    return { ok: true, verified: false, detail: `v${version} immutability UNVERIFIED (no durable ledger; allowed for ${channel})`, label: `UNVERIFIED (${channel})` }
   }
   const prior = ledger.entries[version]
   if (!prior) {

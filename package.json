@@ -1,6 +1,6 @@
 {
   "name": "hermes-business",
-  "version": "0.4.0-alpha.1",
+  "version": "0.4.0-alpha.2",
   "private": true,
   "description": "A friendly always-available business assistant powered by Hermes Agent",
   "author": {
@@ -52,9 +52,11 @@
     "verify:release": "npm test && npm run test:evidence && npm run test:plugin:policy && npm run verify:plugin:release && npm run verify:bootstrap",
     "verify:release-contract": "node scripts/verify-release-contract.mjs",
     "verify:release-contract:qa": "node scripts/verify-release-contract.mjs --channel qa",
+    "verify:release-contract:pilot": "node scripts/verify-release-contract.mjs --channel pilot",
     "test:e2e:real-loader": "node scripts/e2e-real-loader.mjs",
     "package:win": "node scripts/package-win.mjs --channel public",
     "package:win:qa": "node scripts/package-win.mjs --channel qa",
+    "package:win:pilot": "node scripts/package-win.mjs --channel pilot",
     "finalize:payload": "node scripts/finalize-payload.mjs",
     "test:e2e:exact-artifact": "node scripts/e2e-exact-artifact.mjs",
     "gen:lock-attest": "node scripts/gen-lock-attest.mjs",

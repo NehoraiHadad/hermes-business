@@ -7,7 +7,7 @@ const path = require('node:path')
 // which keeps native resedit (icon + version strings + Windows-form file/product version, derived
 // from package.json productName/author/version) while still skipping code signing. That native
 // pass runs in `signApp` AFTER this hook, so it is the authoritative last resource edit and it
-// correctly renders the `0.4.0-alpha.1` prerelease as a numeric Windows version.
+// correctly renders the `0.4.0-alpha.2` prerelease as a numeric Windows version.
 //
 // This hook stays as an early, defense-in-depth icon embed (and a stable subject-registry file).
 // It deliberately embeds ONLY the icon — no version strings — so it cannot diverge from the

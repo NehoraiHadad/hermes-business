@@ -4,9 +4,11 @@ import path from 'node:path'
 import {
   ARTIFACT_KIND,
   ATTESTATION_BASENAME,
+  ATTESTATION_SCHEMA,
   attestationPathInUnpacked,
   buildAttestation,
   computeSourceFingerprint,
+  detectBuildMode,
   repoRoot,
   resolvePackagedArtifact,
   verifyArtifactCurrent,
@@ -29,6 +31,39 @@ describe('buildAttestation', () => {
     expect(m.app_version).toBe('1.2.3')
     expect(m.build_nonce).toMatch(/^[0-9a-f]{32}$/)
     expect(m.source_fingerprint).toBe(computeSourceFingerprint(root).fingerprint)
+  })
+
+  it('records build_mode independently — "unknown" when dist/ was never built (fixture has no dist/)', () => {
+    const { root } = fakeRoot()
+    const m = buildAttestation(root)
+    expect(m.schema).toBe(ATTESTATION_SCHEMA)
+    expect(m.build_mode).toBe('unknown')
+    expect(m.demo_stub_detected).toBe(false)
+  })
+})
+
+describe('detectBuildMode — independent on-disk proof of production vs qa (pilot gate, docs/specs/versioning.md §13 stage 5)', () => {
+  it('absent dist/ → unknown (never guesses production)', () => {
+    const { root } = fakeRoot()
+    expect(detectBuildMode(root)).toMatchObject({ build_mode: 'unknown', demo_stub_detected: false, reason: 'dist-missing' })
+  })
+
+  it('dist/ carrying the demo-strip stub text → production (fixtures physically stripped)', () => {
+    const { root, put } = fakeRoot()
+    put('dist/assets/index-abc123.js', `console.log("x");function f(){throw new Error('demo fixtures are not shipped in this build')}`)
+    expect(detectBuildMode(root)).toMatchObject({ build_mode: 'production', demo_stub_detected: true })
+  })
+
+  it('dist/ with real bundle code but NO stub text → qa (demo module compiled in)', () => {
+    const { root, put } = fakeRoot()
+    put('dist/assets/index-abc123.js', `console.log("x");export function createDemoBackend(){return {}}`)
+    expect(detectBuildMode(root)).toMatchObject({ build_mode: 'qa', demo_stub_detected: false })
+  })
+
+  it('scans nested asset directories, not just the top level', () => {
+    const { root, put } = fakeRoot()
+    put('dist/assets/chunks/vendor-xyz.mjs', `throw new Error('demo fixtures are not shipped in this build')`)
+    expect(detectBuildMode(root).build_mode).toBe('production')
   })
 })
 

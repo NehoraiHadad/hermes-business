@@ -31,6 +31,15 @@ describe('external gates by channel (finding 6)', () => {
     expect(r.failures).toEqual([])
     expect(r.externalBlockers).toEqual(['thin-installer', 'telegram'])
   })
+  it('PILOT requires packaged-e2e/approval/shared-state passed, like qa', () => {
+    const missing = checkGateStatuses('pilot', { ...passed, approval: 'blocked' })
+    expect(missing.failures.map(f => f.code)).toContain('evidence-not-passed')
+  })
+  it('PILOT MAY leave thin-installer/telegram blocked, exactly like qa', () => {
+    const r = checkGateStatuses('pilot', { ...passed, telegram: 'blocked', 'thin-installer': 'blocked' })
+    expect(r.failures).toEqual([])
+    expect(r.externalBlockers).toEqual(['thin-installer', 'telegram'])
+  })
 })
 
 describe('packaged-e2e build binding (finding 4)', () => {

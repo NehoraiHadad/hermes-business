@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { preflightRelease } from './preflight.mjs'
 import { buildReleaseManifest, buildReleaseReport } from './manifest.mjs'
 import { containmentDigest } from './nsis-payload.mjs'
+import { ATTESTATION_SCHEMA } from '../build-attestation.mjs'
 
 // A fully contract-clean, signed public release, assembled synthetically (no
 // dependency on the real, stale artifact). Each case mutates ONE facet.
@@ -13,7 +14,7 @@ const PROD = 'App'
 const NAME = 'Tachles-Setup-0.3.3.exe'
 const APPROVED = { subjects: ['Contoso, Inc.'], thumbprints: [] }
 const sig = { valid: true, trustedTimestamp: true, status: 'Valid', publisher: 'Contoso, Inc.', thumbprint: null }
-const attestation = { artifact_kind: 'win-unpacked-current', app_version: '0.3.3', source_head: HEAD, source_fingerprint: FP, build_nonce: NONCE }
+const attestation = { schema: ATTESTATION_SCHEMA, artifact_kind: 'win-unpacked-current', app_version: '0.3.3', source_head: HEAD, source_fingerprint: FP, build_nonce: NONCE, build_mode: 'production' }
 const appAsar = { bytes: 4096, sha256: 'c'.repeat(64) }
 const installers = [{ name: NAME, version: '0.3.3', bytes: 100, sha256: SHA }]
 const evDigests = { 'packaged-e2e': 'p', approval: 'ap', 'shared-state': 'ss', 'thin-installer': 'ti', telegram: 'tg' }
@@ -140,5 +141,85 @@ describe('preflightRelease — QA channel is lenient but non-distributable', () 
     expect(v.ok).toBe(true)
     expect(v.distributable).toBe(false)
     expect(v.externalBlockers).toEqual(['thin-installer', 'telegram'])
+  })
+})
+
+describe('preflightRelease — pilot channel: full rigor, tolerant only on signing + external gates', () => {
+  // Same fully-bound facts as the public happy path (ledger/lock-attest/release
+  // report/containment ALL present and proven), but unsigned and with
+  // thin-installer/telegram left as honest external blockers — exactly qa's
+  // tolerance, per docs/specs/versioning.md §13 stage 5.
+  function pilotState(over = {}) {
+    return goodState({
+      channel: 'pilot',
+      signatures: { installer: null, app: null },
+      signAllowlist: { subjects: [], thumbprints: [] },
+      evidence: {
+        ok: true,
+        counts: { 'packaged-e2e': 1, approval: 1, 'shared-state': 1, 'thin-installer': 1, telegram: 1 },
+        statuses: { 'packaged-e2e': 'passed', approval: 'passed', 'shared-state': 'passed', 'thin-installer': 'blocked', telegram: 'blocked' },
+        packagedBinding: { ...build, capture_method: 'machine' }
+      },
+      ...over
+    })
+  }
+
+  it('a real-production-build pilot with unsigned PEs and blocked thin-installer/telegram is OK AND distributable', () => {
+    const v = preflightRelease(pilotState())
+    expect(v.failures).toEqual([])
+    expect(v.ok).toBe(true)
+    expect(v.distributable).toBe(true)
+    expect(v.externalBlockers).toEqual(['thin-installer', 'telegram'])
+  })
+
+  it('REJECTS a qa-mode build — the attestation build_mode fact can never be forged as public', () => {
+    const qaModeAttestation = { ...attestation, build_mode: 'qa' }
+    const v = preflightRelease(pilotState({ attestation: qaModeAttestation }))
+    expect(codes(v)).toContain('pilot-qa-mode-build')
+    expect(v.ok).toBe(false)
+  })
+
+  it('REJECTS a build whose attestation records no build_mode at all (pre-upgrade attestation)', () => {
+    const noModeAttestation = { ...attestation }
+    delete noModeAttestation.build_mode
+    const v = preflightRelease(pilotState({ attestation: noModeAttestation }))
+    expect(codes(v)).toContain('pilot-qa-mode-build')
+  })
+
+  it('REJECTS a stale attestation schema as a FIRST-CLASS gate on every channel — not by the accident of a missing field', () => {
+    const stale = { ...attestation, schema: ATTESTATION_SCHEMA - 1 }
+    expect(codes(preflightRelease(pilotState({ attestation: stale })))).toContain('attestation-schema-mismatch')
+    expect(codes(preflightRelease(goodState({ attestation: stale })))).toContain('attestation-schema-mismatch')
+    const noSchema = { ...attestation }
+    delete noSchema.schema
+    expect(codes(preflightRelease(goodState({ attestation: noSchema })))).toContain('attestation-schema-mismatch')
+  })
+
+  it('does NOT tolerate a missing ledger — full rigor, no exemption (unlike qa)', () => {
+    expect(codes(preflightRelease(pilotState({ ledger: null })))).toContain('version-ledger-unavailable')
+  })
+
+  it('does NOT tolerate a missing lock-attestation — full rigor (unlike qa)', () => {
+    expect(codes(preflightRelease(pilotState({ lockAttest: null })))).toContain('lock-integrity-unattested')
+  })
+
+  it('does NOT tolerate a missing release report — full rigor (unlike qa)', () => {
+    expect(codes(preflightRelease(pilotState({ releaseReport: null })))).toContain('release-report')
+  })
+
+  it('does NOT tolerate unproven containment — full rigor (unlike qa)', () => {
+    const noExtract = { proven: false, method: 'none', reason: 'no-nsis-extractor', digest: null, extracted: null }
+    expect(codes(preflightRelease(pilotState({ independentContainment: noExtract })))).toContain('containment-not-independently-proven')
+  })
+
+  it('still requires packaged-e2e/approval/shared-state passed — signing tolerance never widens the evidence gate', () => {
+    const v = preflightRelease(pilotState({ evidence: { ...pilotState().evidence, statuses: { ...pilotState().evidence.statuses, approval: 'blocked' } } }))
+    expect(codes(v)).toContain('evidence-not-passed')
+  })
+
+  it('a real signature on a pilot build is harmless — never required, never rejected', () => {
+    const v = preflightRelease(pilotState({ signatures: { installer: sig, app: sig }, signAllowlist: APPROVED }))
+    expect(v.ok).toBe(true)
+    expect(v.distributable).toBe(true)
   })
 })

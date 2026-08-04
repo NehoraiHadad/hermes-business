@@ -17,7 +17,7 @@ a POC, and not a signed production release.
 
 - **Product:** תכל'ס — Hermes is described honestly as the engine with full
   access; the product name is **תכל'ס**.
-- **Version line:** 0.4.x Alpha (current build: 0.4.0-alpha.1).
+- **Version line:** 0.4.x Alpha (current build: 0.4.0-alpha.2).
 - **Toolchain (reference):** Node 22 · Python 3.13 · Electron 43 ·
   electron-builder 26 · Vite 6 · Vitest 4. Exact patch versions and the git HEAD
   at each acceptance run are recorded in the local `release/ACCEPTANCE.md`.
@@ -82,21 +82,44 @@ is never touched. Covered by `electron/hermes-update-flow.test.ts` and
 
 ## 3. Build artifacts — local & ignored
 
-The production companion installer, the QA (demo-enabled, non-distributable)
-build, and the thin bootstrap live under **`release/`**, which is git-ignored.
-They are **not** tracked in this repository, and their per-build byte sizes and
-SHA-256 digests are recorded in the local `release/ACCEPTANCE.md`, not here.
+The production companion installer, the pilot (Alpha, distributable-but-unsigned)
+installer, the QA (demo-enabled, non-distributable) build, and the thin bootstrap
+live under **`release/`**, which is git-ignored. They are **not** tracked in this
+repository, and their per-build byte sizes and SHA-256 digests are recorded in
+the local `release/ACCEPTANCE.md`, not here.
 
 Durable facts about those artifacts:
 
-- **Production companion** — NSIS one-per-user installer (electron-builder);
-  bundle bakes `VITE_ALLOW_DEMO:""` (fixtures runtime-inert) **and** physically
-  strips the demo entry module at build time (`vite.config.ts` →
-  `stripDemoFixtures`), so `demo-data`/`demo-api`/`demo-rpc` are tree-shaken out
-  and **absent** from the shipped bundle, not merely unreachable.
+- **Production companion** (`npm run package:win`, `--channel public`) — NSIS
+  one-per-user installer (electron-builder); bundle bakes `VITE_ALLOW_DEMO:""`
+  (fixtures runtime-inert) **and** physically strips the demo entry module at
+  build time (`vite.config.ts` → `stripDemoFixtures`), so
+  `demo-data`/`demo-api`/`demo-rpc` are tree-shaken out and **absent** from the
+  shipped bundle, not merely unreachable. Fully signed by an approved publisher
+  (`signtool verify /pa /tw`), full binding-chain/ledger/lock-integrity rigor,
+  every evidence gate (incl. thin-installer + telegram) required `passed`.
+- **Pilot companion** (`npm run package:win:pilot`, `--channel pilot`;
+  docs/specs/versioning.md §13 stage 5) — the SAME NSIS installer as production,
+  built from the SAME real `npm run build` (demo fixtures physically stripped —
+  never `build:qa`), with the SAME full attestation/binding-chain/ledger/
+  lock-integrity rigor and the SAME machine-bound packaged-e2e + approval
+  evidence. The two differences from production, both disclosed rather than
+  hidden: (1) **unsigned** — no code-signing certificate exists yet, so Windows
+  SmartScreen warns on install; users are expected to verify the published
+  `SHA256SUMS.txt`; (2) the two hosted-service external gates (thin-installer,
+  telegram) may stay honest blockers instead of `passed`, exactly like qa. Pilot
+  **IS distributable** — an Alpha prerelease for outside testers, named
+  `Tachles-Setup-<version>.exe` with no `DO-NOT-DISTRIBUTE` marker — published as
+  a GitHub prerelease per `docs/RELEASING.md`. The build attestation
+  (`build/build-attestation.json`) independently records `build_mode` (detected
+  from the compiled `dist/` bundle, never trusted from the `--channel` argument);
+  the pilot gate fails closed if it is not `"production"`, so a `build:qa`
+  artifact can never pass `--channel pilot`.
 - **QA companion** — `vite build --mode qa` + `electron-builder --dir`
   (unpacked only, no installer), the **only** build allowed to serve `?demo=1`
   fixtures; clearly marked `DO-NOT-DISTRIBUTE` and must be deleted before release.
+  Unlike pilot, qa tolerates a missing ledger/lock-attestation/release-report —
+  it is a dev/internal artifact, never handed to anyone outside the machine.
 - **Thin bootstrap (production NSIS)** — a **release gate, not produced**:
   `build-bootstrap.ps1` hard-requires `HERMES_BUSINESS_COMPANION_URL` +
   `HERMES_BUSINESS_COMPANION_SHA256`, which are not configured and were not

@@ -10,8 +10,11 @@
 //
 // QA: intentionally unsigned. This step is a labeled no-op so a QA package can be
 // produced, but downstream it is marked NON-DISTRIBUTABLE.
+// Pilot: ALSO intentionally unsigned — no cert exists yet — but pilot IS
+// distributable (an honest, disclosed Alpha prerelease; see
+// docs/specs/versioning.md §13 stage 5 and scripts/lib/release/signing.mjs).
 //
-//   node scripts/sign-release.mjs --channel public|qa
+//   node scripts/sign-release.mjs --channel public|qa|pilot
 
 import { createHash } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
@@ -24,12 +27,17 @@ import { classifySignature, signerApproved } from './lib/release/signing.mjs'
 import { resolveReleaseTools } from './lib/release/tool-discovery.mjs'
 import { measureInstallers } from './lib/release/gather.mjs'
 import { parseChannel } from './lib/parse-channel.mjs'
+import { isSigningTolerant } from './lib/release/channel-policy.mjs'
 
 const root = repoRoot()
 const channel = parseChannel()
 
-if (channel === 'qa') {
-  console.log('QA channel: leaving EXEs UNSIGNED (non-distributable by policy). No signing performed.')
+if (isSigningTolerant(channel)) {
+  console.log(
+    channel === 'pilot'
+      ? 'Pilot channel (Alpha prerelease): leaving the installer/app EXE UNSIGNED — no code-signing certificate yet. This build IS distributable; SmartScreen will warn on install. No signing performed.'
+      : 'QA channel: leaving EXEs UNSIGNED (non-distributable by policy). No signing performed.'
+  )
   process.exit(0)
 }
 

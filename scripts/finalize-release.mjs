@@ -11,7 +11,7 @@
 //      mutated mid-run; on any failure NOTHING is promoted and the prior official
 //      sidecars are left untouched.
 //
-//   node scripts/finalize-release.mjs [--channel public|qa]
+//   node scripts/finalize-release.mjs [--channel public|qa|pilot]
 
 import { createHash } from 'node:crypto'
 import { readFileSync, existsSync } from 'node:fs'
@@ -22,6 +22,7 @@ import { preflightRelease } from './lib/release/preflight.mjs'
 import { computeReleaseBinding } from './lib/release/binding.mjs'
 import { makeStaging, stageSidecar, fingerprintCandidate, finalizeSidecars, recoverRelease } from './lib/release/staging.mjs'
 import { parseChannel } from './lib/parse-channel.mjs'
+import { requiresFullRigor } from './lib/release/channel-policy.mjs'
 
 const root = repoRoot()
 const channel = parseChannel()
@@ -49,13 +50,21 @@ const table = entries.map(e => `${e.sha256}  ${String(e.bytes).padStart(12)}  ${
 const stagedReportPath = path.join(root, 'build', 'release-report.json')
 const stagedReportJson = existsSync(stagedReportPath) ? readFileSync(stagedReportPath, 'utf8') : null
 const reportOverride = stagedReportJson ? JSON.parse(stagedReportJson) : null
-if (channel === 'public' && !reportOverride) { console.error('No staged build/release-report.json; run gen-release-report first.'); process.exit(1) }
+// public AND pilot are full-rigor channels (channel-policy.mjs) — both require
+// the binding-chain report to exist before anything can be finalized. qa does not.
+if (requiresFullRigor(channel) && !reportOverride) { console.error('No staged build/release-report.json; run gen-release-report first.'); process.exit(1) }
 
-// Gate over the STAGED checksums + STAGED report (public: full contract; qa: signing non-blocking).
+// Gate over the STAGED checksums + STAGED report (public/pilot: full contract;
+// qa: signing non-blocking). Signature probing only makes sense for public —
+// qa/pilot never carry a cert, so skip it there too.
 const state = gatherReleaseState({ root, channel, probe: channel === 'public', checksumsOverride: checksums, reportOverride })
 const verdict = preflightRelease(state)
-const QA_NONBLOCKING = new Set(['unsigned-public', 'untrusted-timestamp-public', 'publisher-not-approved', 'unknown-channel'])
-const blocking = channel === 'qa' ? verdict.failures.filter(f => !QA_NONBLOCKING.has(f.code)) : verdict.failures
+// These codes only ever fire when evaluateSigning ran its per-item loop, which
+// only happens for channel === 'public' (signing.mjs) — so for qa/pilot they can
+// never actually appear. Filtered anyway as a defensive, explicit statement of
+// intent rather than relying on that invariant silently.
+const SIGNING_NONBLOCKING = new Set(['unsigned-public', 'untrusted-timestamp-public', 'publisher-not-approved', 'unknown-channel'])
+const blocking = channel !== 'public' ? verdict.failures.filter(f => !SIGNING_NONBLOCKING.has(f.code)) : verdict.failures
 const gatePassed = blocking.length === 0
 
 // Acceptance report body (canonical doc + artifact-bound appendix).

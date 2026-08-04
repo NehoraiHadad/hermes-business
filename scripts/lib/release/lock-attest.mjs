@@ -12,20 +12,26 @@
 //     throwaway tree — the only mode that fails on a lock/`package.json` mismatch.
 // Any missing field, a mismatched lock hash, or a non-clean install fails closed.
 
+import { requiresFullRigor } from './channel-policy.mjs'
+
 export const LOCK_ATTEST_SCHEME = 1
 
 /**
  * @param attestation       release/lock-attest.json | null
  * @param currentLockSha256 sha256 of the package-lock.json on disk right now
- * @param channel           'public' | 'qa'
+ * @param channel           'public' | 'qa' | 'pilot'
  * Returns { ok, verified, failures:[{code,detail}], provenance }.
- * qa tolerates an absent attestation (labeled unverified); public fails closed.
+ * qa tolerates an absent attestation (labeled unverified); public AND pilot
+ * (full-rigor channels, channel-policy.mjs) fail closed — pilot ships a real
+ * production build to outside testers and gets no exemption from proving the
+ * install that produced it was a clean `npm ci`.
  */
 export function verifyLockAttestation({ attestation, currentLockSha256, channel = 'public' } = {}) {
+  const fullRigor = requiresFullRigor(channel)
   const failures = []
   if (!attestation || typeof attestation !== 'object') {
-    if (channel === 'public') failures.push({ code: 'lock-integrity-unattested', detail: 'no clean-install / lockfile-integrity attestation (npm ci in a clean staging)' })
-    return { ok: channel !== 'public', verified: false, failures, provenance: null }
+    if (fullRigor) failures.push({ code: 'lock-integrity-unattested', detail: 'no clean-install / lockfile-integrity attestation (npm ci in a clean staging)' })
+    return { ok: !fullRigor, verified: false, failures, provenance: null }
   }
   if (attestation.scheme !== LOCK_ATTEST_SCHEME) {
     failures.push({ code: 'lock-attest-scheme', detail: `lock attestation scheme ${JSON.stringify(attestation.scheme)} != ${LOCK_ATTEST_SCHEME}` })
@@ -48,9 +54,9 @@ export function verifyLockAttestation({ attestation, currentLockSha256, channel 
   }
   const ok = failures.length === 0
   return {
-    ok: channel === 'public' ? ok : true,
+    ok: fullRigor ? ok : true,
     verified: ok,
-    failures: channel === 'public' ? failures : [],
+    failures: fullRigor ? failures : [],
     provenance: ok ? { node: attestation.node_version, npm: attestation.npm_version, lock_sha256: attestation.package_lock_sha256 } : null
   }
 }

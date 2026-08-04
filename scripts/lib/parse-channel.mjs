@@ -8,7 +8,7 @@
 // Here the value must be exactly one of the known channels, present, and not
 // another flag.
 
-export const CHANNELS = Object.freeze(['public', 'qa'])
+export const CHANNELS = Object.freeze(['public', 'qa', 'pilot'])
 export const DEFAULT_CHANNEL = 'public'
 
 export class ChannelArgError extends Error {
@@ -24,7 +24,7 @@ export class ChannelArgError extends Error {
  * @param {object}   [options]
  * @param {string}   [options.defaultChannel='public'] used when no --channel is given
  * @param {boolean}  [options.allowShorthand=false]    also accept a bare `--qa`
- * @returns {'public'|'qa'}
+ * @returns {'public'|'qa'|'pilot'}
  */
 export function parseChannel(argv = process.argv.slice(2), { defaultChannel = DEFAULT_CHANNEL, allowShorthand = false } = {}) {
   const args = Array.isArray(argv) ? argv.map(String) : []

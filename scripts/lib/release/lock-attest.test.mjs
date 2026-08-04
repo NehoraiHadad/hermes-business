@@ -31,4 +31,13 @@ describe('verifyLockAttestation (HIGH 5)', () => {
     expect(verifyLockAttestation({ attestation: null, currentLockSha256: LOCK, channel: 'qa' }).ok).toBe(true)
     expect(verifyLockAttestation({ attestation: null, currentLockSha256: LOCK, channel: 'public' }).ok).toBe(false)
   })
+  it('pilot is full-rigor: absent attestation fails closed exactly like public', () => {
+    const r = verifyLockAttestation({ attestation: null, currentLockSha256: LOCK, channel: 'pilot' })
+    expect(r.ok).toBe(false)
+    expect(r.failures.map(f => f.code)).toContain('lock-integrity-unattested')
+  })
+  it('pilot accepts a matching, clean attestation exactly like public', () => {
+    const r = verifyLockAttestation({ attestation: good, currentLockSha256: LOCK, channel: 'pilot' })
+    expect(r.ok).toBe(true)
+  })
 })

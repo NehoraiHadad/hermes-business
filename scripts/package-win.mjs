@@ -1,6 +1,6 @@
-// The Windows packaging pipeline — one orchestrator for both channels.
+// The Windows packaging pipeline — one orchestrator for all three channels.
 //
-//   node scripts/package-win.mjs --channel public|qa [--dry-run]
+//   node scripts/package-win.mjs --channel public|qa|pilot [--dry-run]
 //
 // This replaces the twin ~400-character `package:win` / `package:win:qa` shell
 // one-liners in package.json. Those were byte-for-byte identical apart from the
@@ -13,19 +13,28 @@
 // same fail-fast-on-first-non-zero semantics as `&&` chaining. Only the place
 // they are declared moved. The channel-dependent parts are exactly the two that
 // were channel-dependent before:
-//   * `build` (public) vs `build:qa` (QA, which enables the demo transport)
+//   * `build` (public, pilot) vs `build:qa` (QA, which enables the demo transport)
 //   * `--channel <c>` on finalize-payload / sign-release / e2e-exact-artifact /
 //     finalize-release
 //
+// `pilot` (docs/specs/versioning.md §13 stage 5) is a THIRD, distributable Alpha
+// channel added alongside public/qa: it runs the exact same 12-stage plan as
+// public (real build, full attestation/binding-chain/ledger/lock-attest rigor),
+// but finalize-payload/sign-release skip signing for it (like qa — no cert
+// exists yet) with a pilot-specific honest log line, and the preflight gate
+// (scripts/lib/release/preflight.mjs) independently verifies the attestation
+// proves a REAL production build was packaged, never a `build:qa` one — see
+// scripts/lib/release/channel-policy.mjs for the exact rigor/tolerance split.
+//
 // `packagingStages()` is exported and side-effect free so scripts/packaging-
-// config.test.ts can assert the ordering contract directly on the plan, for BOTH
-// channels, instead of on substring positions in a package.json string.
+// config.test.ts can assert the ordering contract directly on the plan, for
+// EVERY channel, instead of on substring positions in a package.json string.
 
 import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { parseChannel } from './lib/parse-channel.mjs'
+import { parseChannel, CHANNELS } from './lib/parse-channel.mjs'
 
 const repoRoot = path.resolve(fileURLToPath(new URL('..', import.meta.url)))
 
@@ -37,12 +46,17 @@ const builderStage = (args) => ({ id: `electron-builder ${args.join(' ')}`, kind
  * The ordered packaging plan for a channel. Pure: builds no files, spawns
  * nothing, reads no environment.
  *
- * @param {'public'|'qa'} channel
+ * @param {'public'|'qa'|'pilot'} channel
  */
 export function packagingStages(channel) {
-  if (channel !== 'public' && channel !== 'qa') throw new Error(`unknown channel ${JSON.stringify(channel)}`)
-  // QA builds through `build:qa` (vite --mode qa) so the demo transport ships;
-  // the public channel must NEVER use it.
+  if (!CHANNELS.includes(channel)) throw new Error(`unknown channel ${JSON.stringify(channel)}`)
+  // QA builds through `build:qa` (vite --mode qa) so the demo transport ships.
+  // public AND pilot use the REAL production `build` — pilot ships a real,
+  // fixtures-stripped renderer to outside testers (docs/specs/versioning.md §13
+  // stage 5); it must NEVER take the qa shortcut. gen-build-attestation.mjs
+  // below independently verifies this from the compiled dist/ output rather than
+  // trusting this selection, so a future typo here would fail the pilot gate
+  // loudly instead of silently shipping a qa-mode Alpha.
   const buildScript = channel === 'qa' ? 'build:qa' : 'build'
   return [
     // Fail-closed release preflight BEFORE anything is built or written.
@@ -105,7 +119,7 @@ function main(argv) {
     channel = parseChannel(argv)
   } catch (error) {
     console.error(`package-win: ${error?.message || error}`)
-    console.error('usage: node scripts/package-win.mjs --channel public|qa [--dry-run]')
+    console.error('usage: node scripts/package-win.mjs --channel public|qa|pilot [--dry-run]')
     return 1
   }
   const stages = packagingStages(channel)

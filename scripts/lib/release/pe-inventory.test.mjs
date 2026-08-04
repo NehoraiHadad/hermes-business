@@ -70,4 +70,8 @@ describe('evaluatePayloadSigning — public covers ALL shipped PEs (CRITICAL 2)'
     const v = evaluatePayloadSigning({ channel: 'qa', pes: [{ path: 'App.exe', signature: null }], signerApproved })
     expect(v.failures).toEqual([])
   })
+  it('pilot does not require signing either (unsigned PEs tolerated, like qa)', () => {
+    const v = evaluatePayloadSigning({ channel: 'pilot', pes: [{ path: 'App.exe', signature: null }], signerApproved })
+    expect(v.failures).toEqual([])
+  })
 })

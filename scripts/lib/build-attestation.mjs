@@ -39,14 +39,60 @@ import {
 export { repoRoot, listMainSources, computeSourceFingerprint, productExeName } from './source-fingerprint.mjs'
 
 export const ATTESTATION_BASENAME = 'build-attestation.json'
-export const ATTESTATION_SCHEMA = 1
+// Bumped 1 → 2: the manifest now carries build_mode/demo_stub_detected (below).
+// Any attestation written by an older generator lacks the field entirely, which
+// the pilot gate (preflight.mjs) treats as "not proven production" — fail
+// closed, never a silent pass-through of an un-attested fact.
+export const ATTESTATION_SCHEMA = 2
 export const ARTIFACT_KIND = 'win-unpacked-current'
+
+// The literal error text `scripts/strip-demo-fixtures.mjs` bakes into the STUB
+// module it substitutes for `src/lib/hermes/demo.ts` whenever a build does NOT
+// allow the demo transport (i.e. every build except `vite build --mode qa` / the
+// dev server). `hermes-client.ts` statically imports that module, so the STUB
+// (or the real demo module) always ends up in the compiled dist/ bundle —
+// scanning for this exact string is an INDEPENDENT, on-disk proof of which one
+// shipped, never a trust of which npm script the caller claims to have run.
+const DEMO_STUB_MARKER = 'demo fixtures are not shipped in this build'
+
+/**
+ * Independently detect whether the CURRENT dist/ build is a real production
+ * build (demo fixtures physically stripped) or a qa-mode build (`--mode qa`,
+ * demo fixtures compiled in). Never trusts an argument or an env var — it reads
+ * the actual compiled bundle on disk, mirroring the same "prove it from bytes,
+ * not from a claim" discipline as the rest of the release-attestation chain.
+ * Returns { build_mode: 'production'|'qa'|'unknown', demo_stub_detected, reason }.
+ */
+export function detectBuildMode(root = repoRoot()) {
+  const distDir = path.join(root, 'dist')
+  if (!existsSync(distDir)) return { build_mode: 'unknown', demo_stub_detected: false, reason: 'dist-missing' }
+  try {
+    for (const file of walkJsFiles(distDir)) {
+      if (readFileSync(file, 'utf8').includes(DEMO_STUB_MARKER)) {
+        return { build_mode: 'production', demo_stub_detected: true, reason: 'demo-stub-present' }
+      }
+    }
+  } catch {
+    return { build_mode: 'unknown', demo_stub_detected: false, reason: 'dist-unreadable' }
+  }
+  return { build_mode: 'qa', demo_stub_detected: false, reason: 'demo-stub-absent' }
+}
+
+function walkJsFiles(dir, out = []) {
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, e.name)
+    if (e.isDirectory()) walkJsFiles(full, out)
+    else if (/\.(m|c)?js$/i.test(e.name)) out.push(full)
+  }
+  return out
+}
 
 /** Build the attestation manifest for the current working tree. */
 export function buildAttestation(root = repoRoot()) {
   const { fingerprint, fileCount } = computeSourceFingerprint(root)
   const pkg = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'))
   const head = currentHead(root)
+  const mode = detectBuildMode(root)
   return {
     schema: ATTESTATION_SCHEMA,
     artifact_kind: ARTIFACT_KIND,
@@ -55,6 +101,12 @@ export function buildAttestation(root = repoRoot()) {
     source_head_short: head === 'unknown' ? 'unknown' : head.slice(0, 12),
     source_fingerprint: fingerprint,
     source_file_count: fileCount,
+    // Independently detected from the compiled dist/ bundle (see
+    // detectBuildMode above) — NEVER a passthrough of --channel. 'unknown' when
+    // dist/ is absent/unreadable (e.g. this function called before `vite build`
+    // ran); the pilot gate treats anything other than 'production' as unproven.
+    build_mode: mode.build_mode,
+    demo_stub_detected: mode.demo_stub_detected,
     build_nonce: randomBytes(16).toString('hex'),
     generated_at: new Date().toISOString()
   }

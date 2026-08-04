@@ -22,5 +22,9 @@ const manifest = writeAttestation(dest, root)
 console.log(
   `Wrote build/build-attestation.json — app ${manifest.app_version}, ` +
     `head ${manifest.source_head_short}, fingerprint ${manifest.source_fingerprint.slice(0, 16)}…, ` +
-    `${manifest.source_file_count} main sources, nonce ${manifest.build_nonce.slice(0, 8)}…`
+    `${manifest.source_file_count} main sources, nonce ${manifest.build_nonce.slice(0, 8)}…, ` +
+    `build_mode=${manifest.build_mode}`
 )
+if (manifest.build_mode === 'unknown') {
+  console.log('  NOTE: build_mode could not be independently detected (dist/ missing or unreadable) — run this AFTER `vite build`/`vite build --mode qa`, not before. The pilot gate treats "unknown" as not-production.')
+}
