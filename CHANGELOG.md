@@ -10,6 +10,51 @@
 
 ---
 
+## [0.4.0-alpha.3] - 2026-08-04
+
+### מה חדש (למשתמש)
+
+- **כמה זה עולה — עכשיו רואים.** במסך העזרה, תחת "מצב המערכת", נוספה שורת
+  "שימוש ב־AI": כשהעוזר מחובר דרך חשבון ChatGPT היא מציגה כמה אחוזים
+  מהמכסה כבר נוצלו; אם ספק הבינה המלאכותית הודיע שהמכסה נגמרה, מופיעה הודעה
+  ברורה — "המכסה נוצלה כרגע, תתחדש אוטומטית"; ובשאר המקרים מוצג כמה פניות
+  נעשו היום ובחודש האחרון. השורה מידעית בלבד — היא לעולם לא חוסמת שום פעולה.
+- **כל ספקי ה־AI שנתמכים — ברשימה אחת.** מסך חיבור הספק מציג עכשיו את
+  הרשימה המלאה מתוך Hermes עצמו, כולל ספקים שמתחברים עם חשבון (בלי מפתח):
+  ChatGPT‏, Nous Portal (חשבון חינם להתחלה), MiniMax‏, xAI Grok — וגם ספקים
+  שמנוהלים בכלי חיצוני, עם הסבר קצר איך. ספק חדש שיתווסף ל־Hermes יופיע
+  מעצמו.
+- **מסלול חינמי להתחלה.** אפשר להתחבר עם חשבון Nous חינמי ולקבל גישה
+  למודלים חינמיים — האפליקציה בוחרת מודל מתאים אוטומטית.
+- **עמוד "כמה זה עולה" באתר.** אתר המידע כולל עכשיו פירוט הוגן של העלויות:
+  תכל'ס עצמו חינם, המסלול המומלץ (מנוי ChatGPT), האפשרויות החינמיות, ומה
+  כדאי לדעת על זרימת המידע לספק שבחרתם.
+
+### Technical
+
+- **Dynamic provider catalog (docs/specs/provider-costs.md):** the provider
+  modal renders `GET /api/providers/oauth` mapped by `flow` onto exactly three
+  UI shapes — the generalized device-code flow (`DeviceFlowOAuth`, extracted
+  from the Codex component; fresh-approval-only evidence for non-Codex
+  providers), the existing paste-a-key form, and a display-only external-CLI
+  card (also the fail-safe for unknown flows). Failed catalog read falls back
+  to the static pre-catalog list (`src/lib/provider-catalog.ts`).
+  `activateProvider` now passes through Hermes' `free_tier` verdict.
+- **Usage & quota row (`src/lib/health-panel.ts` usageRow):** local
+  cross-provider accounting from `GET /api/analytics/usage` (days=30/1),
+  layered under a quota tier resolved in `src/lib/provider-quota.ts`:
+  Hermes' credential-pool `exhausted` verdict (`GET /api/credentials/pool`,
+  new allow-listed read-only route) outranks the live Codex `used_percent`
+  (codex-probe extended with display-only `usedPercent`/`quotaExhausted`
+  fields — `gateExistingCodexGrant` unchanged, contract-tested), which
+  outranks the local counts. Display-only by construction: the row can only
+  be `ok`/`warning`, never `error`, and never affects the overall verdict.
+- **IPC guard:** two new allow-listed routes (`/api/analytics/usage` +
+  `days` query key, `/api/credentials/pool` list-only; per-entry mutation
+  routes stay blocked), lockstep-tested.
+
+---
+
 ## [0.4.0-alpha.2] - 2026-08-04
 
 ### מה חדש (למשתמש)
