@@ -100,9 +100,8 @@
           </div>
         </div>
         <p class="section-footnote">
-          אין כאן Agent Runtime חלופי, אין זיכרון כפול ואין מנוע נפרד. אם
-          Hermes לא מותקן — תכל'ס יודע להתקין אותו דרך המנגנון הרשמי, בלי
-          Terminal.
+          הכול סוכן אחד — בלי כפילויות ובלי סנכרון. ואם Hermes עוד לא מותקן
+          אצלכם, תכל'ס יתקין אותו בשבילכם, בלי שורת פקודה.
         </p>
       </div>
     </section>
@@ -113,9 +112,9 @@
         <h2>הנתונים שלך לא עוזבים את המחשב</h2>
         <ul class="check-list">
           <li>תכל'ס רץ מקומית. שיחות, הודעות, קבצים והגדרות נשמרים אצלך, בבית של Hermes על המחשב שלך.</li>
-          <li>האתר הזה סטטי לחלוטין: אין אנליטיקס, אין עוגיות, אין פונטים או סקריפטים משרתים חיצוניים.</li>
-          <li>חיבורים חיצוניים (Google, Telegram, WhatsApp) עוברים אך ורק דרך המנגנונים הרשמיים של Hermes, ורק אם חיברתם אותם בעצמכם.</li>
-          <li>מדיניות WhatsApp היא fail-closed: ברירת המחדל היא קריאה בלבד, ומענה אוטומטי מופעל רק לשיחות שבחרתם במפורש.</li>
+          <li>גם באתר הזה אין מעקב: בלי אנליטיקס ובלי עוגיות.</li>
+          <li>חיבורים חיצוניים (Google, Telegram, WhatsApp) פועלים רק אם חיברתם אותם בעצמכם.</li>
+          <li>בוואטסאפ ברירת המחדל היא קריאה בלבד — מענה אוטומטי נשלח רק לשיחות שאישרתם במפורש.</li>
         </ul>
       </div>
     </section>
@@ -126,9 +125,9 @@
         <h2>מה צריך</h2>
         <ul class="check-list">
           <li>Windows 10/11, ‏64-bit.</li>
-          <li>סוכן Hermes בטווח תאימות <code dir="ltr">&gt;=0.19.0 &lt;0.20.0</code> — אם אינו מותקן, המתקין יציע להתקין אותו.</li>
-          <li>חשבון אצל ספק מודל (למשל OpenAI) המחובר דרך מנגנון ההגדרה של Hermes.</li>
-          <li>חיבורי Google/Telegram/WhatsApp — אופציונליים, ודורשים הרשאות שאתם נותנים במפורש.</li>
+          <li>סוכן Hermes — ואם אינו מותקן, המתקין יתקין אותו בשבילכם.</li>
+          <li>חשבון אצל ספק בינה מלאכותית (למשל OpenAI) — מגדירים פעם אחת מתוך האפליקציה.</li>
+          <li>חיבורי Google/Telegram/WhatsApp — אופציונליים, ורק בהרשאה מפורשת שלכם.</li>
         </ul>
       </div>
     </section>
@@ -141,26 +140,26 @@
           <li>מורידים את המתקין מעמוד ההורדות (למטה).</li>
           <li>
             <strong>צפוי מסך SmartScreen כחול:</strong> גרסת ה-Alpha עדיין
-            אינה חתומה בחתימת קוד (code signing). זה מתוכנן ויתוקן לפני גרסת
-            production. אם אתם ממשיכים: <em>“More info”</em> ← <em>“Run
-            anyway”</em>.
+            אינה חתומה בחתימה דיגיטלית — זה יטופל לקראת הגרסה הרשמית. אם אתם
+            ממשיכים: <em>“More info”</em> ← <em>“Run anyway”</em>.
           </li>
-          <li>ההתקנה היא per-user, יוצרת קיצורי Desktop ו-Start Menu, ובהפעלה ראשונה מזהה או מתקינה Hermes תואם.</li>
+          <li>ההתקנה לא דורשת הרשאות מנהל, יוצרת קיצור דרך על שולחן העבודה, ובהפעלה הראשונה דואגת גם ל-Hermes.</li>
         </ol>
 
         <div class="callout callout-amber" role="note">
           <p>
             <strong>אנחנו לא מבקשים מכם "לסמוך עלינו בעיניים עצומות".</strong>
-            המתקין <strong>אינו חתום</strong> — לכל release מצורף קובץ
-            <code dir="ltr">SHA256SUMS.txt</code> לאימות שלמות הקובץ, וכל הקוד
-            פתוח לעיון בריפו.
+            המתקין <strong>אינו חתום</strong> — לכן ליד כל קובץ הורדה מחכה גם
+            קובץ אימות (<code dir="ltr">SHA256SUMS.txt</code>) שמאפשר לוודא
+            שהקובץ שהגיע אליכם הוא בדיוק הקובץ שפרסמנו, וכל הקוד פתוח לעיון
+            ב-GitHub.
           </p>
         </div>
 
         <p class="section-footnote">
-          אימות ידני (אופציונלי):
-          <code dir="ltr">Get-FileHash .\תכל'ס*.exe -Algorithm SHA256</code>
-          והשוואה ל-<code dir="ltr">SHA256SUMS.txt</code> שבאותו release.
+          למי שרוצה לוודא (לא חובה): מריצים
+          <code dir="ltr">Get-FileHash .\Tachles-Setup-*.exe -Algorithm SHA256</code>
+          ומשווים לתוכן <code dir="ltr">SHA256SUMS.txt</code> שבאותו עמוד הורדה.
         </p>
       </div>
     </section>
@@ -176,12 +175,11 @@
           <p class="download-version" id="download-version" hidden></p>
         </div>
         <p class="section-footnote">
-          כל הגרסאות, קבצי ה-checksums והערות ה-release נמצאים ב-GitHub
-          Releases. האתר הזה לא מארח קבצים — מקור אמת אחד.
+          ההורדה נפתחת בעמוד הגרסאות שלנו ב-GitHub — שם תמצאו את כל הגרסאות,
+          מה חדש בכל אחת, וקובצי האימות.
         </p>
         <p class="section-footnote">
-          <em>סטטוס נוכחי: Alpha (<code dir="ltr">0.4.x</code>). לא מוצר
-          production; רשימת הפערים הפתוחים מתועדת ב-README של הריפו.</em>
+          <em>סטטוס נוכחי: גרסת Alpha מוקדמת — דברים עוד משתנים ומשתפרים.</em>
         </p>
       </div>
     </section>
@@ -210,7 +208,7 @@
           <details>
             <summary>מצאתי באג — לאן פונים?</summary>
             <p>
-              <a href="https://github.com/NehoraiHadad/hermes-business/issues">Issue בריפו</a>,
+              <a href="https://github.com/NehoraiHadad/hermes-business/issues">בעמוד הדיווחים ב-GitHub</a>,
               או במייל שבתחתית העמוד.
             </p>
           </details>
