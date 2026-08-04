@@ -124,7 +124,7 @@ blocker, like qa).
 7. **Tag the release commit.**
 
    ```powershell
-   git tag -a v<version> -m "תכל'ס <version> (pilot)"
+   git tag -a v<version> -m "Tachles <version> (pilot)"
    git push --tags
    ```
 
@@ -143,12 +143,19 @@ blocker, like qa).
    gh release create v<version> `
      "release/Tachles-Setup-<version>.exe" `
      "release/SHA256SUMS.txt" `
-     --title "תכל'ס <version> (Alpha — Pilot)" `
+     --title "Tachles <version> (Alpha — Pilot)" `
      --prerelease `
      --notes-file <path-to-a-temp-file-containing>
    ```
 
-   The release notes body MUST contain:
+   The release page is BILINGUAL, split by audience: the title is Latin-script
+   and the body opens in English (the releases page is public, international
+   infrastructure — GitHub visitors, tooling), then carries the full Hebrew
+   user section (the actual pilot testers, and the in-app update panel that
+   renders this body). The body MUST contain, in this order:
+   - a short English opening: what Tachles is, one-line install instruction,
+     the unsigned/SmartScreen disclosure, a link to the (Hebrew) info site,
+     and a note that the product/notes below are in Hebrew;
    - the Hebrew `### מה חדש (למשתמש)` section copied from `CHANGELOG.md` for
      this version, and
    - a fixed installation advisory (copy verbatim, do not paraphrase away the
