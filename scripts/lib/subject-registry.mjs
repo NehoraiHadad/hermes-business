@@ -119,6 +119,7 @@ const RELEASE_SECURITY_DIRTY_ONLY = [
   { file: 'scripts/lib/evidence.mjs' },
   { file: 'scripts/lib/evidence-reducers.mjs' },
   { file: 'scripts/lib/evidence-gates.mjs' },
+  { file: 'scripts/lib/git-provenance.mjs' },
   { file: 'scripts/capture-evidence.mjs' },
   { file: 'scripts/verify-evidence.mjs' },
   { file: 'scripts/gen-lock-attest.mjs' },

@@ -10,13 +10,17 @@
 // Relations (see classifyProvenance):
 //   equal               git_head IS the current HEAD — always fine.
 //   evidence-descendant git_head is a real ancestor and EVERY committed change
-//                       from it to HEAD is confined to durable evidence
-//                       envelopes (docs/evidence/*.json). Safe: nothing the
-//                       evidence attests to (code / config / app / Hermes
-//                       compatibility) moved.
-//   code-descendant     git_head is a real ancestor but something outside the
-//                       evidence envelopes changed since — the evidence may no
-//                       longer be true, so a committed envelope is invalidated.
+//                       from it to HEAD is confined to durable release artifacts:
+//                       evidence envelopes (docs/evidence/*.json) and release
+//                       metadata (the version-immutability ledger + its trust
+//                       roots), or to paths OUTSIDE every attested subject in
+//                       the declarative registry. Safe: nothing any attestation
+//                       or envelope is ABOUT moved.
+//   code-descendant     git_head is a real ancestor but an attested subject
+//                       (packaged/build-pipeline source, an evidence subject, a
+//                       build-config input) — or a non-envelope file under
+//                       docs/evidence — changed since. The attested claim may no
+//                       longer be true, so a committed artifact is invalidated.
 //   divergent           git_head is not an ancestor of HEAD (stale/other branch)
 //                       or is not a resolvable object (bogus/typo hash).
 //   unknown             no usable git_head was recorded.
@@ -25,13 +29,51 @@
 // deterministic fake and never needs a real repository.
 
 import { execFileSync } from 'node:child_process'
+import { matchesSelector } from './release/porcelain.mjs'
+import { PACKAGED_INPUTS, EVIDENCE_SUBJECTS, BUILD_CONFIG_INPUTS } from './subject-registry.mjs'
 
 // Durable evidence artifacts: top-level JSON envelopes under docs/evidence.
-// Only these may change between a committed envelope's git_head and HEAD without
-// invalidating it. Deliberately EXCLUDED so any change to them fails closed:
-// the forensics/ subdir (raw captures) and prose docs (README.md, *.md), because
-// they are not the machine-checked envelopes the verifier gates.
+// Deliberately EXCLUDED so any change to them fails closed: the forensics/
+// subdir (raw captures) and prose docs (README.md, *.md) under docs/evidence,
+// because they are not the machine-checked envelopes the verifier gates and a
+// post-hoc edit to a captured raw must never look like a routine refresh.
 export const EVIDENCE_ARTIFACT_RE = /^docs\/evidence\/[^/]+\.json$/
+
+// Durable release METADATA: records the release process WRITES ABOUT a published
+// artifact — the durable version-immutability ledger and the trust-root material
+// that authenticates it (a step-9 "record the published asset" commit touches
+// exactly these). Like the evidence envelopes they are OUTPUTS of a release,
+// never inputs that shape the artifact or any attested subject, so committing
+// them must not invalidate a truthful attestation/envelope. Trust material is
+// authenticated and consumed at HEAD by the ledger/signing gates themselves; the
+// head-relation walk guards attested subjects, not trust-config review.
+export const RELEASE_METADATA_PATHS = Object.freeze(['release-ledger.json', 'build/trust-roots.json'])
+
+// Every path some attested claim is ABOUT, derived from THE single declarative
+// subject registry (never an ad-hoc path regex): the packaged + build-pipeline
+// inputs the build attestation fingerprints, every per-category evidence
+// subject, and the build-config inputs (lockfile / electron-builder config).
+// A committed change to ANY of these between an attested git_head and HEAD
+// means an attested claim may describe a tree that no longer exists.
+const ATTESTED_INPUT_SELECTORS = [
+  ...PACKAGED_INPUTS,
+  ...Object.values(EVIDENCE_SUBJECTS).flat(),
+  ...BUILD_CONFIG_INPUTS
+]
+
+/** May this ONE committed path change between an attested git_head and HEAD
+ * without invalidating the attestation/envelopes? Evidence envelopes and release
+ * metadata: yes. Anything else under docs/evidence (forensics, prose): no —
+ * fail closed. Any registry-attested subject: no. Everything else (docs prose,
+ * tests, non-subject tooling): yes — the attested claims are about the
+ * registry's subjects, which provably did not move, and verifier tooling always
+ * runs as the version at HEAD regardless of what the walk tolerates. */
+export function isDurableReleaseArtifact(posix) {
+  if (EVIDENCE_ARTIFACT_RE.test(posix)) return true
+  if (posix.startsWith('docs/evidence/')) return false
+  if (RELEASE_METADATA_PATHS.includes(posix)) return true
+  return !ATTESTED_INPUT_SELECTORS.some(sel => matchesSelector(posix, sel))
+}
 
 function runGit(args, cwd) {
   return execFileSync('git', args, { cwd, stdio: ['ignore', 'pipe', 'ignore'] }).toString()
@@ -72,8 +114,9 @@ export function classifyProvenance(head, current, { git = runGit, cwd } = {}) {
   // divergent — rejected by every git_state — never crashing the verifier.
   if (changed === null) return { relation: 'divergent', changed: [] }
   // An empty diff (identical trees, e.g. a revert) is NOT evidence-only: fail
-  // closed rather than open. Only a non-empty, all-evidence diff is durable.
-  const evidenceOnly = changed.length > 0 && changed.every(p => EVIDENCE_ARTIFACT_RE.test(p))
+  // closed rather than open. Only a non-empty diff confined to durable release
+  // artifacts (envelopes, release metadata, non-subject paths) is durable.
+  const evidenceOnly = changed.length > 0 && changed.every(p => isDurableReleaseArtifact(p))
   return { relation: evidenceOnly ? 'evidence-descendant' : 'code-descendant', changed }
 }
 

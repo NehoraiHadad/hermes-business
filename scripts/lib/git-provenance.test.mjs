@@ -1,5 +1,9 @@
-import { describe, expect, it } from 'vitest'
-import { classifyProvenance, memoizeProvenance, EVIDENCE_ARTIFACT_RE } from './git-provenance.mjs'
+import { describe, expect, it, beforeAll, afterAll } from 'vitest'
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
+import { execFileSync } from 'node:child_process'
+import { classifyProvenance, memoizeProvenance, EVIDENCE_ARTIFACT_RE, RELEASE_METADATA_PATHS, isDurableReleaseArtifact } from './git-provenance.mjs'
 import { checkCorrespondence } from './evidence-gates.mjs'
 
 // A deterministic fake git: ancestry + changed paths come from fixture maps, so
@@ -36,11 +40,32 @@ describe('classifyProvenance', () => {
     })
     expect(classifyProvenance('BASE', HEAD, { git }).relation).toBe('evidence-descendant')
   })
-  it('code-descendant when any non-envelope path changed (code/subdir/prose)', () => {
+  it('code-descendant when any attested subject or docs/evidence non-envelope path changed', () => {
     for (const changed of [['src/main.ts'], ['docs/evidence/forensics/raw.txt'], ['docs/evidence/README.md']]) {
       const git = fakeGit({ ancestors: { 'BASE->HEAD1': true }, diffs: { 'BASE->HEAD1': changed } })
       expect(classifyProvenance('BASE', HEAD, { git }).relation).toBe('code-descendant')
     }
+  })
+  it('evidence-descendant for a step-9 release-metadata commit (ledger + trust roots only)', () => {
+    const git = fakeGit({
+      ancestors: { 'BASE->HEAD1': true },
+      diffs: { 'BASE->HEAD1': ['release-ledger.json', 'build/trust-roots.json'] }
+    })
+    expect(classifyProvenance('BASE', HEAD, { git }).relation).toBe('evidence-descendant')
+  })
+  it('code-descendant when release metadata is committed ALONGSIDE a release script', () => {
+    const git = fakeGit({
+      ancestors: { 'BASE->HEAD1': true },
+      diffs: { 'BASE->HEAD1': ['release-ledger.json', 'build/trust-roots.json', 'scripts/lib/release/gather.mjs'] }
+    })
+    expect(classifyProvenance('BASE', HEAD, { git }).relation).toBe('code-descendant')
+  })
+  it('evidence-descendant for a mixed evidence + metadata + docs-prose refresh', () => {
+    const git = fakeGit({
+      ancestors: { 'BASE->HEAD1': true },
+      diffs: { 'BASE->HEAD1': ['docs/evidence/packaged-e2e.json', 'release-ledger.json', 'build/trust-roots.json', 'docs/RELEASING.md'] }
+    })
+    expect(classifyProvenance('BASE', HEAD, { git }).relation).toBe('evidence-descendant')
   })
   it('code-descendant (fail closed) when the ancestor diff is empty', () => {
     const git = fakeGit({ ancestors: { 'BASE->HEAD1': true }, diffs: { 'BASE->HEAD1': [] } })
@@ -100,6 +125,88 @@ describe('EVIDENCE_ARTIFACT_RE', () => {
     expect(EVIDENCE_ARTIFACT_RE.test('docs/evidence/README.md')).toBe(false)
     expect(EVIDENCE_ARTIFACT_RE.test('docs/evidence/forensics/x.json')).toBe(false)
     expect(EVIDENCE_ARTIFACT_RE.test('src/evidence.json')).toBe(false)
+  })
+})
+
+describe('isDurableReleaseArtifact — path classification contract', () => {
+  it('accepts evidence envelopes and the two release-metadata records (exact root paths only)', () => {
+    expect(RELEASE_METADATA_PATHS).toEqual(['release-ledger.json', 'build/trust-roots.json'])
+    for (const p of ['docs/evidence/approval.json', 'release-ledger.json', 'build/trust-roots.json']) {
+      expect(isDurableReleaseArtifact(p), p).toBe(true)
+    }
+    // Same-named files elsewhere are not METADATA — they are tolerated only via
+    // the registry-complement fallback (harmless non-subject paths), so the
+    // metadata list stays exact-path.
+    expect(RELEASE_METADATA_PATHS.includes('sub/release-ledger.json')).toBe(false)
+    expect(isDurableReleaseArtifact('sub/release-ledger.json')).toBe(true)
+  })
+  it('fails closed on everything under docs/evidence that is not a top-level envelope', () => {
+    for (const p of ['docs/evidence/forensics/raw.txt', 'docs/evidence/forensics/x.json', 'docs/evidence/README.md']) {
+      expect(isDurableReleaseArtifact(p), p).toBe(false)
+    }
+  })
+  it('rejects every registry-attested subject class', () => {
+    for (const p of [
+      'electron/quickstart.cjs', // main-process runtime
+      'src/App.tsx', // renderer source
+      'index.html', 'vite.config.ts', // renderer build inputs
+      'hermes-plugin/business-shell/plugin.js', // plugin tree (all 5 categories)
+      'installer/bootstrap.ps1', 'installer/business-bootstrap.nsi', 'installer/lib/common.ps1', // thin installer
+      'package.json', 'package-lock.json', 'electron-builder.yml', // packaging + build config
+      'build/icon.ico', // packaged asset
+      'scripts/after-pack.cjs', 'scripts/lib/release/preflight.mjs', 'scripts/verify-release-contract.mjs', // build/release pipeline
+      'scripts/plugin-sdk-contract.mjs', 'scripts/hermes-desktop-contract.json', // plugin contract (approval/shared-state subjects)
+      'hermes-compat.json'
+    ]) expect(isDurableReleaseArtifact(p), p).toBe(false)
+  })
+  it('tolerates docs prose, tests and non-subject tooling (claims are about registry subjects)', () => {
+    for (const p of [
+      'docs/RELEASING.md', 'docs/specs/versioning.md', 'README.md',
+      'scripts/lib/release/preflight.test.mjs', 'electron/main.test.cjs', // tests never ship
+      'scripts/lib/git-provenance.mjs' // verifier tooling runs as the HEAD version regardless
+    ]) expect(isDurableReleaseArtifact(p), p).toBe(true)
+  })
+})
+
+// The user-facing contract, proven against REAL git: a synthetic step-9 commit
+// touching ONLY release-ledger.json + build/trust-roots.json classifies
+// evidence-descendant; the same metadata plus a release script classifies
+// code-descendant. Uses a throwaway repo — never this project's history.
+describe('classifyProvenance against a real git repository', () => {
+  let repo
+  const g = (...args) => execFileSync(
+    'git', ['-c', 'user.name=t', '-c', 'user.email=t@example.invalid', '-c', 'commit.gpgsign=false', ...args],
+    { cwd: repo, stdio: ['ignore', 'pipe', 'pipe'] }
+  ).toString().trim()
+  const put = (rel, content) => {
+    const abs = path.join(repo, rel)
+    mkdirSync(path.dirname(abs), { recursive: true })
+    writeFileSync(abs, content)
+  }
+  beforeAll(() => {
+    repo = mkdtempSync(path.join(tmpdir(), 'git-provenance-contract-'))
+    g('init', '-q')
+    put('base.txt', 'base\n')
+    g('add', '-A'); g('commit', '-q', '-m', 'base')
+  })
+  afterAll(() => { try { rmSync(repo, { recursive: true, force: true }) } catch { /* best effort */ } })
+
+  it('metadata-only commit → evidence-descendant; metadata+script commit → code-descendant', () => {
+    const base = g('rev-parse', 'HEAD')
+    put('release-ledger.json', '{"v":1}\n')
+    put('build/trust-roots.json', '{"keys":{}}\n')
+    g('add', '-A'); g('commit', '-q', '-m', 'chore(release): record published asset')
+    const metadataHead = g('rev-parse', 'HEAD')
+    const meta = classifyProvenance(base, metadataHead, { cwd: repo })
+    expect(meta.relation).toBe('evidence-descendant')
+    expect(meta.changed.sort()).toEqual(['build/trust-roots.json', 'release-ledger.json'])
+
+    put('scripts/lib/release/gather.mjs', '// changed\n')
+    g('add', '-A'); g('commit', '-q', '-m', 'fix: touch a release script')
+    const codeHead = g('rev-parse', 'HEAD')
+    expect(classifyProvenance(base, codeHead, { cwd: repo }).relation).toBe('code-descendant')
+    // From the metadata commit forward the script is the ONLY change — still code.
+    expect(classifyProvenance(metadataHead, codeHead, { cwd: repo }).relation).toBe('code-descendant')
   })
 })
 

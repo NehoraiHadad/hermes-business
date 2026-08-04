@@ -1,11 +1,31 @@
 import { describe, expect, it } from 'vitest'
 import { decidePayloadPeCoverage, extractAndVerifyPayloadPes, coverageDigest } from './pe-containment.mjs'
+import { isSigningTolerant } from './channel-policy.mjs'
 
 const approved = () => true
 const valid = { valid: true, trustedTimestamp: true, publisher: 'Contoso, Inc.', thumbprint: 'AA', status: 'Valid' }
 
 describe('decidePayloadPeCoverage (CRITICAL 2 final verifier)', () => {
   const mustSign = ['app.exe', 'resources/elevate.exe', 'ffmpeg.dll']
+
+  // Channel parity contract: the gate's inline `channel !== 'public'` must keep
+  // agreeing with channel-policy's isSigningTolerant grouping — qa and pilot are
+  // lenient (never a blocker, never "proven"), public runs the full gate. Guards
+  // the planned refactor of the inline check onto isSigningTolerant.
+  it('qa and pilot verdicts match isSigningTolerant leniency; public stays strict', () => {
+    const extracted = [{ path: 'app.exe', extracted: false, signature: null }]
+    for (const channel of ['qa', 'pilot']) {
+      expect(isSigningTolerant(channel)).toBe(true)
+      const r = decidePayloadPeCoverage({ channel, mustSign, extracted, signerApproved: approved })
+      expect(r.ok, channel).toBe(true)
+      expect(r.proven, channel).toBe(false)
+      expect(r.failures, channel).toEqual([])
+    }
+    expect(isSigningTolerant('public')).toBe(false)
+    const pub = decidePayloadPeCoverage({ channel: 'public', mustSign, extracted, signerApproved: approved })
+    expect(pub.ok).toBe(false)
+    expect(pub.failures.length).toBeGreaterThan(0)
+  })
 
   it('PROVEN when every must-sign PE is extracted, valid, timestamped, approved', () => {
     const extracted = mustSign.map(path => ({ path, extracted: true, signature: valid }))
