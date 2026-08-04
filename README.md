@@ -211,3 +211,11 @@ electron/          runtime, IPC, חלונות, אבחון, Google ו־plugin ins
 - Meta Coexistence הוא המסלול הרשמי המתאים למספר שכבר פעיל ב־WhatsApp
   Business App, אך Hermes `0.19.x` עדיין אינו מממש Embedded Signup או את
   אירועי הסנכרון שלו. הוא אינו מוצג במוצר כאילו הוא זמין.
+
+## רישיון
+
+Copyright © 2026 Nehorai Hadad.
+
+הקוד מפורסם תחת [PolyForm Noncommercial License 1.0.0](LICENSE.md): מותר לצפות,
+להשתמש, לשנות ולהפיץ **לשימוש לא-מסחרי בלבד**, ובכפוף לשמירת הקרדיט והרישיון
+(סעיף Notices). שימוש מסחרי מחייב רישיון נפרד — צרו קשר: nehorai.hadad@gmail.com.
