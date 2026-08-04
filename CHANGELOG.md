@@ -10,6 +10,43 @@
 
 ---
 
+## [0.4.0-alpha.4] - 2026-08-04
+
+### מה חדש (למשתמש)
+
+- **העוזר באמת מקבל את ההנחיות שלו.** התברר שההנחיה המרכזית שמגדירה איך
+  העוזר עובד כשותף עסקי כמעט לא נטענה בפועל — הכותרת שלה הייתה ארוכה מדי
+  והמערכת קיצצה אותה. עכשיו היא קצרה וברורה, וההנחיות המלאות (כולל הכלל
+  שאסור לשלוח, להוציא כסף או למחוק בלי אישור מפורש) מגיעות לעוזר כמו שצריך.
+- **סנכרון הגנת הוואטסאפ.** רכיב ההגנה על הוואטסאפ מתעדכן לגרסה האחרונה,
+  ונוספה בדיקה שמוכיחה אותו מקצה לקצה: בדקנו מול המנגנון האמיתי שהעוזר
+  אינו יכול לשלוח הודעה בוואטסאפ כשהמצב הוא "קריאה בלבד", שגם משימה
+  מתוזמנת ברקע אינה יכולה, ושכששיחה מאושרת במפורש — השליחה כן עוברת.
+
+### Technical
+
+- **Skill routing budget (docs/specs/provider-costs.md audit follow-up):**
+  Hermes truncates a skill's frontmatter `description` to 60 chars when
+  building the model's per-turn skill index (`agent/skill_utils.py`,
+  `SKILL_PROMPT_DESC_LIMIT`). `business-partner` shipped a 235-char
+  description and measured ZERO loads ever in the live session DB (vs 18 for
+  business-bootstrap, 17 for business-context). Both shipped descriptions are
+  now trigger-first and within budget; `scripts/lib/skill-routing-budget.test.mjs`
+  scans every shipped SKILL.md and fails on an over-budget/missing description.
+  The run-on `provider_state semantics:` prompt line was split into short
+  sentences and the bundled plugin rebuilt.
+- **Live egress proof (`tests/test_live_egress_proof.py`):** drives the REAL
+  installed WhatsApp adapter through this plugin's real guard machinery across
+  all three outbound doors (`adapter.send`, standalone/cron sender,
+  `_send_to_platform`) under four policies, with the final network hop replaced
+  by a tripwire — so "blocked" proves transport was never handed the message.
+  13/13 against both the installed plugin and this repo's version; Telegram
+  (delegated entirely to native Hermes since 88fb302) passes through untouched.
+  Context: native Hermes 0.19.1 gates INBOUND (dm_policy/pairing) but has no
+  outbound gate — none of its four send paths consult `_is_user_authorized`.
+
+---
+
 ## [0.4.0-alpha.3] - 2026-08-04
 
 ### מה חדש (למשתמש)
