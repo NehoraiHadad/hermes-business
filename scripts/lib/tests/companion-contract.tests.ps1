@@ -51,10 +51,19 @@ function Invoke-CompanionContractTests {
     Assert-True $threw 'an out-of-range companion version was accepted'
   }
   Test-Case 'semantic prereleases compare correctly inside the current minor line' {
-    $next = Assert-CompanionRelease -Release ([pscustomobject]@{ version = '0.4.0-alpha.2'; url = 'https://x/y'; sha256 = $ValidSha; entrypoint = 'app.exe' })
-    $stable = Assert-CompanionRelease -Release ([pscustomobject]@{ version = '0.4.0'; url = 'https://x/y'; sha256 = $ValidSha; entrypoint = 'app.exe' })
-    Assert-True ($next.version -eq '0.4.0-alpha.2') 'next prerelease was not accepted'
-    Assert-True ($stable.version -eq '0.4.0') 'stable release was not accepted'
+    # Derived from the CURRENT bootstrap version (never hardcoded): a release
+    # bump must not strand this case below the range's inclusive lower bound —
+    # exactly what happened when '0.4.0-alpha.2' was baked in and the product
+    # moved to alpha.3. `next` = the following prerelease on the same line
+    # (or the line's stable release when current is already stable).
+    $parsed = [regex]::Match($BootstrapVersion, '^(\d+)\.(\d+)\.(\d+)(?:-alpha\.(\d+))?$')
+    Assert-True $parsed.Success "unexpected bootstrap version shape: $BootstrapVersion"
+    $stableVersion = '{0}.{1}.{2}' -f $parsed.Groups[1].Value, $parsed.Groups[2].Value, $parsed.Groups[3].Value
+    $nextVersion = if ($parsed.Groups[4].Success) { '{0}-alpha.{1}' -f $stableVersion, ([int]$parsed.Groups[4].Value + 1) } else { $stableVersion }
+    $next = Assert-CompanionRelease -Release ([pscustomobject]@{ version = $nextVersion; url = 'https://x/y'; sha256 = $ValidSha; entrypoint = 'app.exe' })
+    $stable = Assert-CompanionRelease -Release ([pscustomobject]@{ version = $stableVersion; url = 'https://x/y'; sha256 = $ValidSha; entrypoint = 'app.exe' })
+    Assert-True ($next.version -eq $nextVersion) 'next prerelease was not accepted'
+    Assert-True ($stable.version -eq $stableVersion) 'stable release was not accepted'
   }
   Test-Case 'older and malformed prereleases fail closed' {
     foreach ($bad in @('0.4.0-alpha.0', '0.4', '0.4.0-01')) {
