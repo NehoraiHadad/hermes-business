@@ -28,8 +28,14 @@ const lockPath = path.join(root, 'package-lock.json')
 const lockBuf = readFileSync(lockPath)
 const package_lock_sha256 = createHash('sha256').update(lockBuf).digest('hex')
 
+// Node ≥18.20/20.12/22 refuses to spawn a .cmd shim without a shell
+// (CVE-2024-27980 hardening) — npm on Windows IS a .cmd shim, so the shell is
+// required here, exactly as package-win.mjs's stageCommand already does.
+const NPM = process.platform === 'win32' ? 'npm.cmd' : 'npm'
+const NPM_OPTS = { shell: process.platform === 'win32' }
+
 function toolVersion(args) {
-  try { return execFileSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', args, { cwd: root }).toString().trim() } catch { return null }
+  try { return execFileSync(NPM, args, { cwd: root, ...NPM_OPTS }).toString().trim() } catch { return null }
 }
 
 let ci_clean = false
@@ -41,7 +47,7 @@ if (runCi) {
   try {
     copyFileSync(path.join(root, 'package.json'), path.join(tmp, 'package.json'))
     copyFileSync(lockPath, path.join(tmp, 'package-lock.json'))
-    execFileSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['ci', '--ignore-scripts', '--no-audit', '--no-fund'], { cwd: tmp, stdio: 'inherit' })
+    execFileSync(NPM, ['ci', '--ignore-scripts', '--no-audit', '--no-fund'], { cwd: tmp, stdio: 'inherit', ...NPM_OPTS })
     // The lockfile must be byte-identical after `npm ci` (ci never rewrites it).
     const after = createHash('sha256').update(readFileSync(path.join(tmp, 'package-lock.json'))).digest('hex')
     ci_clean = after === package_lock_sha256
