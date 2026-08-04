@@ -1,4 +1,9 @@
 {
   "source": "github-asset",
-  "entries": {}
+  "entries": {
+    "0.4.0-alpha.2": {
+      "sha256": "8d0ecbf1a3bb27647d6663782d22efc6ec933d928e970e1b341270444492ba22",
+      "released_at": "2026-08-04"
+    }
+  }
 }
