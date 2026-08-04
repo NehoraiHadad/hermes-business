@@ -71,7 +71,15 @@ declare global {
     // official `/usage` metadata endpoint (no token rotation, no billable content) so a
     // revoked/expired grant (ok:false) or an unreachable one (reachable:false) can never
     // mint fresh provider evidence. Returns reachable:false when it could not probe.
-    probeCodexGrant?: () => Promise<{ ok: boolean; reachable: boolean; message?: string }>
+    // `usedPercent`/`quotaExhausted` are DISPLAY-ONLY extras (the worst rate-limit window /
+    // a known-exhausted quota) — the evidence gate keys off ok/reachable alone.
+    probeCodexGrant?: () => Promise<{
+      ok: boolean
+      reachable: boolean
+      message?: string
+      usedPercent?: number | null
+      quotaExhausted?: boolean
+    }>
     // Non-secret provider validation evidence, persisted in the Hermes-owned profile.
     getProviderEvidence: () => Promise<import('./lib/provider-validation').ProviderValidation | null>
     recordProviderEvidence: (

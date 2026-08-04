@@ -11,11 +11,32 @@ export function createDemoApi() {
       return { version: '0.19.0', provider: 'openrouter', gateway: 'running', cron: 'running' } as T
     }
     if (endpoint === '/api/providers/oauth?profile=default') {
+      // Mirrors the real 0.19.1 catalog shape: all three `flow` kinds, so the
+      // dynamic provider list renders every UI branch in demo.
       return {
-        providers: [{ id: 'openai-codex', name: 'OpenAI Codex', flow: 'device_code', status: { logged_in: true } }]
+        providers: [
+          {
+            id: 'nous',
+            name: 'Nous Portal',
+            flow: 'device_code',
+            cli_command: 'hermes auth add nous',
+            docs_url: 'https://portal.nousresearch.com',
+            status: { logged_in: false }
+          },
+          { id: 'openai-codex', name: 'OpenAI Codex', flow: 'device_code', status: { logged_in: true } },
+          {
+            id: 'qwen-oauth',
+            name: 'Qwen (via Qwen CLI)',
+            flow: 'external',
+            cli_command: 'hermes auth add qwen-oauth',
+            docs_url: 'https://github.com/QwenLM/qwen-code',
+            status: { logged_in: false }
+          },
+          { id: 'anthropic', name: 'Anthropic API Key', flow: 'pkce', status: { logged_in: false } }
+        ]
       } as T
     }
-    if (endpoint.includes('/api/providers/oauth/openai-codex/start')) {
+    if (/\/api\/providers\/oauth\/[^/]+\/start/.test(endpoint)) {
       return {
         session_id: 'demo-oauth',
         flow: 'device_code',
@@ -25,12 +46,32 @@ export function createDemoApi() {
         poll_interval: 1
       } as T
     }
-    if (endpoint.includes('/api/providers/oauth/openai-codex/poll/')) {
+    if (/\/api\/providers\/oauth\/[^/]+\/poll\//.test(endpoint)) {
       return { session_id: 'demo-oauth', status: 'approved' } as T
+    }
+    if (endpoint.startsWith('/api/analytics/usage')) {
+      const today = /[?&]days=1(&|$)/.test(endpoint)
+      return {
+        totals: today
+          ? { total_api_calls: 4, total_sessions: 2 }
+          : { total_api_calls: 87, total_sessions: 23 },
+        period_days: today ? 1 : 30
+      } as T
+    }
+    if (endpoint === '/api/credentials/pool') {
+      return {
+        providers: [
+          { provider: 'openai-codex', entries: [{ index: 1, last_status: 'ok', token_preview: 'sk-…demo' }] }
+        ]
+      } as T
     }
     if (endpoint.startsWith('/api/messaging/whatsapp/onboarding')) return whatsappResponse(endpoint, init) as T
     if (endpoint.includes('/api/providers/validate')) return { ok: true, reachable: true } as T
     if (endpoint.includes('/api/model/recommended-default')) {
+      if (endpoint.includes('provider=nous')) {
+        // Hermes picks a free model for free-tier accounts server-side.
+        return { provider: 'nous', model: 'Hermes-4-70B', free_tier: true } as T
+      }
       return { provider: 'openrouter', model: 'anthropic/claude-sonnet-4.5' } as T
     }
     return { ok: true } as T

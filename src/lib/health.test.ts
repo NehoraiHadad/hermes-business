@@ -195,6 +195,105 @@ describe('buildSystemHealth — panel rows', () => {
     expect(report.healthy).toBe(false)
   })
 
+  it('usage row is DISPLAY-ONLY: a failed usage read is a "no data" warning that never flips overall health', () => {
+    const report = buildSystemHealth({ runtime: { running: true } as HermesRuntime, provider: usable, connections: [], tasks, usage: null })
+    const row = report.components.find(c => c.id === 'usage')
+    expect(row?.state).toBe('warning')
+    expect(row?.value).toBe('אין נתוני שימוש כרגע')
+    // The iron rule: usage participates in NO verdict. Everything else healthy ⇒ healthy.
+    expect(report.healthy).toBe(true)
+  })
+
+  it('shows real usage numbers only after a successful read, and zero only as a REAL zero', () => {
+    const withUsage = buildSystemHealth({
+      runtime: { running: true } as HermesRuntime,
+      provider: usable,
+      connections: [],
+      tasks,
+      usage: { todayApiCalls: 4, periodApiCalls: 87, periodSessions: 23, periodDays: 30 }
+    })
+    const row = withUsage.components.find(c => c.id === 'usage')
+    expect(row?.state).toBe('ok')
+    expect(row?.value).toContain('87')
+    expect(row?.value).toContain('היום: 4')
+    const zero = buildSystemHealth({
+      runtime: { running: true } as HermesRuntime,
+      provider: usable,
+      connections: [],
+      tasks,
+      usage: { todayApiCalls: 0, periodApiCalls: 0, periodSessions: 0, periodDays: 30 }
+    })
+    expect(zero.components.find(c => c.id === 'usage')?.value).toBe('עדיין לא נעשה שימוש')
+  })
+
+  it('renders no usage row at all when usage was not probed (runtime down / not applicable)', () => {
+    const report = buildSystemHealth({ runtime: { running: false } as HermesRuntime, provider: usable, connections: [], tasks })
+    expect(report.components.find(c => c.id === 'usage')).toBeUndefined()
+  })
+
+  it('usage row can never be an error state by construction (display-only contract)', () => {
+    for (const usage of [null, { todayApiCalls: 0, periodApiCalls: 0, periodSessions: 0, periodDays: 30 }]) {
+      const report = buildSystemHealth({ runtime: { running: true } as HermesRuntime, provider: usable, connections: [], tasks, usage })
+      expect(['ok', 'warning']).toContain(report.components.find(c => c.id === 'usage')?.state)
+    }
+  })
+
+  it('quota tier: Hermes\' exhausted verdict shows as a warning that still never flips overall health', () => {
+    const report = buildSystemHealth({
+      runtime: { running: true } as HermesRuntime,
+      provider: usable,
+      connections: [],
+      tasks,
+      usage: { todayApiCalls: 4, periodApiCalls: 87, periodSessions: 23, periodDays: 30 },
+      quota: { kind: 'exhausted' }
+    })
+    const row = report.components.find(c => c.id === 'usage')
+    expect(row?.state).toBe('warning')
+    expect(row?.value).toBe('המכסה נוצלה כרגע — תתחדש אוטומטית')
+    expect(report.healthy).toBe(true)
+  })
+
+  it('quota tier: a live Codex percent outranks the local counts, warning from 90%', () => {
+    const at37 = buildSystemHealth({
+      runtime: { running: true } as HermesRuntime,
+      provider: usable,
+      connections: [],
+      tasks,
+      usage: { todayApiCalls: 4, periodApiCalls: 87, periodSessions: 23, periodDays: 30 },
+      quota: { kind: 'percent', usedPercent: 37.4 }
+    })
+    expect(at37.components.find(c => c.id === 'usage')).toMatchObject({ value: 'נוצלו 37% מהמכסה', state: 'ok' })
+    const at93 = buildSystemHealth({
+      runtime: { running: true } as HermesRuntime,
+      provider: usable,
+      connections: [],
+      tasks,
+      quota: { kind: 'percent', usedPercent: 93 }
+    })
+    expect(at93.components.find(c => c.id === 'usage')).toMatchObject({ value: 'נוצלו 93% מהמכסה', state: 'warning' })
+    expect(at93.healthy).toBe(true)
+  })
+
+  it('quota tier "none" falls through to the local counts and adds no row on its own', () => {
+    const fallthrough = buildSystemHealth({
+      runtime: { running: true } as HermesRuntime,
+      provider: usable,
+      connections: [],
+      tasks,
+      usage: { todayApiCalls: 4, periodApiCalls: 87, periodSessions: 23, periodDays: 30 },
+      quota: { kind: 'none' }
+    })
+    expect(fallthrough.components.find(c => c.id === 'usage')?.value).toContain('87')
+    const noRow = buildSystemHealth({
+      runtime: { running: true } as HermesRuntime,
+      provider: usable,
+      connections: [],
+      tasks,
+      quota: { kind: 'none' }
+    })
+    expect(noRow.components.find(c => c.id === 'usage')).toBeUndefined()
+  })
+
   it('does NOT show a failed platform read as known-disconnected connectors', () => {
     const report = buildSystemHealth({ runtime: { running: true } as HermesRuntime, provider: usable, connections: [], tasks, errors: { connections: true } })
     const whatsapp = report.components.find(c => c.id === 'whatsapp')

@@ -90,6 +90,30 @@ describe('Hermes provider API — connectProvider records live evidence, never a
     expect(api).not.toHaveBeenCalledWith('/api/model/set', expect.anything())
   })
 
+  it('activateProvider passes Hermes\' free-tier verdict through — and null when Hermes did not say', async () => {
+    const withVerdict = vi.fn(async (endpoint: string) => {
+      if (endpoint.startsWith('/api/model/recommended-default')) {
+        return { provider: 'nous', model: 'Hermes-4-70B', free_tier: true }
+      }
+      return { ok: true }
+    }) as unknown as ProviderApiFn
+    await expect(createProviderApi(withVerdict).activateProvider('nous')).resolves.toEqual({
+      ok: true,
+      model: 'Hermes-4-70B',
+      free_tier: true
+    })
+
+    const withoutVerdict = vi.fn(async (endpoint: string) => {
+      if (endpoint.startsWith('/api/model/recommended-default')) return { model: 'openai/gpt-5' }
+      return { ok: true }
+    }) as unknown as ProviderApiFn
+    await expect(createProviderApi(withoutVerdict).activateProvider('openai-codex')).resolves.toEqual({
+      ok: true,
+      model: 'openai/gpt-5',
+      free_tier: null
+    })
+  })
+
   it('uses the official device-code OAuth session routes', async () => {
     const api = vi.fn(async (endpoint: string) => {
       if (endpoint === '/api/providers/oauth?profile=default') {

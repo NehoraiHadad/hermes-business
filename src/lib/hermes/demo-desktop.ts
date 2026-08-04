@@ -170,7 +170,7 @@ export function createDemoDesktop(): HermesDesktopApi {
       return evidence
     },
     async probeCodexGrant() {
-      return { ok: true, reachable: true }
+      return { ok: true, reachable: true, usedPercent: 34 }
     },
 
     // A demo session never talks to api.github.com — a FIXED unknown verdict

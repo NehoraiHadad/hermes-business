@@ -21,7 +21,10 @@ export type ProviderCredentialProbe = (input: {
 export type OAuthProvider = {
   id: string
   name: string
-  flow: 'pkce' | 'device_code' | 'external'
+  // The catalog's known flows today; a future Hermes may add more, so consumers
+  // must treat an unrecognized value as `external` (display-only, fail-safe).
+  flow: 'pkce' | 'device_code' | 'external' | (string & {})
+  cli_command?: string
   docs_url?: string
   status?: { logged_in?: boolean; source_label?: string; error?: string }
 }
@@ -49,26 +52,32 @@ export interface HermesProviderApi {
   startOAuth(provider: string): Promise<OAuthStart>
   pollOAuth(provider: string, sessionId: string): Promise<OAuthPoll>
   cancelOAuth(sessionId: string): Promise<{ ok: boolean }>
-  activateProvider(provider: string): Promise<{ ok: boolean; model: string }>
+  // `free_tier` is Hermes' own account-tier verdict from recommended-default
+  // (true/false when known, null when the provider has no tier concept or the
+  // gateway did not say) — display-only, nothing gates on it.
+  activateProvider(provider: string): Promise<{ ok: boolean; model: string; free_tier: boolean | null }>
 }
 
 export function createProviderApi(api: ApiFn, probeCredential?: ProviderCredentialProbe): HermesProviderApi {
-  const resolveDefaultModel = async (provider: string) => {
-    const recommended = await api<{ model: string }>(
+  const resolveRecommended = async (provider: string) => {
+    const recommended = await api<{ model: string; free_tier?: boolean | null }>(
       `/api/model/recommended-default?provider=${encodeURIComponent(provider)}`
     )
     if (!recommended.model) throw new Error('Hermes did not provide a compatible default model for this provider')
-    return recommended.model
+    return recommended
   }
+  const resolveDefaultModel = async (provider: string) => (await resolveRecommended(provider)).model
   const setMainModel = (provider: string, model: string) =>
     api('/api/model/set', {
       method: 'POST',
       body: { scope: 'main', provider, model, confirm_expensive_model: true }
     })
   const activateProvider = async (provider: string) => {
-    const model = await resolveDefaultModel(provider)
-    await setMainModel(provider, model)
-    return { ok: true, model }
+    const recommended = await resolveRecommended(provider)
+    await setMainModel(provider, recommended.model)
+    // Pass Hermes' free-tier verdict through untouched (it picks a free model for
+    // free-tier accounts server-side); absence is null, never a fabricated false.
+    return { ok: true, model: recommended.model, free_tier: recommended.free_tier ?? null }
   }
 
   return {

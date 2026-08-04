@@ -126,7 +126,7 @@ describe('codex-probe — real, non-destructive, non-billable liveness probe', (
     const token = fakeJwt()
     const { fetchImpl, seen } = fakeFetch(200, usableUsageBody())
     const res = await probeCodexGrant({ fetchImpl, readToken: () => token, baseUrl: 'https://example.test' })
-    expect(res).toEqual({ ok: true, reachable: true })
+    expect(res).toEqual({ ok: true, reachable: true, usedPercent: 12 })
     expect(seen[0].url).toBe('https://example.test/api/codex/usage')
     expect(seen[0].headers.authorization).toBe(`Bearer ${token}`)
     expect(seen[0].url).not.toContain(token)
@@ -157,18 +157,27 @@ describe('codex-probe — real, non-destructive, non-billable liveness probe', (
     }
   })
 
-  it('429 (valid grant, quota EXHAUSTED) is NOT ok and issues no evidence', async () => {
+  it('429 (valid grant, quota EXHAUSTED) is NOT ok, issues no evidence, and is flagged for display', async () => {
     const { fetchImpl } = fakeFetch(429)
     const res = await probeCodexGrant({ fetchImpl, readToken: () => fakeJwt() })
     expect(res.ok).toBe(false)
     expect(res.reachable).toBe(true)
+    expect(res.quotaExhausted).toBe(true)
     expect(res.message).toBeTruthy()
   })
 
-  it('a 200 with a quota-exhausted (100% used) window is reachable but NOT ok', async () => {
+  it('a 200 with a quota-exhausted (100% used) window is reachable but NOT ok — and flagged', async () => {
     const { fetchImpl } = fakeFetch(200, usableUsageBody(100))
     const res = await probeCodexGrant({ fetchImpl, readToken: () => fakeJwt() })
+    expect(res).toMatchObject({ ok: false, reachable: true, quotaExhausted: true, usedPercent: 100 })
+  })
+
+  it('the display fields never loosen the gate: an unexpected 200 carries NO quota flag or percent', async () => {
+    const { fetchImpl } = fakeFetch(200, { unexpected: true })
+    const res = await probeCodexGrant({ fetchImpl, readToken: () => fakeJwt() })
     expect(res).toMatchObject({ ok: false, reachable: true })
+    expect(res.quotaExhausted).toBeUndefined()
+    expect(res.usedPercent).toBeUndefined()
   })
 
   it('a malformed/unexpected 200 body is reachable but NOT proof', async () => {

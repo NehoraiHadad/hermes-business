@@ -97,14 +97,22 @@ const ALLOWED_API_ROUTES = [
   /^\/api\/actions\/hermes-update\/status$/,
   /^\/api\/model\/(recommended-default|set)$/,
   /^\/api\/providers\/validate$/,
-  new RegExp(`^/api/providers/oauth(/sessions/${SEG}|/${SEG}/(start|poll/${SEG}))?$`)
+  new RegExp(`^/api/providers/oauth(/sessions/${SEG}|/${SEG}/(start|poll/${SEG}))?$`),
+  // Read-only local usage accounting for the support panel's usage row.
+  /^\/api\/analytics\/usage$/,
+  // Credential-pool STATUS for the same row's quota tier (per-entry last_status:
+  // ok/exhausted/dead — Hermes' own quota verdict). The endpoint redacts secrets
+  // server-side; the renderer only ever reads it (list route only — the
+  // per-entry delete route has extra segments and stays blocked).
+  /^\/api\/credentials\/pool$/
 ]
 
 // Query keys the renderer actually sends (`withProfile`, provider/model lookup,
-// skill content by name, update-check `force`, action-log `lines`). Unknown
+// skill content by name, update-check `force`, action-log `lines`, usage-window
+// `days`). Unknown
 // keys are rejected, not stripped — a request carrying an unexpected key is a
 // bug or an attack, and silently altering it would hide either.
-const API_QUERY_KEYS = new Set(['profile', 'provider', 'name', 'force', 'lines'])
+const API_QUERY_KEYS = new Set(['profile', 'provider', 'name', 'force', 'lines', 'days'])
 const API_QUERY_VALUE = new RegExp(`^(${SEG})?$`)
 
 /**

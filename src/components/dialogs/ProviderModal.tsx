@@ -2,9 +2,17 @@ import { LoaderCircle, PlugZap, ShieldCheck } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { hermesClient } from '../../lib/hermes-client'
 import type { OAuthProvider } from '../../lib/hermes/providers'
+import { buildProviderOptions } from '../../lib/provider-catalog'
 import { Modal } from '../ui/Modal'
 import { CodexOAuth } from './providers/CodexOAuth'
+import { DeviceFlowOAuth } from './providers/DeviceFlowOAuth'
+import { ExternalProviderCard } from './providers/ExternalProviderCard'
 
+// The provider list is rendered from the LIVE Hermes catalog (user decision
+// 2026-08-04): every `/api/providers/oauth` entry appears, mapped by its `flow`
+// onto one of three UI shapes (device-flow / api-key / external card) in
+// provider-catalog.ts. A failed catalog read falls back to the static
+// pre-catalog list — the user is never left without a way to connect.
 export function ProviderModal({
   onClose,
   onConnect,
@@ -15,39 +23,57 @@ export function ProviderModal({
   onOAuthConnected: () => void
 }) {
   const [provider, setProvider] = useState('openai-codex')
-  const [oauthProviders, setOauthProviders] = useState<OAuthProvider[]>([])
+  const [oauthProviders, setOauthProviders] = useState<OAuthProvider[] | null>(null)
   const [oauthLoaded, setOauthLoaded] = useState(false)
   const [key, setKey] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const codex = oauthProviders.find(item => item.id === 'openai-codex')
 
   useEffect(() => {
     void hermesClient
       .listOAuthProviders()
       .then(setOauthProviders)
-      .catch(caught => setError(caught instanceof Error ? caught.message : 'לא ניתן לבדוק חיבור OAuth'))
+      .catch(() => setOauthProviders(null))
       .finally(() => setOauthLoaded(true))
   }, [])
+
+  const options = buildProviderOptions(oauthProviders)
+  const selected = options.find(option => option.id === provider) || options[0]
+  const codex = oauthProviders?.find(item => item.id === 'openai-codex')
 
   return (
     <Modal title="חיבור לספק AI" subtitle="פרטי החיבור נשמרים ב־Hermes בלבד, לא במעטפת." onClose={onClose}>
       <label className="modal-provider-select">
         <span>ספק</span>
-        <select value={provider} onChange={event => setProvider(event.target.value)}>
-          <option value="openai-codex">OpenAI Codex — חיבור ChatGPT</option>
-          <option value="openrouter">OpenRouter — API key</option>
-          <option value="anthropic">Anthropic — API key</option>
-          <option value="openai">OpenAI API — API key</option>
-          <option value="gemini">Google Gemini — API key</option>
+        <select value={selected.id} onChange={event => setProvider(event.target.value)}>
+          {options.map(option => (
+            <option key={option.id} value={option.id}>
+              {option.label}
+            </option>
+          ))}
         </select>
       </label>
-      {provider === 'openai-codex' ? (
+      {selected.ui === 'codex-oauth' ? (
         oauthLoaded ? (
           <CodexOAuth connected={Boolean(codex?.status?.logged_in)} onConnected={onOAuthConnected} />
         ) : (
           <div className="info-inline"><LoaderCircle className="spin" size={17} /> בודק אם ChatGPT כבר מחובר…</div>
         )
+      ) : selected.ui === 'device-flow' ? (
+        <DeviceFlowOAuth
+          key={selected.id}
+          providerId={selected.id}
+          connectLabel={`התחבר עם ${selected.id === 'nous' ? 'Nous Portal' : selected.label.split(' — ')[0]}`}
+          description="Hermes יבקש אישור בדפדפן באמצעות Device Code. הסיסמה והאסימון אינם עוברים דרך המעטפת."
+          note={
+            selected.id === 'nous'
+              ? 'חשבון Nous חינמי כולל גישה למודלים חינמיים; שדרוג בתשלום דרך Nous Portal פותח מודלים וכלים נוספים.'
+              : undefined
+          }
+          onConnected={onOAuthConnected}
+        />
+      ) : selected.ui === 'external' ? (
+        <ExternalProviderCard option={selected} />
       ) : (
         <form
           className="modal-form"
@@ -56,7 +82,7 @@ export function ProviderModal({
             setSaving(true)
             setError('')
             try {
-              await onConnect(provider, key)
+              await onConnect(selected.id, key)
               onClose()
             } catch (caught) {
               setError(caught instanceof Error ? caught.message : 'החיבור נכשל')

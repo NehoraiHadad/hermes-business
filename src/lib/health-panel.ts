@@ -2,6 +2,8 @@ import type { ProviderStatus } from './provider-readiness'
 import { describeWhatsappProtection, type WhatsappGuardStatus } from './whatsapp-policy'
 import type { Connection, ScheduledTask } from '../types'
 import type { HealthComponent, HealthReport, LoadErrors } from './health'
+import type { UsageSummary } from './hermes/rest-usage'
+import type { QuotaSignal } from './provider-quota'
 
 // The support status panel: turn the already-authoritative runtime/provider/
 // connection state into the rows the UI renders + one overall verdict. This layer
@@ -44,6 +46,41 @@ function providerRow(provider: ProviderStatus): HealthComponent {
   return { id: 'provider', label: 'ספק AI', value, state: 'error' }
 }
 
+// The usage row is DISPLAY-ONLY by contract (user decision 2026-08-04): it never
+// participates in the overall verdict and never blocks anything — so it is
+// constructed with only 'ok' | 'warning' states, never 'error'. A failed read is
+// an honest "no data" warning, NEVER a zero: zero usage is shown only after a
+// read that actually succeeded. The quota tier answers "what's left" and ranks
+// above the local "what I used" counts, most-authoritative first: Hermes'
+// exhausted verdict (a real provider 429 froze the credential) > the Codex live
+// used-percent > the local counts.
+function usageRow(usage: UsageSummary | null, quota?: QuotaSignal): HealthComponent {
+  if (quota?.kind === 'exhausted') {
+    return { id: 'usage', label: 'שימוש ב־AI', value: 'המכסה נוצלה כרגע — תתחדש אוטומטית', state: 'warning' }
+  }
+  if (quota?.kind === 'percent') {
+    const percent = Math.round(quota.usedPercent)
+    return {
+      id: 'usage',
+      label: 'שימוש ב־AI',
+      value: `נוצלו ${percent}% מהמכסה`,
+      state: percent >= 90 ? 'warning' : 'ok'
+    }
+  }
+  if (!usage) {
+    return { id: 'usage', label: 'שימוש ב־AI', value: 'אין נתוני שימוש כרגע', state: 'warning' }
+  }
+  if (usage.periodApiCalls === 0 && usage.periodSessions === 0) {
+    return { id: 'usage', label: 'שימוש ב־AI', value: 'עדיין לא נעשה שימוש', state: 'ok' }
+  }
+  return {
+    id: 'usage',
+    label: 'שימוש ב־AI',
+    value: `היום: ${usage.todayApiCalls} · ב־${usage.periodDays} הימים האחרונים: ${usage.periodApiCalls} פניות`,
+    state: 'ok'
+  }
+}
+
 // Build the component rows + overall verdict for the support status panel from the
 // already-authoritative runtime/provider/connection state. Overall health is the AND
 // of every REQUIRED component (runtime + provider): either failing flips the header off
@@ -59,6 +96,12 @@ export function buildSystemHealth(input: {
   // has no enforcement concept); null = probed but no LIVE proof (a connected channel
   // then reads UNKNOWN/unprotected); a value = the live running-gateway guard proof.
   whatsappGuard?: WhatsappGuardStatus | null
+  // undefined = not probed (runtime down / row not applicable — no row at all);
+  // null = read failed (honest "no data" warning); a value = a successful read.
+  usage?: UsageSummary | null
+  // The usage row's quota tier (undefined / 'none' fall through to the local
+  // counts). Like usage, DISPLAY-ONLY — it can never make the row an error.
+  quota?: QuotaSignal
 }): HealthReport {
   const connected = (id: string) => input.connections.find(item => item.id === id)?.state === 'connected'
   const connErr = Boolean(input.errors?.connections)
@@ -94,6 +137,9 @@ export function buildSystemHealth(input: {
       ? { id: 'tasks', label: 'משימות מתוזמנות', value: 'קריאה נכשלה', state: 'error' }
       : { id: 'tasks', label: 'משימות מתוזמנות', value: `${input.tasks.filter(task => task.enabled).length} פעילות`, state: 'ok' }
   )
+  if (input.usage !== undefined || (input.quota && input.quota.kind !== 'none')) {
+    components.push(usageRow(input.usage ?? null, input.quota))
+  }
   const errored = components.some(component => component.state === 'error')
   const healthy = !errored
   return { healthy, summary: healthy ? 'הכול תקין' : 'דורש בדיקה', components }

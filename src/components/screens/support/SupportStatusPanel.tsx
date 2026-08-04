@@ -1,4 +1,6 @@
 import { Activity as ActivityIcon, AlertTriangle, Check } from 'lucide-react'
+import { useProviderQuota } from '../../../hooks/useProviderQuota'
+import { useUsageSummary } from '../../../hooks/useUsageSummary'
 import { useWhatsappGuard } from '../../../hooks/useWhatsappGuard'
 import { buildSystemHealth, type HealthComponent, type LoadErrors } from '../../../lib/health-panel'
 import type { ProviderStatus } from '../../../lib/provider-readiness'
@@ -34,7 +36,12 @@ export function SupportStatusPanel({
   // Re-probe the live guard whenever the runtime/connection snapshot changes (health
   // refresh) so a gateway reload or a policy write is reflected, not a stale proof.
   const whatsappGuard = useWhatsappGuard(runtime?.running ? connections : null)
-  const report = buildSystemHealth({ runtime, provider, connections, tasks, errors, whatsappGuard })
+  // Display-only usage accounting, re-read on the same refresh cadence. Skipped
+  // entirely (no row) while the runtime is down — there is nothing to read from.
+  const usage = useUsageSummary(connections, Boolean(runtime?.running))
+  // The quota tier ("what's left") for the same row — display-only like usage.
+  const quota = useProviderQuota(provider, connections, Boolean(runtime?.running))
+  const report = buildSystemHealth({ runtime, provider, connections, tasks, errors, whatsappGuard, usage, quota })
 
   return (
     <section className="panel health-panel">

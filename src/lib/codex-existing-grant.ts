@@ -8,7 +8,15 @@
 // expired, or unreachable grant can NEVER pass — and onboarding stays incomplete (no fresh
 // accepting evidence is ever recorded on a denied grant).
 
-export type CodexGrantProbe = { ok: boolean; reachable: boolean; message?: string }
+// `usedPercent`/`quotaExhausted` are DISPLAY-ONLY extras carried by the probe (the worst
+// rate-limit window / a known-exhausted quota) — the gate below keys off ok/reachable only.
+export type CodexGrantProbe = {
+  ok: boolean
+  reachable: boolean
+  message?: string
+  usedPercent?: number | null
+  quotaExhausted?: boolean
+}
 
 export type ExistingGrantGate = { allow: true } | { allow: false; error: string }
 

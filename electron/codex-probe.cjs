@@ -42,15 +42,13 @@ function codexUsageUrl(baseUrl) {
   return `${prefix}/usage`
 }
 
-// Does a parsed 200 `/usage` body prove a USABLE grant? Mirrors official
-// `_probe_codex_quota_restored`: the body must be the expected shape (an object with a
-// `rate_limit` object) AND every reported rate-limit window must be below 100% used. A body
-// with no numeric window (worst-used indeterminate) or a fully-used window is NOT proof, so
-// it fails closed. Never throws.
-function usageProvesUsableGrant(payload) {
-  if (!payload || typeof payload !== 'object') return false
+// The WORST (highest) used_percent across the reported rate-limit windows, or null when the
+// body is not the expected `/usage` shape / carries no numeric window. This is the one true
+// "% of quota used" number a Codex account exposes. Never throws.
+function worstUsedPercent(payload) {
+  if (!payload || typeof payload !== 'object') return null
   const rateLimit = payload.rate_limit
-  if (!rateLimit || typeof rateLimit !== 'object') return false
+  if (!rateLimit || typeof rateLimit !== 'object') return null
   let worstUsed = null
   for (const key of ['primary_window', 'secondary_window']) {
     const window = rateLimit[key]
@@ -59,16 +57,30 @@ function usageProvesUsableGrant(payload) {
       worstUsed = Math.max(worstUsed === null ? 0 : worstUsed, used)
     }
   }
+  return worstUsed
+}
+
+// Does a parsed 200 `/usage` body prove a USABLE grant? Mirrors official
+// `_probe_codex_quota_restored`: the body must be the expected shape (an object with a
+// `rate_limit` object) AND every reported rate-limit window must be below 100% used. A body
+// with no numeric window (worst-used indeterminate) or a fully-used window is NOT proof, so
+// it fails closed. Never throws.
+function usageProvesUsableGrant(payload) {
+  const worstUsed = worstUsedPercent(payload)
   return worstUsed !== null && worstUsed < 100
 }
 
-// Probe the existing grant. { ok, reachable, message }:
-//   ok:true,  reachable:true  — grant is proven USABLE (exact 200 + usage shape < 100% used).
+// Probe the existing grant. { ok, reachable, message, usedPercent?, quotaExhausted? }:
+//   ok:true,  reachable:true  — grant is proven USABLE (exact 200 + usage shape < 100% used);
+//                               carries `usedPercent` (worst window) for display.
 //   ok:false, reachable:true  — reached the provider but the grant is NOT proven usable:
-//                               rejected (401/403), quota exhausted (429), a malformed/
-//                               unexpected 200 body, or any other status.
+//                               rejected (401/403), quota exhausted (429 or a 100%-used
+//                               window — both additionally flagged `quotaExhausted:true`),
+//                               a malformed/unexpected 200 body, or any other status.
 //   ok:false, reachable:false — could not probe (no token / non-JWT token / offline);
 //                               NOT proof either way.
+// The extra display fields never loosen the evidence gate: gateExistingCodexGrant keys off
+// ok/reachable only.
 async function probeCodexGrant(options = {}) {
   const fetchImpl = options.fetchImpl || globalThis.fetch
   if (typeof fetchImpl !== 'function') {
@@ -116,15 +128,27 @@ async function probeCodexGrant(options = {}) {
     } catch {
       payload = null // Malformed body ⇒ not proof; never surface parse internals.
     }
+    const usedPercent = worstUsedPercent(payload)
     if (usageProvesUsableGrant(payload)) {
-      return { ok: true, reachable: true }
+      return { ok: true, reachable: true, usedPercent }
+    }
+    // A well-shaped body with a fully-used window is a KNOWN-exhausted quota, not an
+    // unexpected response — flag it so display surfaces can say so honestly.
+    if (usedPercent !== null && usedPercent >= 100) {
+      return {
+        ok: false,
+        reachable: true,
+        quotaExhausted: true,
+        usedPercent,
+        message: 'מכסת ה־ChatGPT מוצתה כרגע; היא תתחדש אוטומטית בהמשך.'
+      }
     }
     return { ok: false, reachable: true, message: 'חיבור ה־ChatGPT אינו זמין כעת לשימוש (המכסה מוצתה או שהתשובה אינה צפויה)' }
   }
   // 429 = valid grant, quota EXHAUSTED. Re-auth cannot lift a quota cap, so this must never
   // mint onboarding evidence: reachable but NOT ok.
   if (status === 429) {
-    return { ok: false, reachable: true, message: 'מכסת ה־ChatGPT מוצתה כרגע; חיבור מחדש לא יפתור זאת. נסה/י שוב מאוחר יותר.' }
+    return { ok: false, reachable: true, quotaExhausted: true, message: 'מכסת ה־ChatGPT מוצתה כרגע; חיבור מחדש לא יפתור זאת. נסה/י שוב מאוחר יותר.' }
   }
   return { ok: false, reachable: true, message: `ChatGPT החזיר HTTP ${status || '?'} עבור חיבור זה` }
 }
@@ -133,5 +157,6 @@ module.exports = {
   probeCodexGrant,
   codexUsageUrl,
   usageProvesUsableGrant,
+  worstUsedPercent,
   DEFAULT_CODEX_BASE_URL
 }
