@@ -20,6 +20,23 @@
   }
 }
 
+/* Below the Electron window's own minimum (minWidth 1100 / minHeight 720,
+   electron/window-create.cjs) only Ctrl+= zoom shrinks the effective viewport
+   this far — ordinary resizing never does, so nothing here fires at a normal
+   window size. The sidebar is a fixed-height flex column (sidebar.css) with
+   several flex-shrink:0 sections (brand, nav, footer status pill) around the
+   one part that already scrolls itself (.session-list); once those sections
+   alone exceed the shrunk height, overflow:hidden simply erases whatever
+   doesn't fit — the status pill becomes permanently unreachable (WCAG 1.4.10
+   reflow). Letting the sidebar scroll vertically (not horizontally — its
+   width never needs to) turns that clip into a scroll. */
+@media (max-height: 719px) {
+  .sidebar {
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+}
+
 @media (max-height: 760px) {
   .sidebar {
     padding-top: 52px;
