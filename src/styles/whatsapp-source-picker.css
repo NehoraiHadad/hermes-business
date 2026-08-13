@@ -58,7 +58,7 @@
 .whatsapp-source-row small,
 .whatsapp-source-picker__empty {
   color: var(--muted);
-  font-size: 10.5px;
+  font-size: 12px;
 }
 
 .whatsapp-behavior {
@@ -81,13 +81,13 @@
 }
 
 .whatsapp-behavior b {
-  font-size: 11.5px;
+  font-size: 12.5px;
 }
 
 .whatsapp-behavior small,
 .form-hint {
   color: var(--muted);
-  font-size: 10.5px;
+  font-size: 12.5px;
   line-height: 1.5;
 }
 

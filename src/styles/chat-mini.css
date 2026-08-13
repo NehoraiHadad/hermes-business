@@ -47,7 +47,7 @@
 
 .mini-shell .activity-row {
   max-width: calc(100% - 20px);
-  font-size: 10.5px;
+  font-size: 12px;
 }
 
 .mini-shell .approval-card {
@@ -89,6 +89,6 @@
   bottom: 94px;
   inset-inline-end: 12px;
   width: auto;
-  font-size: 10.5px;
+  font-size: 12px;
 }
 

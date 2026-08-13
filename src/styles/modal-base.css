@@ -46,7 +46,7 @@
 .modal__heading p {
   margin: 6px 0 21px;
   color: var(--muted);
-  font-size: 11.5px;
+  font-size: 12.5px;
 }
 
 .modal-form,
@@ -65,7 +65,7 @@
 .modal-form label > span,
 .onboarding-form label > span {
   color: #5f5b54;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 650;
 }
 
@@ -125,7 +125,7 @@
   color: #625f6d;
   background: var(--indigo-soft);
   border-radius: 8px;
-  font-size: 10.5px;
+  font-size: 12.5px;
   line-height: 1.5;
 }
 
@@ -140,5 +140,5 @@
   color: var(--red);
   background: #f9e8e8;
   border-radius: 7px;
-  font-size: 10.5px;
+  font-size: 12.5px;
 }

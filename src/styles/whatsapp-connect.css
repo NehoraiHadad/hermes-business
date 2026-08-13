@@ -17,7 +17,7 @@
 .whatsapp-connect__head p {
   margin: 0;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12.5px;
   line-height: 1.6;
 }
 
@@ -50,7 +50,7 @@
   max-width: 360px;
   margin: 0;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12.5px;
   line-height: 1.6;
   text-align: center;
 }
@@ -60,7 +60,7 @@
   width: 100%;
   gap: 5px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .copy-value {
@@ -72,7 +72,7 @@
   padding: 8px 10px;
   background: #f6f4ee;
   border-radius: 8px;
-  font-size: 10.5px;
+  font-size: 12px;
 }
 
 .copy-value code {
@@ -133,14 +133,14 @@
 
 .policy-option small {
   color: var(--muted);
-  font-size: 10.5px;
+  font-size: 12.5px;
   line-height: 1.6;
 }
 
 .policy-chats {
   display: grid;
   gap: 5px;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .policy-chats textarea {

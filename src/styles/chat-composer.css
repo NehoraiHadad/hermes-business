@@ -33,7 +33,7 @@
 }
 
 .composer textarea::placeholder {
-  color: #9c978d;
+  color: var(--muted);
 }
 
 .composer__bottom {
@@ -83,8 +83,8 @@
 
 .composer-hint {
   margin: 7px auto 0;
-  color: #a09b91;
-  font-size: 9.5px;
+  color: var(--muted);
+  font-size: 12px;
   text-align: center;
 }
 
@@ -102,7 +102,7 @@
   max-width: 220px;
   padding: 4px 6px 4px 9px;
   color: #5d5951;
-  font-size: 11px;
+  font-size: 12px;
   background: var(--surface-soft);
   border: 1px solid var(--border-soft, #e6e1d8);
   border-radius: 8px;

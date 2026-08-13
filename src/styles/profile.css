@@ -9,7 +9,7 @@
   align-items: center;
   margin: 0 9px 10px;
   color: var(--muted);
-  font-size: 10.5px;
+  font-size: 12px;
 }
 
 .status-pill__dot {
@@ -29,7 +29,7 @@
   width: 32px;
   height: 32px;
   place-items: center;
-  color: #615c8c;
+  color: var(--indigo-dark);
   background: #ddd8ee;
   border-radius: 9px;
   font-size: 13px;

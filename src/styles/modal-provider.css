@@ -6,7 +6,7 @@
 
 .modal-provider-select > span {
   color: #5f5b54;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 650;
 }
 
@@ -31,7 +31,7 @@
 
 .oauth-code small {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   text-transform: uppercase;
 }
 
