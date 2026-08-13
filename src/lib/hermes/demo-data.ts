@@ -38,6 +38,44 @@ export const DEMO_SESSIONS: Session[] = [
   }
 ]
 
+// Each stored conversation reopens to ITS OWN transcript (keyed by session id and
+// consistent with that session's title/preview above) — resuming must never borrow
+// another conversation's history just because a fixture existed.
+export const DEMO_TRANSCRIPTS: Record<string, Array<{ role: 'user' | 'assistant'; content: string }>> = {
+  'weekly-leads': [
+    { role: 'user', content: 'תכין לי סיכום קצר של הלידים החדשים השבוע' },
+    {
+      role: 'assistant',
+      content:
+        'בשמחה. עברתי על הלידים החדשים: 18 פניות בסך הכול, מתוכן 6 חמות שכדאי לחזור אליהן עוד היום. רוצה שאכין גם הודעות המשך?'
+    }
+  ],
+  'tomorrow-calendar': [
+    { role: 'user', content: 'מה יש לי מחר? תכין אותי לפגישות' },
+    {
+      role: 'assistant',
+      content:
+        'יש לך שלוש פגישות מחר. הכנתי נקודות רקע לכל אחת — מי מגיע, מה סוכם בפעם הקודמת ומה כדאי לסגור הפעם. רוצה שאשלח לך את זה גם לטלגרם בבוקר?'
+    }
+  ],
+  'client-followup': [
+    { role: 'user', content: 'דני עוד לא חזר אליי על הצעת המחיר. מה עושים?' },
+    {
+      role: 'assistant',
+      content:
+        'עברו חמישה ימים מאז ששלחת את ההצעה. ניסחתי הודעת המשך קצרה ועניינית לדני — היא מוכנה וממתינה לאישור שלך לפני שליחה.'
+    }
+  ],
+  'content-plan': [
+    { role: 'user', content: 'בוא נסגור את תוכנית התוכן לאוגוסט' },
+    {
+      role: 'assistant',
+      content:
+        'סגרנו יחד תוכנית של 8 פרסומים לחודש: שני סיפורי לקוח, שלושה טיפים מקצועיים, שני עדכוני מוצר ופוסט סיכום. הכנתי טיוטה ראשונה לכל אחד.'
+    }
+  ]
+}
+
 export const DEMO_TASKS: ScheduledTask[] = [
   {
     id: 'morning-summary',

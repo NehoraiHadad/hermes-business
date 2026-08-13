@@ -2,12 +2,16 @@ import type { GatewayEvent } from '../../types'
 import { createDemoApi } from './demo-api'
 import { createDemoDesktop } from './demo-desktop'
 import { createDemoRpc } from './demo-rpc'
+import type { DemoScenarioId } from './demo-scenarios'
 import type { HermesDesktopApi } from './desktop'
 
 export type DemoEmit = (event: GatewayEvent) => void
 
 export type DemoState = {
   activeSession: string
+  // Which scripted scenario is waiting on an approval answer, so the demo can
+  // follow through on approve/deny instead of going silent.
+  pendingApproval: DemoScenarioId | null
 }
 
 export type DemoBackend = {
@@ -22,7 +26,7 @@ export type DemoBackend = {
 // stripDemoFixtures replaces it wholesale in a non-demo build, so every fixture module
 // it reaches is tree-shaken out of the shipping executable.
 export function createDemoBackend(): DemoBackend {
-  const state: DemoState = { activeSession: 'weekly-leads' }
+  const state: DemoState = { activeSession: 'weekly-leads', pendingApproval: null }
   return {
     rpc: createDemoRpc(state),
     api: createDemoApi(),

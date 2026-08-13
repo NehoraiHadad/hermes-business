@@ -1,5 +1,12 @@
 import type { DemoEmit, DemoState } from './demo'
-import { DEMO_SESSIONS } from './demo-data'
+import { DEMO_SESSIONS, DEMO_TRANSCRIPTS } from './demo-data'
+import {
+  buildApprovalFollowUpEvents,
+  buildScenarioEvents,
+  findDemoScenario,
+  matchDemoScenario,
+  type DemoScheduledEvent
+} from './demo-scenarios'
 
 export function createDemoRpc(state: DemoState) {
   return async function rpc<T>(method: string, params: Record<string, unknown>, emit: DemoEmit): Promise<T> {
@@ -12,17 +19,9 @@ export function createDemoRpc(state: DemoState) {
     if (method === 'session.resume') {
       const id = String(params.session_id || state.activeSession)
       state.activeSession = id
-      return {
-        session_id: id,
-        messages: [
-          { role: 'user', content: 'תכין לי סיכום קצר של הלידים החדשים השבוע' },
-          {
-            role: 'assistant',
-            content:
-              'בשמחה. עברתי על הלידים החדשים: 18 פניות בסך הכול, מתוכן 6 חמות שכדאי לחזור אליהן עוד היום. רוצה שאכין גם הודעות המשך?'
-          }
-        ]
-      } as T
+      // Per-session transcript, or honestly empty for ids without one (sessions the
+      // demo user created live) — never another conversation's history.
+      return { session_id: id, messages: DEMO_TRANSCRIPTS[id] ?? [] } as T
     }
     if (method === 'file.attach') {
       const name = String(params.name || 'file')
@@ -39,47 +38,31 @@ export function createDemoRpc(state: DemoState) {
       const name = String(params.name || '')
       return { type: 'skill', name, message: String(params.arg || ''), display: `/${name}` } as T
     }
-    if (method === 'prompt.submit') return submitDemoPrompt(params, emit) as Promise<T>
+    if (method === 'approval.respond') return respondDemoApproval(state, params, emit) as Promise<T>
+    if (method === 'prompt.submit') return submitDemoPrompt(state, params, emit) as Promise<T>
     return { ok: true } as T
   }
 }
 
-async function submitDemoPrompt(params: Record<string, unknown>, emit: DemoEmit) {
-  const sessionId = String(params.session_id || 'weekly-leads')
-  const later = (delay: number, event: Parameters<DemoEmit>[0]) => window.setTimeout(() => emit(event), delay)
-  later(120, { type: 'message.start', session_id: sessionId, payload: {} })
-  later(450, {
-    type: 'tool.start',
-    session_id: sessionId,
-    payload: { tool_id: 'tool-1', name: 'google_workspace.gmail_search' }
-  })
-  later(1_250, {
-    type: 'tool.complete',
-    session_id: sessionId,
-    payload: { tool_id: 'tool-1', name: 'google_workspace.gmail_search', summary: 'נמצאו 18 לידים' }
-  })
-  const chunks = [
-    'עברתי על הפניות החדשות. ',
-    'מצאתי 18 לידים, ומתוכם 6 נראים דחופים במיוחד. ',
-    'הייתי מתחיל היום עם דני, נועה וחברת אלומה — לכולם יש בקשה ברורה ותקציב מתאים. ',
-    'הכנתי גם טיוטת מייל המשך לדני.'
-  ]
-  chunks.forEach((text, index) => {
-    later(1_450 + index * 420, { type: 'message.delta', session_id: sessionId, payload: { text } })
-  })
-  later(3_250, {
-    type: 'approval.request',
-    session_id: sessionId,
-    payload: {
-      command: 'gmail send --to dani@example.com',
-      reason: 'שליחת טיוטת המשך לדני בנושא הצעת המחיר',
-      choices: ['once', 'session', 'deny']
-    }
-  })
-  later(3_420, {
-    type: 'message.complete',
-    session_id: sessionId,
-    payload: { text: chunks.join(''), status: 'complete' }
-  })
+// The staggered delays are what make the demo read like a live answer rather than a
+// paste; the scripted timing itself lives in demo-scenarios.
+function play(events: DemoScheduledEvent[], emit: DemoEmit) {
+  events.forEach(({ delay, event }) => window.setTimeout(() => emit(event), delay))
+}
+
+async function submitDemoPrompt(state: DemoState, params: Record<string, unknown>, emit: DemoEmit) {
+  const sessionId = String(params.session_id || state.activeSession || 'weekly-leads')
+  const scenario = matchDemoScenario(String(params.text || ''))
+  state.pendingApproval = scenario.approval ? scenario.id : null
+  play(buildScenarioEvents(scenario, sessionId), emit)
   return { status: 'streaming' }
+}
+
+async function respondDemoApproval(state: DemoState, params: Record<string, unknown>, emit: DemoEmit) {
+  const scenario = state.pendingApproval ? findDemoScenario(state.pendingApproval) : null
+  if (!scenario) return { ok: true }
+  state.pendingApproval = null
+  const sessionId = String(params.session_id || state.activeSession || 'weekly-leads')
+  play(buildApprovalFollowUpEvents(scenario, String(params.choice || 'deny'), sessionId), emit)
+  return { ok: true }
 }
