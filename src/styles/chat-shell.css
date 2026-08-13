@@ -96,3 +96,75 @@
   background: white;
   border-color: #aaa7cb;
 }
+
+/* "מצב העסק" — real-data cards under the suggestion chips. Deliberately quieter
+   than .stat-card on the tasks screen (that screen IS the numbers; here they are
+   context for a conversation the owner has not started yet): same surface/line/
+   icon-tile language, smaller tile, tighter box. Sits inside .empty-conversation,
+   whose justify-items:center leaves children at content width, so the row takes
+   the full 420px column itself and the cards share it. */
+.empty-state-strip {
+  display: flex;
+  flex-wrap: wrap;
+  width: 100%;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 20px;
+}
+
+.empty-state-card {
+  display: grid;
+  min-width: 178px;
+  flex: 1 1 178px;
+  padding: 10px 12px;
+  /* .empty-conversation centers its text; the card's own content reads as a
+     block, so it starts at the inline start (right in RTL). */
+  color: var(--muted);
+  text-align: start;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  cursor: pointer;
+  grid-template-columns: 30px 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 9px;
+}
+
+.empty-state-card:hover {
+  border-color: var(--line-strong);
+}
+
+.empty-state-card__icon {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  color: var(--green);
+  background: var(--green-soft);
+  border-radius: 9px;
+  grid-row: 1 / 3;
+}
+
+.empty-state-card__icon--amber {
+  color: var(--amber);
+  background: var(--amber-soft);
+}
+
+.empty-state-card__icon--indigo {
+  color: var(--indigo);
+  background: var(--indigo-soft);
+}
+
+/* Scoped through .empty-conversation to out-specify its own `strong` rule above
+   (16px, for the greeting) rather than relying on source order. */
+.empty-conversation .empty-state-card strong {
+  align-self: end;
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.empty-state-card small {
+  align-self: start;
+  color: var(--muted);
+  font-size: 12px;
+}

@@ -4,7 +4,8 @@ import { describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ChatScreen } from './ChatScreen'
-import type { Activity, ChatMessage } from '../../types'
+import { FeedUnseenContext } from '../../lib/feed-unseen-context'
+import type { Activity, ChatMessage, ScheduledTask } from '../../types'
 
 // Regression coverage for three confirmed defects: suggestion chips used to send
 // immediately instead of populating the composer, the composer textarea went
@@ -198,5 +199,128 @@ describe('ChatScreen — conversation live region', () => {
       />
     )
     expect(screen.getByRole('status')).toHaveTextContent('מחפש הודעות ב־Gmail')
+  })
+})
+
+// The home screen used to be a greeting, three chips and a lot of nothing. The
+// "מצב העסק" strip anchors it in the owner's REAL state — which makes the honesty
+// rules load-bearing: a failed schedule read must read as 'לא ידוע' and never as a
+// confident 0, and a genuinely fresh install must collapse the strip rather than
+// show a row of zeros.
+function scheduledTask(overrides: Partial<ScheduledTask> = {}): ScheduledTask {
+  return {
+    id: 't1',
+    name: 'סיכום יומי',
+    prompt: 'סכם את היום',
+    schedule: 'every day 08:00',
+    enabled: true,
+    ...overrides
+  }
+}
+
+// Local 08:00 tomorrow, as the ISO instant a real Hermes profile reports.
+function tomorrowAt8(): string {
+  const at = new Date()
+  at.setDate(at.getDate() + 1)
+  at.setHours(8, 0, 0, 0)
+  return at.toISOString()
+}
+
+function renderHome(
+  overrides: Partial<Parameters<typeof ChatScreen>[0]> = {},
+  feedUnseenCount = 0
+) {
+  const props = {
+    messages: [] as ChatMessage[],
+    activities: [] as Activity[],
+    approval: null,
+    clarify: null,
+    busy: false,
+    onSend: vi.fn(noop),
+    onStop: vi.fn(),
+    onApproval: vi.fn(),
+    onClarify: vi.fn(),
+    onOpenTasks: vi.fn(),
+    ...overrides
+  }
+  return {
+    ...props,
+    ...render(
+      <FeedUnseenContext.Provider value={feedUnseenCount}>
+        <ChatScreen {...props} />
+      </FeedUnseenContext.Provider>
+    )
+  }
+}
+
+describe('ChatScreen — home "מצב העסק" strip', () => {
+  it('shows the active task count and the next run from the real schedule', () => {
+    renderHome({
+      tasks: [
+        scheduledTask({ id: 'a', next_run: tomorrowAt8() }),
+        scheduledTask({ id: 'b' }),
+        scheduledTask({ id: 'c', enabled: false })
+      ]
+    })
+    const card = screen.getByRole('button', { name: /2 משימות פעילות/ })
+    expect(card).toHaveTextContent('2 משימות פעילות')
+    expect(card).toHaveTextContent('הריצה הבאה: מחר 08:00')
+    expect(screen.getByRole('navigation', { name: 'מצב העסק' })).toBeInTheDocument()
+  })
+
+  it('renders the honest-unknown variant — never a 0 — when the schedule read failed', () => {
+    renderHome({ tasks: [], tasksLoadError: true })
+    const card = screen.getByRole('button', { name: /לא הצלחנו לקרוא כרגע את המשימות המתוזמנות/ })
+    expect(card).toHaveTextContent('לא ידוע')
+    expect(screen.queryByText('0 משימות פעילות')).toBeNull()
+    expect(screen.queryByText(/הריצה הבאה/)).toBeNull()
+  })
+
+  it('collapses entirely on a fresh install, keeping the clean empty state', () => {
+    renderHome({ tasks: [] })
+    expect(screen.queryByRole('navigation', { name: 'מצב העסק' })).toBeNull()
+    expect(screen.queryByText(/משימות פעילות/)).toBeNull()
+    expect(screen.queryByText('לא ידוע')).toBeNull()
+    // The suggestion chips are untouched by any of this.
+    expect(screen.getByRole('button', { name: 'נסח תשובה ללקוח' })).toBeInTheDocument()
+  })
+
+  it('shows unseen partner activity from the shared sidebar count', () => {
+    renderHome({ tasks: [] }, 2)
+    const card = screen.getByRole('button', { name: /2 עדכונים חדשים מהעוזר מאז הביקור האחרון/ })
+    expect(card).toHaveTextContent('2 עדכונים חדשים מהעוזר')
+  })
+
+  it('says nothing about activity while the shared count is zero', () => {
+    renderHome({ tasks: [scheduledTask({ next_run: tomorrowAt8() })] }, 0)
+    expect(screen.queryByText(/עדכונים חדשים/)).toBeNull()
+    expect(screen.queryByText(/0 עדכונים/)).toBeNull()
+  })
+
+  it('never renders on a started conversation or mid-answer', () => {
+    const { unmount } = renderHome({
+      tasks: [scheduledTask({ next_run: tomorrowAt8() })],
+      messages: [{ id: 'm1', role: 'user', text: 'שלום' }]
+    })
+    expect(screen.queryByRole('navigation', { name: 'מצב העסק' })).toBeNull()
+    unmount()
+
+    renderHome({ tasks: [scheduledTask({ next_run: tomorrowAt8() })], busy: true }, 3)
+    expect(screen.queryByRole('navigation', { name: 'מצב העסק' })).toBeNull()
+  })
+
+  it('navigates to the activity screen from either card', async () => {
+    const user = userEvent.setup()
+    const { onOpenTasks } = renderHome({ tasks: [scheduledTask({ next_run: tomorrowAt8() })] }, 4)
+    await user.click(screen.getByRole('button', { name: /משימה פעילה אחת/ }))
+    expect(onOpenTasks).toHaveBeenCalledTimes(1)
+    await user.click(screen.getByRole('button', { name: /4 עדכונים חדשים מהעוזר/ }))
+    expect(onOpenTasks).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not steal focus or leak into the chat live region', () => {
+    renderHome({ tasks: [scheduledTask({ next_run: tomorrowAt8() })] }, 2)
+    expect(document.body).toHaveFocus()
+    expect(screen.getByRole('status')).toHaveTextContent('')
   })
 })

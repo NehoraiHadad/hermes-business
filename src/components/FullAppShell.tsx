@@ -5,6 +5,7 @@ import { readDismissedVersion, writeDismissedVersion } from '../hooks/useCompani
 import type { useHermesData } from '../hooks/useHermesData'
 import { usePartnerFeed } from '../hooks/usePartnerFeed'
 import type { useSupportActions } from '../hooks/useSupportActions'
+import { FeedUnseenContext } from '../lib/feed-unseen-context'
 import { hermesClient } from '../lib/hermes-client'
 import type { ToastMessage, ToastSeverity } from '../lib/toast'
 import type { Connection, Screen, TaskActions } from '../types'
@@ -168,9 +169,15 @@ export function FullAppShell({
           onMini={onMini}
           hasUpdateIndicator={updateIndicatorVisible}
         />
+        {/* `chatScreen` is wrapped in FeedUnseenContext below: the home screen's
+            "מצב העסק" strip reads the unseen count from there — the same
+            `feedUnseenCount` the Sidebar badge above renders, PUBLISHED rather
+            than recomputed (a second usePartnerFeed instance would fetch again
+            and could disagree with the badge). It is provided here, at the point
+            of use, because App.tsx builds `chatScreen` as an opaque node. */}
         <MainScreen
           screen={screen}
-          chatScreen={chatScreen}
+          chatScreen={<FeedUnseenContext.Provider value={feedUnseenCount}>{chatScreen}</FeedUnseenContext.Provider>}
           tasks={data.tasks}
           skills={data.skills}
           connections={data.connections}

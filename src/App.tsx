@@ -148,10 +148,18 @@ export default function App() {
       approval={chat.approval}
       clarify={chat.clarify}
       busy={chat.busy}
+      // Home "מצב העסק" strip: the SAME schedule slice (and its fail-closed
+      // loadErrors.tasks flag) MainScreen hands TasksScreen — one read, one
+      // truth, so the empty screen can never state a count the tasks screen
+      // would contradict. The strip's partner-feed count arrives by context
+      // from FullAppShell, which already owns that computation for the sidebar.
+      tasks={data.tasks}
+      tasksLoadError={data.loadErrors.tasks}
       onSend={chat.sendMessage}
       onStop={chat.stop}
       onApproval={chat.respondApproval}
       onClarify={chat.respondClarify}
+      onOpenTasks={() => setScreen('tasks')}
     />
   )
   const modalLayer = (

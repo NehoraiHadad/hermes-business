@@ -1,7 +1,9 @@
-import { Paperclip, Send, Sparkles, Square } from 'lucide-react'
-import { FormEvent, useEffect, useRef, useState } from 'react'
-import type { Activity, Approval, ChatMessage, ClarifyRequest } from '../../types'
+import { AlertTriangle, Bell, Paperclip, Play, Send, Sparkles, Square } from 'lucide-react'
+import { FormEvent, ReactNode, useContext, useEffect, useRef, useState } from 'react'
+import type { Activity, Approval, ChatMessage, ClarifyRequest, ScheduledTask } from '../../types'
 import type { PendingAttachment } from '../../lib/hermes/attachments'
+import { FeedUnseenContext } from '../../lib/feed-unseen-context'
+import { summarizeHomeTasks } from '../../lib/home-status'
 import { ActivityStrip } from './ActivityStrip'
 import { ApprovalCard } from './ApprovalCard'
 import { ClarifyCard } from './ClarifyCard'
@@ -10,26 +12,49 @@ import { MessageBubble } from './MessageBubble'
 import { buildConversationTimeline } from './conversation-timeline'
 import { useComposerAttachments } from './useComposerAttachments'
 
+// One card of the empty state's "מצב העסק" strip. Every card is a real button
+// that navigates somewhere the number can be acted on — nothing here is decoration.
+type StatusCard = {
+  key: string
+  icon: ReactNode
+  tone: string
+  value: string
+  note: string
+  /** Full-sentence accessible name — the visible value/note read as one thought. */
+  label: string
+  onClick: () => void
+}
+
 export function ChatScreen({
   messages,
   activities,
   approval,
   clarify,
   busy,
+  tasks = [],
+  tasksLoadError = false,
   onSend,
   onStop,
   onApproval,
-  onClarify
+  onClarify,
+  onOpenTasks
 }: {
   messages: ChatMessage[]
   activities: Activity[]
   approval: Approval | null
   clarify: ClarifyRequest | null
   busy: boolean
+  // Same authoritative schedule slice TasksScreen renders, with the same caveat:
+  // when `tasksLoadError` is set, `tasks` is an EMPTY PLACEHOLDER, not a
+  // proven-empty list. Optional because the surfaces that only host a
+  // conversation (tests, any future embed) have nothing to say about them.
+  tasks?: ScheduledTask[]
+  tasksLoadError?: boolean
   onSend: (text: string, attachments: PendingAttachment[]) => Promise<boolean> | void
   onStop: () => void
   onApproval: (choice: 'once' | 'deny') => void
   onClarify: (answer: string) => void
+  onOpenTasks?: () => void
 }) {
   const [text, setText] = useState('')
   const { attachments, setAttachments, fileInput, pickAttachment, onBrowserFiles, removeAttachment } =
@@ -87,6 +112,61 @@ export function ChatScreen({
     }
   }, [busy, activities, messages])
 
+  // "מצב העסק" strip — the empty screen's only real-data content. Read from the
+  // exact values their own screens use: the schedule slice via summarizeHomeTasks
+  // (src/lib/home-status.ts), and the partner-feed unseen count via the context
+  // FullAppShell publishes from the SAME computation the sidebar badge renders,
+  // so the two can never disagree.
+  const feedUnseenCount = useContext(FeedUnseenContext)
+  const showEmptyState = !messages.length && !busy
+  const statusCards: StatusCard[] = []
+  if (showEmptyState) {
+    const { activeCount, nextRun } = summarizeHomeTasks(tasks, tasksLoadError, Date.now())
+    if (activeCount === null) {
+      // A failed read renders as honestly-unknown rather than as nothing at all.
+      // Silence here would be its own lie: scheduled tasks may well be running
+      // right now, and the owner would read the empty screen as "nothing is set
+      // up". Same wording as TasksScreen's stat cards ('לא ידוע'), and the card
+      // leads to the screen that explains the failure and offers a retry.
+      statusCards.push({
+        key: 'tasks',
+        icon: <AlertTriangle size={16} />,
+        tone: 'empty-state-card__icon--amber',
+        value: 'לא ידוע',
+        note: 'מצב המשימות המתוזמנות',
+        label: 'לא הצלחנו לקרוא כרגע את המשימות המתוזמנות. פתחו את מסך פעילות ומשימות כדי לבדוק.',
+        onClick: () => onOpenTasks?.()
+      })
+    } else if (activeCount > 0) {
+      // A proven 0 shows nothing: a fresh install must keep the clean empty
+      // state, not a row of zeros telling the owner what they do not have.
+      const count = activeCount === 1 ? 'משימה פעילה אחת' : `${activeCount} משימות פעילות`
+      const note = nextRun ? `הריצה הבאה: ${nextRun}` : 'טרם נקבעה ריצה הבאה'
+      statusCards.push({
+        key: 'tasks',
+        icon: <Play size={16} />,
+        tone: 'empty-state-card__icon--green',
+        value: count,
+        note,
+        label: `${count}. ${note}. פתחו את מסך פעילות ומשימות.`,
+        onClick: () => onOpenTasks?.()
+      })
+    }
+    if (feedUnseenCount > 0) {
+      const count =
+        feedUnseenCount === 1 ? 'עדכון חדש מהעוזר' : `${feedUnseenCount} עדכונים חדשים מהעוזר`
+      statusCards.push({
+        key: 'feed',
+        icon: <Bell size={16} />,
+        tone: 'empty-state-card__icon--indigo',
+        value: count,
+        note: 'מאז הביקור האחרון',
+        label: `${count} מאז הביקור האחרון. פתחו את מסך פעילות ומשימות כדי לראות מה נעשה.`,
+        onClick: () => onOpenTasks?.()
+      })
+    }
+  }
+
   const submit = async (event: FormEvent) => {
     event.preventDefault()
     const value = text.trim()
@@ -110,7 +190,7 @@ export function ChatScreen({
       <div className="chat-scroll">
         <div className="conversation">
           <div className="conversation-date">היום</div>
-          {!messages.length && !busy ? (
+          {showEmptyState ? (
             <div className="empty-conversation">
               <span>
                 <Sparkles size={20} />
@@ -137,6 +217,28 @@ export function ChatScreen({
                   </button>
                 ))}
               </div>
+              {/* Collapses entirely when there is nothing real to say — a fresh
+                  install keeps the clean greeting-and-chips screen. Never
+                  auto-focused: starting a conversation stays the primary action.
+                  Outside the chat live region above, so none of this is announced
+                  as conversation activity. */}
+              {statusCards.length ? (
+                <nav className="empty-state-strip" aria-label="מצב העסק">
+                  {statusCards.map(card => (
+                    <button
+                      key={card.key}
+                      type="button"
+                      className="empty-state-card"
+                      aria-label={card.label}
+                      onClick={card.onClick}
+                    >
+                      <span className={`empty-state-card__icon ${card.tone}`}>{card.icon}</span>
+                      <strong>{card.value}</strong>
+                      <small>{card.note}</small>
+                    </button>
+                  ))}
+                </nav>
+              ) : null}
             </div>
           ) : null}
           {timeline.map(entry =>
