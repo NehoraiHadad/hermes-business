@@ -9,7 +9,10 @@ import { navigateScreen } from '../../installed-app.mjs'
 export async function runTasks(ctx) {
   const { page, taskName } = ctx
 
-  await navigateScreen(page, 'משימות מתוזמנות', { waitHeading: true, timeout: 30_000 })
+  // The simple shell renames this nav item (constants.ts NAV_ITEMS), and the screen
+  // heading now matches that same label — so one string drives both halves of the
+  // navigation. Keep them equal; a divergence here silently stops finding the screen.
+  await navigateScreen(page, 'פעילות ומשימות', { waitHeading: true, timeout: 30_000 })
 
   await page.getByRole('button', { name: 'משימה חדשה' }).click()
   const taskDialog = page.getByRole('dialog', { name: 'משימה מתוזמנת חדשה' })

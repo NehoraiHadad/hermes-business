@@ -8,7 +8,12 @@
   --surface: #fffefb;
   --surface-soft: #f1efe8;
   --ink: #292722;
-  --muted: #79756c;
+  /* Secondary text. Darkened from #79756c (4.24:1 on --bg / 3.99:1 on
+     --surface-soft — both FAIL WCAG AA) to #6c6860, which clears 4.5:1 as
+     normal-size text on every surface this app actually paints it on:
+     --bg 5.13, --surface 5.50, --surface-soft 4.82, sidebar #eeece5 4.69,
+     chip #efede8 4.74, user bubble #e9e8f2 4.57. */
+  --muted: #6c6860;
   --line: #e6e2d8;
   --line-strong: #d7d1c3;
   --indigo: #5c5ba8;
@@ -16,8 +21,13 @@
   --indigo-soft: #efeffa;
   --green: #2a7a57;
   --green-soft: #e7f3ec;
+  /* --amber is the ICON/BORDER amber: 3.94:1 on --amber-soft clears the 3:1
+     non-text threshold but NOT the 4.5:1 text one. Amber TEXT must use
+     --amber-ink, which is 7.63:1 on --amber-soft, 7.88:1 on #fbf4e8 and
+     7.96:1 on --bg. */
   --amber: #a56b22;
   --amber-soft: #fbf0dc;
+  --amber-ink: #6b4315;
   --red: #a54242;
   --shadow: 0 14px 48px rgba(55, 49, 39, 0.11);
 }

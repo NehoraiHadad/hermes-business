@@ -21,7 +21,7 @@
   position: relative;
   z-index: 6;
   display: flex;
-  flex: 0 0 96px;
+  flex: 0 0 100px;
   align-items: flex-end;
   justify-content: space-between;
   padding: 50px 12px 10px;
@@ -64,7 +64,7 @@
   margin-top: 2px;
   padding-inline-start: 10px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .mini-status::before {
@@ -110,9 +110,9 @@
 }
 
 .mini-powered {
-  flex: 0 0 20px;
-  color: #a39e94;
+  flex: 0 0 22px;
+  color: var(--muted);
   background: var(--bg);
-  font-size: 8.5px;
+  font-size: 12px;
   text-align: center;
 }

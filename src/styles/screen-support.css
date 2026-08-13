@@ -18,7 +18,7 @@
   padding: 0 18px;
   border-bottom: 1px solid var(--line);
   grid-template-columns: 25px 1fr auto;
-  font-size: 11.5px;
+  font-size: 12px;
 }
 
 .check-row:last-child {
@@ -47,7 +47,7 @@
 
 .check-row strong {
   color: #67635c;
-  font-size: 10.5px;
+  font-size: 12.5px;
   font-weight: 550;
 }
 
@@ -59,13 +59,13 @@
   border-bottom: 1px solid var(--line);
   grid-template-columns: 1fr auto auto;
   gap: 10px;
-  font-size: 11.5px;
+  font-size: 12px;
 }
 
 .version-row strong {
   direction: ltr;
   font-family: Consolas, monospace;
-  font-size: 10.5px;
+  font-size: 12px;
 }
 
 .up-to-date {
@@ -73,13 +73,13 @@
   color: var(--green);
   background: var(--green-soft);
   border-radius: 12px;
-  font-size: 8.5px;
+  font-size: 12px;
 }
 
 .version-note {
   margin: 13px 18px 16px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12.5px;
   line-height: 1.6;
 }
 
@@ -129,21 +129,21 @@
 
 .support-action-grid button > svg {
   align-self: center;
-  color: #aaa49a;
+  color: var(--muted);
   grid-column: 3;
   grid-row: 1 / 3;
 }
 
 .support-action-grid strong {
   align-self: end;
-  font-size: 11.5px;
+  font-size: 12.5px;
 }
 
 .support-action-grid small {
   align-self: start;
   margin-top: 3px;
   color: var(--muted);
-  font-size: 9.5px;
+  font-size: 12px;
 }
 
 .support-summary {
@@ -165,20 +165,22 @@
 }
 
 .support-summary--attention {
-  color: #9b6d28;
+  color: var(--amber-ink);
   background: #fbf4e8;
 }
 
+/* Inherits the summary's state colour (attention amber, otherwise the page ink)
+   instead of setting one — see the note in onboarding-shell.css: the old
+   `var(--text)` was an undefined token that already resolved to `inherit`. */
 .support-summary h3 {
   margin: 0;
-  color: var(--text);
   font-size: 17px;
 }
 
 .support-summary p {
   margin: 5px 0 0;
   color: var(--muted);
-  font-size: 11.5px;
+  font-size: 12.5px;
 }
 
 .support-help-panel {
@@ -198,7 +200,7 @@
 .support-help-panel p {
   margin: 4px 0 0;
   color: var(--muted);
-  font-size: 10.5px;
+  font-size: 12.5px;
 }
 
 .advanced-support {
@@ -216,7 +218,7 @@
   padding: 14px 17px;
   cursor: pointer;
   color: #6b665f;
-  font-size: 11.5px;
+  font-size: 12.5px;
   font-weight: 650;
   list-style: none;
 }

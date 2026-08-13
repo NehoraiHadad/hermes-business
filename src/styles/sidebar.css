@@ -63,8 +63,22 @@
   font-size: 21px;
 }
 
+/* The sidebar is a fixed-height flex column, so the conversation list takes the
+   leftover space and scrolls INSIDE itself: expanding it with "הצג עוד" can never
+   push the footer StatusPill out of the window. */
 .sidebar--simple .session-list {
+  flex: 1 1 auto;
   min-height: 0;
+}
+
+/* ...and nothing above or below the list gets squeezed to make room for it. */
+.sidebar--simple .brand,
+.sidebar--simple .new-chat-button,
+.sidebar--simple .main-nav,
+.sidebar--simple .sidebar__divider,
+.sidebar--simple .sessions-title,
+.sidebar--simple .sidebar__footer {
+  flex-shrink: 0;
 }
 
 .sessions-title--simple {

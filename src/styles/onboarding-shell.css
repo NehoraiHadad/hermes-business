@@ -134,15 +134,18 @@
   display: grid;
 }
 
+/* Deliberately inherits the item's own state colour (green/amber) rather than
+   setting one. This used to read `color: var(--text)` — a token that was never
+   defined, so it was invalid at computed-value time and fell back to `inherit`
+   anyway. Same rendering, without the phantom reference. */
 .setup-readiness__item strong {
-  color: var(--text);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .setup-readiness__item small {
   margin-top: 3px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12.5px;
 }
 
 .conversation-first-note {
@@ -156,7 +159,7 @@
   background: var(--indigo-soft);
   border-radius: 10px;
   text-align: right;
-  font-size: 11px;
+  font-size: 12.5px;
 }
 
 .onboarding-safety-note {
@@ -171,5 +174,5 @@
 
 .onboarding__footer--simple > span {
   color: var(--muted);
-  font-size: 10.5px;
+  font-size: 12px;
 }

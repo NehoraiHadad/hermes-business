@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { hermesClient } from '../lib/hermes-client'
 import { handleGatewayEvent, nextTimelineOrder, now } from '../lib/hermes/chat-events'
 import { createReconnectResumeTracker } from '../lib/hermes/chat-resume'
@@ -149,12 +149,32 @@ export function useChat({
     setBusy(false)
   }, [runtimeSession])
 
+  // Answer the approval gate. The card locks its own buttons on the first
+  // click, but that is only UI state — this ref is what actually protects the
+  // send: while a response is in flight no second one may reach Hermes, or the
+  // same email goes out twice (or a deny chases an approve already on the
+  // wire). Resolves false when the answer did NOT land, so the card can unlock
+  // itself and stay on screen for a retry instead of silently vanishing — the
+  // card reads that value at runtime, since ChatScreen's onApproval prop erases
+  // it to void on the way down.
+  const approvalInFlight = useRef(false)
   const respondApproval = useCallback(
-    async (choice: 'once' | 'deny') => {
-      if (!approval) return
-      await hermesClient.respondApproval(approval.sessionId, choice)
-      setApproval(null)
-      setToast(choice === 'once' ? 'הפעולה אושרה' : 'הפעולה נדחתה')
+    async (choice: 'once' | 'deny'): Promise<boolean | void> => {
+      if (!approval || approvalInFlight.current) return false
+      approvalInFlight.current = true
+      try {
+        await hermesClient.respondApproval(approval.sessionId, choice)
+        setApproval(null)
+        setToast(choice === 'once' ? 'הפעולה אושרה' : 'הפעולה נדחתה')
+        return true
+      } catch {
+        // The transport's own failure text is English and technical; the only
+        // thing that matters to the user is that nothing was sent yet.
+        setToast('לא הצלחנו לשלוח את התשובה. אפשר לנסות שוב.', 'error')
+        return false
+      } finally {
+        approvalInFlight.current = false
+      }
     },
     [approval, setToast]
   )

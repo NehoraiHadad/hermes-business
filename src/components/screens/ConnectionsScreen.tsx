@@ -13,24 +13,32 @@ function ConnectionRow({
     <article className="connection-card" key={connection.id}>
       <ServiceIcon type={connection.icon} />
       <div className="connection-card__content">
-        <h3>{connection.name}</h3>
-        <p>{connection.description}</p>
+        <h4>{connection.name}</h4>
         {connection.official === false ? (
           <div className="connection-risk-note">
-            <ShieldAlert size={14} />
+            <ShieldAlert size={16} />
             <span>
               הרישום מתבצע באמצעות API צד שלישי. החיבור עלול להשתנות, להפסיק לעבוד
               או להביא להגבלת החשבון בהתאם למדיניות WhatsApp; מומלץ להשתמש במספר ייעודי.
             </span>
           </div>
         ) : null}
+        <p>{connection.description}</p>
       </div>
       {connection.state === 'connected' ? (
-        <button className="connected-button" onClick={() => onConnect(connection)}>
-          <CheckCircle2 size={16} /> מחובר
+        <button
+          className="connected-button"
+          onClick={() => onConnect(connection)}
+          aria-label={`${connection.name}, מחובר. לחצו כדי לפתוח ולנהל את החיבור.`}
+        >
+          <CheckCircle2 size={16} /> מחובר · ניהול
         </button>
       ) : (
-        <button className="outline-button outline-button--small" onClick={() => onConnect(connection)}>
+        <button
+          className="outline-button outline-button--small"
+          onClick={() => onConnect(connection)}
+          aria-label={`חבר את ${connection.name}`}
+        >
           חבר <ChevronLeft size={15} />
         </button>
       )}
@@ -70,7 +78,9 @@ export function ConnectionsScreen({
       <section className="panel connections-panel">
         <div className="panel__title">
           <h3>חיבורים זמינים</h3>
-          <span>בחר את השירות שמתאים לעסק; אפשר לנתק כל חיבור בכל רגע</span>
+          {/* No disconnect control exists yet — only ConnectionModal's connect/reconfigure
+              flow. Promising "ניתוק" here would be a UI promise with no matching control. */}
+          <span>בחר את השירות שמתאים לעסק; אפשר לפתוח ולנהל כל חיבור פעיל בכל רגע</span>
         </div>
         {loadError ? (
           <div className="list-state list-state--error">

@@ -41,7 +41,7 @@ export async function runApproval(ctx) {
   const approvalCard = page.locator('.approval-card')
   await approvalCard.waitFor({ state: 'visible', timeout: 180_000 })
   const cardText = await approvalCard.innerText()
-  if (!/אשר פעם אחת/.test(cardText) || !/דחה/.test(cardText)) {
+  if (!/אשר ושלח/.test(cardText) || !/דחה/.test(cardText)) {
     throw new Error(`Approval card is missing clear actions: ${cardText}`)
   }
   await approvalCard.getByRole('button', { name: 'דחה' }).click()

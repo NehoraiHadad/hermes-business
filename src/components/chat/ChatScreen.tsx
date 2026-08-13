@@ -35,11 +35,57 @@ export function ChatScreen({
   const { attachments, setAttachments, fileInput, pickAttachment, onBrowserFiles, removeAttachment } =
     useComposerAttachments(busy)
   const endRef = useRef<HTMLDivElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  // Set by a suggestion chip click; consumed once the populated text has committed
+  // to the DOM so the caret lands after the real value, not the stale one.
+  const focusComposerRef = useRef(false)
   const timeline = buildConversationTimeline(messages, activities)
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
   }, [messages, activities, approval, clarify])
+
+  useEffect(() => {
+    if (!focusComposerRef.current) return
+    focusComposerRef.current = false
+    const node = textareaRef.current
+    if (!node) return
+    node.focus()
+    node.setSelectionRange(node.value.length, node.value.length)
+  }, [text])
+
+  const [liveStatus, setLiveStatus] = useState('')
+  // Reports state transitions to screen readers (turn started/finished, tool activity),
+  // never per-token deltas — the ref gates each branch so a re-render mid-stream (text
+  // still arriving, busy/activity unchanged) does not re-announce anything.
+  const liveStatusRef = useRef({ busy: false, activityKey: '' })
+  useEffect(() => {
+    const state = liveStatusRef.current
+    const activeActivity = activities.reduce<Activity | null>(
+      (latest, activity) => (!latest || activity.timelineOrder > latest.timelineOrder ? activity : latest),
+      null
+    )
+    const activityKey = activeActivity ? `${activeActivity.id}:${activeActivity.status}` : ''
+    if (activityKey && activityKey !== state.activityKey) {
+      state.activityKey = activityKey
+      setLiveStatus(
+        activeActivity!.status === 'running'
+          ? activeActivity!.detail
+            ? `${activeActivity!.label}: ${activeActivity!.detail}`
+            : activeActivity!.label
+          : `${activeActivity!.label} — הושלם`
+      )
+      return
+    }
+    if (busy && !state.busy) {
+      state.busy = true
+      setLiveStatus('העוזר עובד על התשובה')
+    } else if (!busy && state.busy) {
+      state.busy = false
+      const finished = [...messages].reverse().find(message => message.role === 'assistant' && message.text.trim())
+      setLiveStatus(finished ? `התשובה מוכנה. ${finished.text}` : 'התשובה מוכנה')
+    }
+  }, [busy, activities, messages])
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
@@ -58,6 +104,9 @@ export function ChatScreen({
 
   return (
     <main className="chat-screen">
+      <div className="chat-live-region visually-hidden" role="status" aria-live="polite">
+        {liveStatus}
+      </div>
       <div className="chat-scroll">
         <div className="conversation">
           <div className="conversation-date">היום</div>
@@ -74,7 +123,16 @@ export function ChatScreen({
                   'עזור לי לתכנן את השבוע',
                   'מצא משימה שחוזרת על עצמה'
                 ].map(suggestion => (
-                  <button key={suggestion} type="button" onClick={() => void onSend(suggestion, [])}>
+                  <button
+                    key={suggestion}
+                    type="button"
+                    onClick={() => {
+                      // Populate the composer instead of sending — a curious click should
+                      // let the user edit the suggestion before it becomes a real turn.
+                      focusComposerRef.current = true
+                      setText(suggestion)
+                    }}
+                  >
                     {suggestion}
                   </button>
                 ))}
@@ -97,12 +155,17 @@ export function ChatScreen({
         <form className="composer" onSubmit={submit}>
           <ComposerAttachments attachments={attachments} onRemove={removeAttachment} />
           <textarea
+            ref={textareaRef}
             rows={1}
-            disabled={busy}
             value={text}
             onChange={event => setText(event.target.value)}
             onKeyDown={event => {
-              if (event.key === 'Enter' && !event.shiftKey) submit(event)
+              if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return
+              // Sending stays blocked while busy (the stop button covers cancelling the
+              // turn) — but let Enter insert a newline instead of swallowing the keystroke,
+              // so nothing the user typed is lost.
+              if (busy) return
+              submit(event)
             }}
             placeholder="מה תרצה לעשות?"
             aria-label="הודעה לעוזר"

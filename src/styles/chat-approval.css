@@ -35,6 +35,21 @@
   font-size: 12px;
 }
 
+/* Secondary technical detail, not the explanation: the raw command stays
+   available under an honest caption instead of being the first thing a
+   non-technical owner reads. */
+.approval-card__details {
+  margin-bottom: 11px;
+}
+
+.approval-card__details-caption {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .approval-card pre {
   max-width: 100%;
   padding: 9px;
@@ -43,7 +58,7 @@
   color: #5d584f;
   background: #f2eee5;
   border-radius: 7px;
-  font-size: 10px;
+  font-size: 12px;
   text-align: left;
 }
 
@@ -62,7 +77,7 @@
   color: var(--indigo);
   background: transparent;
   border: 0;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
 }
 

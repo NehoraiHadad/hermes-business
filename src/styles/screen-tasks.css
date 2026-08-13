@@ -10,7 +10,7 @@
   display: block;
   margin-top: 5px;
   color: var(--muted);
-  font-size: 10.5px;
+  font-size: 12.5px;
 }
 
 .schedule-fields {
@@ -81,7 +81,7 @@
 .stat-card small {
   align-self: start;
   color: var(--muted);
-  font-size: 10.5px;
+  font-size: 12px;
 }
 
 .panel {
@@ -109,7 +109,18 @@
 
 .panel__title > span {
   color: var(--muted);
-  font-size: 10.5px;
+  font-size: 12px;
+}
+
+/* Groups the item count + "משימה חדשה" action together as the panel__title's
+   second flex child, so the existing h3/space-between layout still works with
+   the primary action now anchored to the tasks section it belongs to (moved
+   here from the page heading, which now spans both this panel and the
+   partner-feed panel above it). */
+.panel__title-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
 }
 
 .task-row {
@@ -154,7 +165,7 @@
   overflow: hidden;
   margin: 5px 0 10px;
   color: #777269;
-  font-size: 11.5px;
+  font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -162,8 +173,8 @@
 .task-row__meta {
   display: flex;
   gap: 18px;
-  color: #918c82;
-  font-size: 10.5px;
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .task-row__meta span {
@@ -181,10 +192,10 @@
 .state-label {
   display: inline-flex;
   padding: 4px 8px;
-  color: #7e786e;
+  color: var(--muted);
   background: #efede8;
   border-radius: 15px;
-  font-size: 9.5px;
+  font-size: 12px;
   font-weight: 650;
 }
 
@@ -230,12 +241,49 @@
 .list-state p {
   max-width: 320px;
   margin: 6px 0 0;
-  font-size: 11px;
+  font-size: 12.5px;
   line-height: 1.6;
 }
 
 .list-state .outline-button {
   margin-top: 14px;
+}
+
+/* Confirm dialog (src/components/ui/ConfirmDialog.tsx) — replaces window.confirm()
+   for the trigger-now/delete confirmations below. Styled here (this stylesheet is
+   the only one this screen owns) on top of the shared .modal/.modal__actions/
+   .ghost-button primitives from modal-base.css/buttons.css; the two new classes
+   are the message paragraph and the destructive confirm button, which must read
+   as visually distinct from the neutral .primary-button confirm. */
+.confirm-dialog__message {
+  margin: 0;
+  color: var(--ink);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.confirm-dialog__confirm--danger {
+  display: inline-flex;
+  min-height: 40px;
+  padding: 0 16px;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  background: var(--red);
+  border: 1px solid var(--red);
+  border-radius: 9px;
+  font-size: 14px;
+  font-weight: 650;
+  cursor: pointer;
+  transition:
+    filter 140ms ease,
+    transform 140ms ease;
+}
+
+.confirm-dialog__confirm--danger:hover {
+  filter: brightness(0.9);
+  transform: translateY(-1px);
 }
 
 /* Partner-visibility feed panel (docs/specs/partner-feed.md §6) — reuses .panel/
@@ -251,7 +299,7 @@
   align-items: center;
   padding: 2px 7px;
   border-radius: 10px;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 650;
 }
 
@@ -276,8 +324,8 @@
   align-items: center;
   margin: 0;
   padding: 10px 19px;
-  color: var(--amber);
+  color: var(--amber-ink);
   background: var(--amber-soft);
   border-bottom: 1px solid var(--line);
-  font-size: 11px;
+  font-size: 12.5px;
 }

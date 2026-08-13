@@ -73,8 +73,8 @@
 
 .message__content time {
   margin-top: 5px;
-  color: #a39e94;
-  font-size: 9.5px;
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .typing-cursor {

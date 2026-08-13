@@ -64,7 +64,7 @@
   align-items: center;
 }
 
-.connection-card h3 {
+.connection-card h4 {
   margin: 0;
   font-size: 13.5px;
 }
@@ -72,23 +72,31 @@
 .connection-card p {
   margin: 5px 0 0;
   color: var(--muted);
-  font-size: 10.8px;
+  font-size: 12.5px;
 }
 
-.connection-risk-note {
+/* Qualified with the parent class so this reliably wins over the generic
+   `.connection-card__content > div` layout rule below (same specificity,
+   but this is the more specific intent) — the risk text is the highest-stakes
+   copy on the screen and must stay legible/top-aligned, not silently
+   recentered by the shared row rule. Sized and weighted so it reads as a real
+   warning, scannable before "חבר" is clicked, not a footnote after it. */
+.connection-card__content > .connection-risk-note {
   display: flex;
-  gap: 6px;
+  gap: 7px;
   align-items: flex-start;
-  margin-top: 8px;
-  padding: 8px 10px;
-  color: #77572d;
+  margin: 4px 0 6px;
+  padding: 9px 11px;
+  color: var(--amber-ink);
   background: var(--amber-soft);
+  border: 1px solid var(--amber);
   border-radius: 8px;
-  font-size: 9.5px;
-  line-height: 1.45;
+  font-size: 12.5px;
+  font-weight: 650;
+  line-height: 1.5;
 }
 
-.connection-risk-note svg {
+.connection-card__content > .connection-risk-note svg {
   flex: 0 0 auto;
   margin-top: 1px;
   color: var(--amber);
@@ -98,7 +106,7 @@
   display: block;
   margin-top: 5px;
   color: #a16828;
-  font-size: 9.3px;
+  font-size: 12px;
 }
 
 .privacy-note,
@@ -121,13 +129,13 @@
 }
 
 .privacy-note strong {
-  font-size: 11.5px;
+  font-size: 12.5px;
 }
 
 .privacy-note p,
 .diagnostic-safety p {
   margin: 3px 0 0;
-  font-size: 10.5px;
+  font-size: 12.5px;
 }
 
 .success-toast {
@@ -140,7 +148,7 @@
   color: var(--green);
   background: var(--green-soft);
   border-radius: 8px;
-  font-size: 11.5px;
+  font-size: 12px;
 }
 
 .intent-connection-note {
@@ -160,12 +168,12 @@
 }
 
 .intent-connection-note strong {
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .intent-connection-note p {
   margin: 3px 0 0;
-  font-size: 10.5px;
+  font-size: 12.5px;
 }
 
 .connections-list .connection-card {
@@ -174,4 +182,11 @@
 
 .connections-list .connection-card:not(:last-child) {
   border-bottom: 1px solid var(--line);
+}
+
+/* The connected state is a real button (re-opens the connect flow for that
+   service so its settings can be reviewed/changed) — give it a hover state
+   like the other row action so it doesn't read as inert status text. */
+.connections-list .connected-button:hover {
+  border-color: var(--green);
 }
