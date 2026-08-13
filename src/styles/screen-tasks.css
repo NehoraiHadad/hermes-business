@@ -24,20 +24,35 @@
   gap: 6px;
 }
 
+/* 44×44 is the smallest reliable touch/pointer target. Seven chips at 44px plus six
+   6px gaps is 344px — well inside the 520px dialog (modal-base.css .modal), so the
+   whole week still fits on one row without shrinking the target. */
 .day-chip {
-  min-width: 34px;
+  display: inline-flex;
+  min-width: 44px;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
   padding: 6px 8px;
-  border: 1px solid var(--border, #e2ddd4);
-  border-radius: 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
   background: transparent;
-  font-size: 12px;
+  font-size: 12.5px;
   cursor: pointer;
 }
 
 .day-chip--on {
   color: #fff;
-  background: var(--accent, #6b5b95);
-  border-color: var(--accent, #6b5b95);
+  background: var(--indigo);
+  border-color: var(--indigo);
+}
+
+/* The global focus ring (base.css) is translucent indigo — invisible on a selected
+   chip, which is indigo itself. A dark ink ring, offset so the gap shows the dialog
+   surface, reads clearly on both the selected and the unselected chip. */
+.day-chip:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
 }
 
 .stat-card {

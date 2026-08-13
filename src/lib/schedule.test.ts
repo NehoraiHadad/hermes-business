@@ -6,6 +6,7 @@ import {
   humanizeSchedule,
   ISRAELI_WORK_WEEK,
   parseSchedule,
+  parseTimeInput,
   scheduleDefault,
   type FriendlySchedule
 } from './schedule'
@@ -97,6 +98,40 @@ describe('describeSchedule / humanizeSchedule — human Hebrew display', () => {
 describe('humanizeSchedule — shared/schedule-display.js CASES contract', () => {
   it.each(SCHEDULE_DISPLAY_CASES)('$label', ({ schedule, text }) => {
     expect(humanizeSchedule(schedule)).toBe(text)
+  })
+})
+
+describe('parseTimeInput — forgiving 24h entry, canonical HH:MM output', () => {
+  it('canonicalises every shorthand the picker accepts', () => {
+    expect(parseTimeInput('8')).toBe('08:00')
+    expect(parseTimeInput('08')).toBe('08:00')
+    expect(parseTimeInput('830')).toBe('08:30')
+    expect(parseTimeInput('2359')).toBe('23:59')
+    expect(parseTimeInput('8:30')).toBe('08:30')
+    expect(parseTimeInput('08:30')).toBe('08:30')
+    expect(parseTimeInput('8:5')).toBe('08:05')
+    expect(parseTimeInput('8.30')).toBe('08:30')
+    expect(parseTimeInput(' 08:30 ')).toBe('08:30')
+    expect(parseTimeInput('0:00')).toBe('00:00')
+  })
+
+  it('is idempotent on an already-canonical time', () => {
+    for (const time of ['00:00', '08:30', '23:59']) expect(parseTimeInput(time)).toBe(time)
+  })
+
+  it('returns null for anything that is not a real wall-clock time', () => {
+    for (const raw of ['', '   ', '25:00', '24:00', '8:75', '2475', '99', 'abc', '8:', ':30', '08:30:00', '12345', '-1:00', '٨:٣٠']) {
+      expect(parseTimeInput(raw)).toBeNull()
+    }
+  })
+
+  // The picker holds ONLY what this returns, so anything it accepts must compile.
+  it('never returns a time compileSchedule would refuse', () => {
+    for (const raw of ['8', '830', '2359', '0', '00:00', '8.5']) {
+      const time = parseTimeInput(raw)
+      expect(time).not.toBeNull()
+      expect(compileSchedule({ mode: 'daily', time: time as string })).not.toBe('')
+    }
   })
 })
 

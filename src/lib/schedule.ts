@@ -47,6 +47,36 @@ function isValidDate(date: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(date || '')
 }
 
+// Forgiving entry, strict output for the picker's 24-hour time field. The field is a
+// plain text box rather than <input type="time"> — Chromium renders that widget's
+// format from the OS locale, so it can show "08:00 AM" right above our 24h Hebrew
+// summary, and neither CSS nor lang can override it. So we canonicalise the typed text
+// ourselves: "8" / "08" / "830" / "8:30" / "2359" all become "08:30"-shaped HH:MM.
+// Returns null for anything that is not a real wall-clock time (25:00, 8:75, "abc"),
+// so the caller can hold NO time instead of a guess. Validity is decided by the same
+// isValidTime() compileSchedule uses, so the field and the compiler can never disagree
+// about what a legal time is.
+export function parseTimeInput(raw: string): string | null {
+  const text = String(raw ?? '').trim()
+  const separated = /^(\d{1,2})[:.](\d{1,2})$/.exec(text)
+  const digits = /^\d{1,4}$/.test(text) ? text : null
+  let hour: string
+  let minute: string
+  if (separated) {
+    hour = separated[1]
+    minute = separated[2]
+  } else if (digits) {
+    // Bare digits: the last two are the minutes ("830" → 8:30), unless the user typed
+    // only an hour ("8", "23").
+    hour = digits.length <= 2 ? digits : digits.slice(0, -2)
+    minute = digits.length <= 2 ? '0' : digits.slice(-2)
+  } else {
+    return null
+  }
+  const canonical = `${pad(Number(hour))}:${pad(Number(minute))}`
+  return isValidTime(canonical) ? canonical : null
+}
+
 // Compile the friendly model to a Hermes schedule string. This is the single place
 // UI choices become backend schedule syntax.
 export function compileSchedule(model: FriendlySchedule): string {
