@@ -1,8 +1,9 @@
-import { AlertTriangle, CalendarClock, CheckCircle2, Clock3, Inbox, Pause, Pencil, Play, Plus, Trash2, Zap } from 'lucide-react'
+import { AlertTriangle, CalendarClock, Clock3, Inbox, Pause, Pencil, Play, Plus, Trash2, Zap } from 'lucide-react'
 import { useState } from 'react'
 import { humanSchedule } from '../../lib/presentation'
 import type { PartnerFeed } from '../../lib/partner-feed'
 import type { ScheduledTask, TaskActions } from '../../types'
+import { ConfirmDialog } from '../ui/ConfirmDialog'
 import { TaskEditDialog } from '../dialogs/TaskEditDialog'
 import { PartnerFeedPanel } from './PartnerFeedPanel'
 
@@ -30,35 +31,40 @@ export function TasksScreen({
   onOpenSession: (sessionId: string) => void
 }) {
   const [editing, setEditing] = useState<ScheduledTask | null>(null)
+  // Pending confirmation for a consequential action — set by the row buttons below,
+  // rendered as a ConfirmDialog (house Modal-based dialog, never window.confirm())
+  // near the bottom of this component, cleared on confirm or cancel.
+  const [confirmingTrigger, setConfirmingTrigger] = useState<ScheduledTask | null>(null)
+  const [confirmingDelete, setConfirmingDelete] = useState<ScheduledTask | null>(null)
   // Unknown, not zero/dash, while the read that would prove either value failed.
   const activeCount = loadError ? null : tasks.filter(task => task.enabled).length
   const nextRun = loadError ? null : tasks.find(task => task.enabled && task.next_run)?.next_run || '—'
+  const pausedCount = loadError ? null : tasks.filter(task => !task.enabled).length
 
   // Destructive/irreversible actions confirm first (delete permanently removes
   // the job; trigger fires a real run now). Editing opens a prefilled dialog.
-  const confirmTrigger = (task: ScheduledTask) => {
-    if (window.confirm(`להריץ עכשיו את "${task.name}"? Hermes יבצע את המשימה מיד.`)) {
-      // Spec §11 stage 5 / §7 trigger 2: the user just made Hermes DO something —
-      // refetch the feed so the new run shows up without waiting for the next
-      // live-refresh tick. actions.onTrigger already catches its own errors
-      // (useTaskActions) and never rejects, so this always resolves.
-      void actions.onTrigger(task).then(() => void onRefreshFeed())
-    }
-  }
-  const confirmDelete = (task: ScheduledTask) => {
-    if (window.confirm(`למחוק לצמיתות את "${task.name}"? לא ניתן לשחזר.`)) actions.onDelete(task)
+  const runTrigger = (task: ScheduledTask) => {
+    // Spec §11 stage 5 / §7 trigger 2: the user just made Hermes DO something —
+    // refetch the feed so the new run shows up without waiting for the next
+    // live-refresh tick. actions.onTrigger already catches its own errors
+    // (useTaskActions) and never rejects, so this always resolves.
+    void actions.onTrigger(task).then(() => void onRefreshFeed())
   }
 
   return (
     <main className="content-screen">
+      {/* Heading now matches the nav label ("פעילות ומשימות", src/constants.ts:21) so it
+          honestly covers BOTH sections rendered under it — the activity feed right below
+          (spec §6.1) and the scheduled-tasks list further down. Each section carries its
+          own h3 (PartnerFeedPanel's "מה השותף עשה בשבילך"; "כל המשימות" below), so the
+          heading outline stays valid: h2 page → h3 per section. The "משימה חדשה" action
+          moved into the tasks panel's own title bar below so it visibly belongs to the
+          tasks section, not to this now-broader page heading. */}
       <section className="page-heading">
         <div>
-          <h2>משימות מתוזמנות</h2>
-          <p>Hermes יבצע אותן בזמן שקבעת, גם אם החלון סגור.</p>
+          <h2>פעילות ומשימות</h2>
+          <p>מה Hermes עשה בשבילכם, ורשימת המשימות המתוזמנות שהוא מריץ.</p>
         </div>
-        <button className="primary-button" onClick={onAdd}>
-          <Plus size={17} /> משימה חדשה
-        </button>
       </section>
       <PartnerFeedPanel
         feed={feed}
@@ -84,16 +90,24 @@ export function TasksScreen({
         </div>
         <div className="stat-card">
           <span className="stat-card__icon stat-card__icon--blue">
-            <CheckCircle2 size={18} />
+            <Pause size={18} />
           </span>
-          <strong>Hermes</strong>
-          <small>מקור המשימות וההרצות</small>
+          {/* Computed only from `tasks`, same fail-closed rule as activeCount/nextRun
+              above: while the authoritative read failed, `tasks` is an empty placeholder,
+              never a proven-empty list — this must render "לא ידוע", never a confident 0. */}
+          <strong>{pausedCount === null ? 'לא ידוע' : pausedCount}</strong>
+          <small>משימות מושהות</small>
         </div>
       </div>
       <section className="panel">
         <div className="panel__title">
           <h3>כל המשימות</h3>
-          <span>{loadError ? 'לא ידוע' : `${tasks.length} משימות`}</span>
+          <div className="panel__title-actions">
+            <span>{loadError ? 'לא ידוע' : `${tasks.length} משימות`}</span>
+            <button className="primary-button" onClick={onAdd}>
+              <Plus size={15} /> משימה חדשה
+            </button>
+          </div>
         </div>
         {loadError ? (
           <div className="list-state list-state--error">
@@ -139,7 +153,7 @@ export function TasksScreen({
                   </span>
                   <button
                     className="outline-button outline-button--small"
-                    onClick={() => confirmTrigger(task)}
+                    onClick={() => setConfirmingTrigger(task)}
                     title="הרץ עכשיו"
                   >
                     <Zap size={15} /> הרץ עכשיו
@@ -152,7 +166,7 @@ export function TasksScreen({
                   </button>
                   <button
                     className="icon-button icon-button--danger"
-                    onClick={() => confirmDelete(task)}
+                    onClick={() => setConfirmingDelete(task)}
                     title="מחיקה"
                     aria-label="מחיקה"
                   >
@@ -169,6 +183,31 @@ export function TasksScreen({
           task={editing}
           onClose={() => setEditing(null)}
           onSave={updates => actions.onEdit(editing, updates)}
+        />
+      ) : null}
+      {confirmingTrigger ? (
+        <ConfirmDialog
+          title="הרצה עכשיו"
+          message={`להריץ עכשיו את "${confirmingTrigger.name}"? Hermes יבצע את המשימה מיד.`}
+          confirmLabel="הרץ עכשיו"
+          onConfirm={() => {
+            runTrigger(confirmingTrigger)
+            setConfirmingTrigger(null)
+          }}
+          onCancel={() => setConfirmingTrigger(null)}
+        />
+      ) : null}
+      {confirmingDelete ? (
+        <ConfirmDialog
+          title="מחיקת משימה"
+          message={`למחוק לצמיתות את "${confirmingDelete.name}"? לא ניתן לשחזר.`}
+          confirmLabel="מחיקה לצמיתות"
+          destructive
+          onConfirm={() => {
+            actions.onDelete(confirmingDelete)
+            setConfirmingDelete(null)
+          }}
+          onCancel={() => setConfirmingDelete(null)}
         />
       ) : null}
     </main>
