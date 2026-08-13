@@ -62,31 +62,39 @@
   flex: 1;
 }
 
+/* Steady-state total of scheduled tasks. Deliberately an OUTLINED, muted chip: it has
+   to be tellable apart at a glance from the filled "new activity" badge below, since
+   both can sit on the same nav row. Each also carries its own Hebrew name/tooltip in
+   Sidebar.tsx — a bare number explains nothing on its own. */
 .nav-count {
-  min-width: 22px;
+  min-width: 24px;
   padding: 2px 6px;
   color: var(--muted);
   background: rgba(255, 255, 255, 0.65);
+  border: 1px solid var(--line-strong);
   border-radius: 12px;
-  font-size: 11px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
   text-align: center;
 }
 
 /* "New activity" badge (docs/specs/partner-feed.md §6.4) — distinct from .nav-count
    (which shows the total ACTIVE task count): this one counts partner-feed items newer
    than the localStorage seen-marker, so it needs its own accent color to read as
-   "something changed" rather than a steady-state total. */
+   "something changed" rather than a steady-state total. Filled + haloed against the
+   outlined neutral chip above, so the two never read as one pair of digits. */
 .nav-badge {
   display: inline-flex;
-  min-width: 20px;
-  height: 20px;
+  min-width: 22px;
+  height: 22px;
   padding: 0 6px;
   align-items: center;
   justify-content: center;
   color: #fff;
   background: var(--indigo);
   border-radius: 10px;
-  font-size: 10.5px;
+  box-shadow: 0 0 0 2px var(--indigo-soft);
+  font-size: 12px;
   font-weight: 700;
 }
 
