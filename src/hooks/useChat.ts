@@ -144,10 +144,50 @@ export function useChat({
     [runtimeSession, setToast]
   )
 
-  const stop = useCallback(() => {
-    void hermesClient.interrupt(runtimeSession)
-    setBusy(false)
-  }, [runtimeSession])
+  // Guards stop() against a double-fire while an interrupt is already in
+  // flight — the stop button stays visible for the whole busy window, so a
+  // user can (and does) click it more than once before the first click's
+  // request has even reached Hermes.
+  const stopInFlight = useRef(false)
+
+  // Deliberately PESSIMISTIC, mirroring respondApproval below: only claim the
+  // turn is over once Hermes actually acknowledges the interrupt. The old
+  // code set busy=false the instant it *fired* the request, which lied about
+  // a turn that was still running server-side whenever the interrupt itself
+  // failed (dead session, gateway hiccup) — the composer unblocked and the
+  // stop button vanished while Hermes could still be streaming into a UI that
+  // claimed nothing was happening.
+  //
+  // This can never deadlock busy=true, even if Hermes never acks the
+  // interrupt at all: handleGatewayEvent (chat-events.ts) already flips busy
+  // back to false on its own the moment the turn's `message.complete` or
+  // `error` event arrives, completely independent of stop() ever succeeding.
+  // So a failed/lost interrupt just means the user sees an error toast and
+  // can press Stop again (or simply wait) — busy is always eventually
+  // resolved by the gateway's own event stream, never left stuck on this
+  // request alone. (The mirror-image race — an ack arriving just as a brand
+  // new turn starts — is the same unguarded risk respondApproval already
+  // accepts below; neither action carries a turn/session generation token.)
+  //
+  // Deliberately does NOT touch chat messages: sealing the streaming bubble
+  // is chat-events.ts's job on message.complete/error, and there is no
+  // contract guarantee Hermes emits one of those after an interrupt ack
+  // rather than just going quiet — reaching into setMessages here would risk
+  // racing or duplicating with that handler instead of fixing anything.
+  const stop = useCallback(async () => {
+    if (stopInFlight.current) return
+    stopInFlight.current = true
+    try {
+      await hermesClient.interrupt(runtimeSession)
+      setBusy(false)
+    } catch {
+      // Hebrew, plain, no transport detail — the only fact that matters to
+      // the user is that the turn is still running and Stop did not work.
+      setToast('לא הצלחנו לעצור את התשובה. אפשר לנסות שוב.', 'error')
+    } finally {
+      stopInFlight.current = false
+    }
+  }, [runtimeSession, setToast])
 
   // Answer the approval gate. The card locks its own buttons on the first
   // click, but that is only UI state — this ref is what actually protects the
