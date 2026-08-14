@@ -110,6 +110,8 @@ true` — כדי שאמירות של תושבים לא יהפכו בשקט ל"י
 | **M3 — תפעול** | מסך קהילה: רשימת קבוצות, עורך ידע (markdown), תיבת אישורי למידה (`skills.write_approval`), זרימת שדרוג מנוע | דשבורד קיים |
 | **M4 — ‏release** | מהדורת קהילה נכנסת לחוזה ה־release הקיים (אריזה, ראיות, verifier) | `scripts/lib/release/**` |
 
+**מימוש M1 (2026-08-14):** ‏`scripts/lib/community/provision.mjs` (ליבה טהורה: descriptor ‏→ תוכנית צעדים עם `check()` פר־צעד, executor מוזרק, ‏`applyPlan` ‏fail-closed אידמפוטנטי, ‏`verifyDeployment`) + ‏CLI ‏`scripts/community-provision.mjs` ‏(`plan|apply|verify`). התוכנית: clone+checkout של התג הנעוץ (`community-engine-v0.1.0`) ‏→ ‏venv ‏→ ‏`pip install -e .` ‏→ ‏`npm ci` בגשר ‏→ הגנרטור (סעיף 3, בשימוש חוזר דרך ה־CLI הקיים) ‏→ ‏`hermes gateway install --no-start-now --start-on-login` עם ‏`HERMES_HOME` בסביבת התהליך (המנוע אופה אותו לתוך משגרי ה־Scheduled Task). בטיחות: סירוב לכל נתיב שנוגע ב־HOME החי, בקלון הייחוס או בפיילוט; אף gateway לא מותנע. **גבולות תחולה:** אימות ספק (OAuth אינטראקטיבי) וצימוד QR הם עניין האשף (M2) — ה־provisioning רק מאמת ומדווח (auth.json/creds.json, צעדי report בלבד).
+
 **אילוצים חיצוניים שאינם "חוב" אלא מציאות המוצר** (מתועדים ללקוח): מספר
 וואטסאפ ייעודי פר קהילה (סיכון חסימה — Baileys), מכונה דלוקה 24/7 (מחשב
 הלקוח או אירוח מנוהל — שני המודלים נתמכים ע"י אותה התקנה), ומגבלת מילת
