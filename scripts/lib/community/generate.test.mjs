@@ -306,6 +306,22 @@ describe('per-space artifacts (§2.1)', () => {
     expect(SHARED_TOOLSET).toEqual([...GROUP_TOOLSET, 'session_search'])
   })
 
+  // Pilot group, 2026-08-14: a clarify call parked the turn for 21+ minutes at
+  // "iteration 1/500, clarify" and every later message got only an
+  // "Interrupting current task" ack — one unanswered prompt took the bot down
+  // for the whole group. No timeout exists on that wait.
+  it('never gives a GROUP the clarify tool (a blocking prompt hangs a public group), but keeps it for admin DMs', () => {
+    expect(GROUP_TOOLSET).not.toContain('clarify')
+    expect(SHARED_TOOLSET).not.toContain('clarify')
+    expect(ADMIN_TOOLSET).toContain('clarify')
+  })
+
+  it('the group persona asks for clarification in plain text instead of opening a poll', () => {
+    const soul = gen()[`profiles/${SHARED_SPACE}/SOUL.md`]
+    expect(soul).toContain('כמשפט טקסט רגיל')
+    expect(soul).toContain('לפני שאתה שואל שאלת הבהרה')
+  })
+
   it('unions the knowledge packs of ALL shared-space member groups into the village profile', () => {
     const c = contract()
     c.groups[1].isolated = false // emergency joins the shared space

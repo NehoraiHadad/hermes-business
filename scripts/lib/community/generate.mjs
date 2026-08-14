@@ -74,7 +74,20 @@ import { SHARED_SPACE, SKILL_DESCRIPTION_ROUTING_MAX, contractSpaces } from './c
 // via get_default_hermes_root(), which ignores the per-turn scope override —
 // hermes_constants.py:173-209), so granting it to a sensitive group would
 // hand a prompt-injected turn a cross-space read door. Fail closed.
-export const GROUP_TOOLSET = Object.freeze(['web', 'skills', 'vision', 'clarify'])
+// `clarify` is deliberately ABSENT. Observed live in the pilot group
+// 2026-08-14: the agent answered a resident's question by calling clarify,
+// which on a messaging platform renders a numbered multiple-choice list and
+// PARKS the turn until somebody answers it (tools/clarify_tool.py — the
+// interaction itself lives in the platform layer). Nobody did, and the turn
+// was still open 21 minutes later at "iteration 1/500, clarify", with the
+// group unable to get any other answer out of the bot; every later message
+// only produced an "⚡ Interrupting current task" ack. There is no timeout on
+// that wait. A public community group is exactly the wrong place for a
+// blocking interactive prompt — one unanswered question takes the bot down
+// for every resident — so the persona asks for clarification in plain text
+// instead (persona.mjs). The admin DM keeps the tool (ADMIN_TOOLSET): it is a
+// 1:1 channel with the operator, where blocking is the intended behaviour.
+export const GROUP_TOOLSET = Object.freeze(['web', 'skills', 'vision'])
 // The SHARED space additionally gets the engine's session-history search
 // toolset (`session_search`, tools/session_search_tool.py:1143-1146; a
 // configurable key valid for whatsapp, hermes_cli/tools_config.py:114). Its
