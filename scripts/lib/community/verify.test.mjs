@@ -184,12 +184,38 @@ describe('verifyArtifacts — space profile configs (per-space fence is an owned
         skills: parsed.skills,
         platform_toolsets: { whatsapp: [...parsed.platform_toolsets.whatsapp].reverse() },
         memory: parsed.memory,
-        model: { name: 'engine-added' } // engine/operator addition is not drift
+        agent: { max_turns: 42 } // non-owned engine/operator addition is not drift
       },
       { sortKeys: false }
     )
     const home = { ...artifacts, [`profiles/${SHARED_SPACE}/config.yaml`]: rewritten }
     const report = verifyArtifacts(contract(), artifacts, { readFile: homeReader(home) })
+    expect(report.ok, JSON.stringify(report.artifacts, null, 2)).toBe(true)
+  })
+
+  // The model block is what a routed turn actually runs on (pilot, 2026-08-14).
+  it('flags a space profile whose model block does not mirror the ROOT config', () => {
+    const artifacts = gen()
+    const root = yaml.load(artifacts['config.yaml'])
+    root.model = { default: 'gpt-5.6-sol', provider: 'openai-codex' }
+    const home = { ...artifacts, 'config.yaml': yaml.dump(root) }
+    const entry = verifyArtifacts(contract(), artifacts, { readFile: homeReader(home) }).artifacts.find(
+      a => a.path === `profiles/${SHARED_SPACE}/config.yaml`
+    )
+    expect(entry.status).toBe('drift')
+    expect(entry.detail).toContain('model')
+  })
+
+  it('accepts a space profile whose model block mirrors the ROOT config', () => {
+    const model = { default: 'gpt-5.6-sol', provider: 'openai-codex' }
+    const artifacts = generateArtifacts(contract(), {
+      readKnowledgeSource: p => sources[p],
+      readAdminSkillTemplate: name => adminTemplates[name],
+      deployPaths,
+      existingConfigText: yaml.dump({ model })
+    })
+    expect(yaml.load(artifacts[`profiles/${SHARED_SPACE}/config.yaml`]).model).toEqual(model)
+    const report = verifyArtifacts(contract(), artifacts, { readFile: homeReader({ ...artifacts }) })
     expect(report.ok, JSON.stringify(report.artifacts, null, 2)).toBe(true)
   })
 

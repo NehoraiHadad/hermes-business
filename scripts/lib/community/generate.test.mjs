@@ -326,12 +326,37 @@ describe('per-space artifacts (§2.1)', () => {
       gen({
         readProfileConfigText: space =>
           space === SHARED_SPACE
-            ? yaml.dump({ model: { name: 'per-space-model' }, platform_toolsets: { whatsapp: ['terminal'] } })
+            ? yaml.dump({ agent: { max_turns: 42 }, platform_toolsets: { whatsapp: ['terminal'] } })
             : undefined
       })[`profiles/${SHARED_SPACE}/config.yaml`]
     )
-    expect(merged.model).toEqual({ name: 'per-space-model' })
+    expect(merged.agent).toEqual({ max_turns: 42 }) // non-owned: preserved
     expect(merged.platform_toolsets.whatsapp).toEqual([...SHARED_TOOLSET]) // owned: rewritten
+  })
+
+  // Live on the pilot 2026-08-14: a routed group turn resolves its model from
+  // the PROFILE home (multiplex overrides get_hermes_home()), so a profile
+  // carrying its own stale model silently answers with the wrong one — and a
+  // profile carrying none dies with `HTTP 400: No models provided`.
+  it('OVERWRITES a per-space model block with the ROOT config model (both name and provider travel)', () => {
+    const merged = yaml.load(
+      gen({
+        existingConfigText: yaml.dump({ model: { default: 'gpt-5.6-sol', provider: 'openai-codex' } }),
+        readProfileConfigText: space =>
+          space === SHARED_SPACE ? yaml.dump({ model: { default: 'stale-model' } }) : undefined
+      })[`profiles/${SHARED_SPACE}/config.yaml`]
+    )
+    expect(merged.model).toEqual({ default: 'gpt-5.6-sol', provider: 'openai-codex' })
+  })
+
+  it('drops a per-space model block when the ROOT config has none (no model is honest; a stale one is not)', () => {
+    const merged = yaml.load(
+      gen({
+        readProfileConfigText: space =>
+          space === SHARED_SPACE ? yaml.dump({ model: { default: 'stale-model' } }) : undefined
+      })[`profiles/${SHARED_SPACE}/config.yaml`]
+    )
+    expect(merged.model).toBeUndefined()
   })
 
   it('buildProfileConfig refuses a non-mapping existing profile config', () => {

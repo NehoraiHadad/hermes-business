@@ -89,10 +89,14 @@ export function expectedOwnedView(contract) {
   return effectiveOwnedView(buildGatewayConfig(contract, undefined))
 }
 
-/** The generator-owned EFFECTIVE view of a PROFILE config (fenced toolset). */
+/** The generator-owned EFFECTIVE view of a PROFILE config (fenced toolset +
+ * the mirrored model block — a routed turn reads its model from HERE, not from
+ * the root, so a missing/stale model block is drift, not cosmetics). */
 export function effectiveProfileOwnedView(cfgData) {
   const cfg = cfgData && typeof cfgData === 'object' && !Array.isArray(cfgData) ? cfgData : {}
+  const model = cfg.model && typeof cfg.model === 'object' && !Array.isArray(cfg.model) ? cfg.model : {}
   return {
+    model: Object.fromEntries(Object.entries(model).map(([k, v]) => [k, v]).sort(([a], [b]) => (a < b ? -1 : 1))),
     'platform_toolsets.whatsapp': sortedSet(cfg.platform_toolsets?.whatsapp),
     'memory.write_approval': cfg.memory?.write_approval === true,
     'skills.write_approval': cfg.skills?.write_approval === true
@@ -101,10 +105,11 @@ export function effectiveProfileOwnedView(cfgData) {
 
 /** The owned view a SPACE profile must carry: the shared space's fence
  * includes session_search, every other (isolated) space keeps the plain
- * fenced set (§2.1). */
-export function expectedProfileOwnedView(spaceSlug) {
+ * fenced set (§2.1), and every space mirrors `rootModel` — the ROOT config's
+ * model block as it actually stands on disk. */
+export function expectedProfileOwnedView(spaceSlug, rootModel) {
   const toolset = spaceSlug === SHARED_SPACE ? SHARED_TOOLSET : GROUP_TOOLSET
-  return effectiveProfileOwnedView(buildProfileConfig(undefined, toolset))
+  return effectiveProfileOwnedView(buildProfileConfig(undefined, toolset, rootModel))
 }
 
 const ENV_LINE_RE = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)$/
@@ -172,6 +177,21 @@ export function verifyArtifacts(contract, artifacts, { readFile } = {}) {
   if (typeof readFile !== 'function') {
     throw new TypeError('verifyArtifacts requires a readFile(relPath) callback')
   }
+  // The model block each space profile must mirror is read from the ROOT
+  // config AS IT STANDS ON DISK, not from the contract: the model/provider are
+  // the engine's to own (hermes setup / auth writes them) and the contract
+  // never names them. An unreadable/unparseable root config yields {} — the
+  // root's own entry reports that separately, and the profiles then correctly
+  // read as drifted rather than silently passing.
+  let rootModel
+  try {
+    const rootText = readFile('config.yaml')
+    const rootData = rootText == null ? null : yaml.load(rootText)
+    if (rootData && typeof rootData === 'object' && !Array.isArray(rootData)) rootModel = rootData.model
+  } catch {
+    rootModel = undefined
+  }
+
   const report = []
   for (const [relPath, expected] of Object.entries(artifacts)) {
     const actual = readFile(relPath)
@@ -186,7 +206,12 @@ export function verifyArtifacts(contract, artifacts, { readFile } = {}) {
     const profileConfig = PROFILE_CONFIG_RE.exec(relPath)
     if (profileConfig) {
       report.push(
-        verifyConfigEntry(relPath, actual, expectedProfileOwnedView(profileConfig[1]), effectiveProfileOwnedView)
+        verifyConfigEntry(
+          relPath,
+          actual,
+          expectedProfileOwnedView(profileConfig[1], rootModel),
+          effectiveProfileOwnedView
+        )
       )
       continue
     }

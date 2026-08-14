@@ -199,9 +199,25 @@ export function buildGatewayConfig(contract, existingConfigText) {
  * root config (M2 verification, §6.1). `toolset` selects the fence: the
  * shared space passes SHARED_TOOLSET (adds session_search), isolated spaces
  * keep the default GROUP_TOOLSET.
+ *
+ * `rootModel` is the ROOT config's `model` block, MIRRORED here. Under the
+ * multiplexer a routed turn runs with `get_hermes_home()` overridden to the
+ * profile dir (gateway/run.py `_profile_runtime_scope`), so the profile's own
+ * config.yaml is the ONLY model source — a profile without it resolves no
+ * model at all. Observed live on the pilot 2026-08-14: a routed group turn
+ * died with `HTTP 400: No models provided`, and with the model name alone it
+ * picked the wrong provider (`No usable credentials found for 'openai-api'`),
+ * so BOTH `default` and `provider` have to travel. Credentials do NOT: the
+ * same run proved auth.json still resolves from the root home, which is why
+ * we mirror the model block and never duplicate the OAuth store (a second
+ * copy would race the refresh-token rotation).
  */
-export function buildProfileConfig(existingConfigText, toolset = GROUP_TOOLSET) {
+export function buildProfileConfig(existingConfigText, toolset = GROUP_TOOLSET, rootModel) {
   const cfg = clone(parseExistingConfig(existingConfigText, 'profile config.yaml')) ?? {}
+
+  const model = asMapping(clone(rootModel))
+  if (Object.keys(model).length > 0) cfg.model = model
+  else delete cfg.model
 
   const toolsets = asMapping(clone(cfg.platform_toolsets))
   toolsets.whatsapp = [...toolset]
@@ -389,7 +405,8 @@ export function generateArtifacts(
   const readProfileConfig = typeof readProfileConfigText === 'function' ? readProfileConfigText : () => undefined
 
   const artifacts = {}
-  artifacts['config.yaml'] = dumpConfig(buildGatewayConfig(contract, existingConfigText))
+  const rootConfig = buildGatewayConfig(contract, existingConfigText)
+  artifacts['config.yaml'] = dumpConfig(rootConfig)
   artifacts['.env'] = buildEnvFile(existingEnvText)
 
   // Admin skills → DEFAULT profile only (skills/ at the HOME root). Group
@@ -420,7 +437,11 @@ export function generateArtifacts(
 
   for (const space of contractSpaces(contract)) {
     artifacts[`profiles/${space.slug}/config.yaml`] = dumpConfig(
-      buildProfileConfig(readProfileConfig(space.slug), space.shared ? SHARED_TOOLSET : GROUP_TOOLSET)
+      buildProfileConfig(
+        readProfileConfig(space.slug),
+        space.shared ? SHARED_TOOLSET : GROUP_TOOLSET,
+        rootConfig.model
+      )
     )
     artifacts[`profiles/${space.slug}/SOUL.md`] = space.shared
       ? renderSharedSoul({
