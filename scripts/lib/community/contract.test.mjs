@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
   ContractError,
+  contractSpaces,
   defaultPackDescription,
   loadContract,
   parseContract,
   validateContract,
+  SHARED_SPACE,
   SKILL_DESCRIPTION_ROUTING_MAX
 } from './contract.mjs'
 
@@ -27,6 +29,7 @@ function validRaw() {
         name: 'צח"י',
         purpose: 'חירום בלבד',
         tone: 'strict',
+        isolated: true, // a strict group must be isolated (shared-space tone coherence)
         knowledge: ['general', 'emergency']
       }
     ],
@@ -68,6 +71,11 @@ describe('validateContract — happy path & normalization', () => {
     expect(c.groups.map(g => g.slug)).toEqual(['main', 'emergency'])
     expect(c.groups[0].tone).toBe('default') // tone defaults
     expect(c.groups[1].tone).toBe('strict')
+    // Context spaces (§2.1): isolated defaults to false ⇒ shared space.
+    expect(c.groups[0].isolated).toBe(false)
+    expect(c.groups[0].space).toBe(SHARED_SPACE)
+    expect(c.groups[1].isolated).toBe(true)
+    expect(c.groups[1].space).toBe('emergency')
     // A pack without an explicit description gets the derived routable one.
     expect(c.knowledge.general.description).toBe(defaultPackDescription('general'))
     expect(c.knowledge.general.description.length).toBeLessThanOrEqual(SKILL_DESCRIPTION_ROUTING_MAX)
@@ -161,6 +169,16 @@ describe('validateContract — groups', () => {
     expectSingleError(raw, /reserved/)
   })
 
+  it(`reserves the "${SHARED_SPACE}" slug (it names the shared context-space profile — §2.1)`, () => {
+    const raw = validRaw()
+    raw.groups[0].slug = SHARED_SPACE
+    expectSingleError(raw, /reserved.*context-space/)
+    // Reserved even for an isolated group — its slug would BE the profile name.
+    const raw2 = validRaw()
+    raw2.groups[1].slug = SHARED_SPACE
+    expectSingleError(raw2, /reserved.*context-space/)
+  })
+
   it('fails on duplicate slugs and duplicate JIDs', () => {
     const raw = validRaw()
     raw.groups[1].slug = 'main'
@@ -195,6 +213,83 @@ describe('validateContract — groups', () => {
     const raw = validRaw()
     raw.groups[0].knowledge = ['general', 'nonexistent']
     expectSingleError(raw, /unknown knowledge pack "nonexistent"/)
+  })
+
+  it('fails on a non-boolean isolated value', () => {
+    const raw = validRaw()
+    raw.groups[1].isolated = 'yes'
+    expectSingleError(raw, /isolated.*true or false/)
+  })
+})
+
+describe('validateContract — context spaces (§2.1)', () => {
+  it('REFUSES mixed tones in the shared space, pointing at isolation instead', () => {
+    const raw = validRaw()
+    raw.groups[1].isolated = false // strict emergency now joins the shared space
+    expectSingleError(raw, /shared "village" space mixes tones.*isolated: true.*emergency/)
+  })
+
+  it('accepts a UNIFORMLY strict shared space (uniformity, not softness, is the rule)', () => {
+    const raw = validRaw()
+    raw.groups[0].tone = 'strict'
+    raw.groups[1].isolated = false
+    const verdict = validate(raw)
+    expect(verdict.ok, verdict.errors?.join('\n')).toBe(true)
+    expect(contractSpaces(verdict.contract)).toHaveLength(1)
+    expect(contractSpaces(verdict.contract)[0].tone).toBe('strict')
+  })
+
+  it('does NOT double-report a tone conflict when a tone is simply invalid', () => {
+    const raw = validRaw()
+    raw.groups[0].tone = 'angry'
+    const verdict = validate(raw)
+    expect(verdict.ok).toBe(false)
+    expect(verdict.errors.some(e => /not a known tone/.test(e))).toBe(true)
+    expect(verdict.errors.some(e => /mixes tones/.test(e))).toBe(false)
+  })
+
+  it('an isolated strict group beside default shared groups is the blessed layout', () => {
+    const verdict = validate(validRaw())
+    expect(verdict.ok).toBe(true)
+    const spaces = contractSpaces(verdict.contract)
+    expect(spaces.map(s => s.slug)).toEqual([SHARED_SPACE, 'emergency'])
+    expect(spaces[0].shared).toBe(true)
+    expect(spaces[0].groups.map(g => g.slug)).toEqual(['main'])
+    expect(spaces[1].shared).toBe(false)
+    expect(spaces[1].groups.map(g => g.slug)).toEqual(['emergency'])
+  })
+})
+
+describe('contractSpaces', () => {
+  it('unions the knowledge packs of shared-space members (first-appearance order, deduped)', () => {
+    const contract = {
+      groups: [
+        { slug: 'a', tone: 'default', knowledge: ['general'] },
+        { slug: 'b', tone: 'default', knowledge: ['sports', 'general'] },
+        { slug: 'c', tone: 'strict', isolated: true, knowledge: ['secret', 'general'] }
+      ]
+    }
+    const spaces = contractSpaces(contract)
+    expect(spaces.map(s => s.slug)).toEqual([SHARED_SPACE, 'c'])
+    expect(spaces[0].knowledge).toEqual(['general', 'sports'])
+    expect(spaces[0].groups.map(g => g.slug)).toEqual(['a', 'b'])
+    expect(spaces[1].knowledge).toEqual(['secret', 'general'])
+  })
+
+  it('omits the shared space entirely when every group is isolated', () => {
+    const contract = {
+      groups: [
+        { slug: 'a', tone: 'strict', isolated: true, knowledge: [] },
+        { slug: 'b', tone: 'default', isolated: true, knowledge: [] }
+      ]
+    }
+    expect(contractSpaces(contract).map(s => s.slug)).toEqual(['a', 'b'])
+  })
+
+  it('treats a hand-built group without an isolated field as shared (back-compat)', () => {
+    const spaces = contractSpaces({ groups: [{ slug: 'a', tone: 'default', knowledge: [] }] })
+    expect(spaces).toHaveLength(1)
+    expect(spaces[0].slug).toBe(SHARED_SPACE)
   })
 })
 

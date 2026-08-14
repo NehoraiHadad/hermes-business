@@ -54,28 +54,34 @@ community:
 admins:                         # חובה, ≥1 (עובדה 8)
   - "9725XXXXXXXX"
 groups:
-  - slug: main                  # → profiles/main/
+  - slug: main                  # זהות הקבוצה; בלי isolated ⇒ המרחב המשותף village (§2.1)
     jid: "1203...@g.us"
     name: "קבוצת היישוב הראשית"
     purpose: "שאלות כלליות, מידע יישובי"
-    knowledge: [general]        # אילו חבילות ידע נטענות לפרופיל
+    knowledge: [general]        # אילו חבילות ידע הקבוצה תורמת למרחב שלה
   - slug: emergency
     jid: "1203...@g.us"
     name: "צח\"י"
     purpose: "חירום בלבד"
     knowledge: [general, emergency]
     tone: strict                # פרמטר פרסונה פר־קבוצה
+    isolated: true              # opt-in: מרחב/פרופיל משלה (§2.1)
 knowledge:                      # חבילות ידע → skills
   general:  { source: knowledge/general.md }
   emergency: { source: knowledge/emergency.md }
 ```
 
+כללי תקפות של המודל: ‏`default` ו־`village` הם slugs שמורים; קבוצות
+לא־מבודדות חייבות טון אחיד — פרסונה משותפת אחת לא יכולה להיות גם `strict`
+וגם `default`, והוולידציה מסרבת עם הנחיה לבודד את הקבוצה המחמירה
+(`isolated: true`) במקום לערבב טונים במרחב המשותף.
+
 ### 3.2 גנרטור (`scripts/lib/community/`, מודולים טהורים + CLI)
 
 קלט: `community.yaml` + תבנית פרסונה. פלט אידמפוטנטי לתוך HERMES_HOME של הפריסה:
 
-1. **`config.yaml` של ה־gateway:** ‏`multiplex_profiles: true`; ‏`profile_routes` — ‏route פר קבוצה (platform: whatsapp, ‏chat_id: jid → profile: slug); ‏`group_allow_from` = איחוד כל ה־JIDים; ‏`group_allow_admin_from`+`allow_admin_from` = admins (חובה — הגנרטור **נכשל** על רשימה ריקה, עובדה 8); ‏`platform_toolsets.whatsapp` ניהולי (פרופיל ברירת־המחדל = ערוץ המנהלים, ר' 6.1.1); ‏`dm_policy: allowlist` + ‏`allow_from` = admins (‏DM למנהלים בלבד — עודכן במימוש M2 מ־`disabled`, ר' אימות 1 ב־6.1.1); ‏`require_mention` + תבנית ההשכמה.
-2. **`profiles/<slug>/`** לכל קבוצה: `SOUL.md` מתבנית הפרסונה (זהות תכל'ס + ייעוד הקבוצה + tone), ‏`skills/` מחבילות הידע המוצהרות (תיאור ≤60 תווים — נאכף, עובדה 9), ו־`config.yaml` פרופילי שמגדר את ה־toolset הקבוצתי (חובה — בלעדיו התור הקבוצתי מקבל את ה־toolset המלא של המנוע, ר' אימות 2 ב־6.1.1).
+1. **`config.yaml` של ה־gateway:** ‏`multiplex_profiles: true`; ‏`profile_routes` — ‏route פר קבוצה אל פרופיל **המרחב** שלה (platform: whatsapp, ‏chat_id: jid → profile: ‏`village` או ה־slug המבודד; N ‏routes לפרופיל אחד נתמך — ר' אימות 4 ב־6.1.1); ‏`group_allow_from` = איחוד כל ה־JIDים; ‏`group_allow_admin_from`+`allow_admin_from` = admins (חובה — הגנרטור **נכשל** על רשימה ריקה, עובדה 8); ‏`platform_toolsets.whatsapp` ניהולי (פרופיל ברירת־המחדל = ערוץ המנהלים, ר' 6.1.1); ‏`dm_policy: allowlist` + ‏`allow_from` = admins (‏DM למנהלים בלבד — עודכן במימוש M2 מ־`disabled`, ר' אימות 1 ב־6.1.1); ‏`require_mention` + תבנית ההשכמה.
+2. **`profiles/<space>/`** לכל **מרחב** (§2.1), לא לכל קבוצה: המרחב המשותף `village` מקבל `SOUL.md` קהילתי (מונה את הקבוצות החברות + ייעודן, מלמד את מודל הזיכרון המשותף; טון אחיד — נאכף בוולידציה) ו־`skills/` = **איחוד** חבילות הידע של כל הקבוצות החברות; קבוצה מבודדת מקבלת `profiles/<slug>/` עם `SOUL.md` פר־קבוצה (זהות תכל'ס + ייעוד + tone) ו־skills מחבילותיה בלבד (תיאור ≤60 תווים — נאכף, עובדה 9). כל פרופיל מרחב מקבל `config.yaml` שמגדר את ה־toolset שלו (חובה — בלעדיו התור מקבל את ה־toolset המלא של המנוע, ר' אימות 2 ב־6.1.1): המרחב המשותף מוסיף לגדר את `session_search` (חיפוש היסטוריה בין קבוצות המרחב — ר' אימות 4 ב־6.1.1); מרחב מבודד נשאר על הגדר ללא `session_search` (הכרעה fail-closed, שם).
 2a. **`.env` של ה־HOME:** שלושה מפתחות בבעלות הגנרטור — `WHATSAPP_ENABLED=true`, ‏`WHATSAPP_MODE=bot`, ‏`WHATSAPP_ALLOWED_USERS=*` (שער הגשר נפתח, האכיפה ב־gateway — ר' אימות 1 ב־6.1.1); שאר השורות נשמרות כלשונן.
 2b. **`skills/<community-bootstrap|community-admin>/`** בפרופיל ברירת־המחדל: skills הניהול המוצריים עם נתיבי הפריסה מוחלפים (מימוש M2).
 3. **אימות:** checksums לכל artifact שנוצר + פקודת `verify` שמזהה drift (בתבנית ה־business-context skill). המנוע משכתב `config.yaml` ומוחק הערות (נצפה חי 2026-08-14) — לכן ה־verify משווה **מפתחות אפקטיביים**, לא טקסט.
@@ -211,6 +217,37 @@ credentials לתורים מנותבים נפתרים עם fallback לקריאה�
 `auth.json` של השורש (‏`auth.py:1060-1124`; ‏`get_default_hermes_root` קורא
 את env ‏HERMES_HOME התהליכי — ‏`hermes_constants.py:173-198`), כך שפרופילי
 קבוצות עובדים בלי auth משלהם.
+
+**אימות 4 — מרחבי הקשר (§2.1): ‏session_search, איחוד routes, ומפתוח
+sessions (2026-08-14, הקלון על ענף pilot).** שלוש עובדות שהמימוש נגזר מהן:
+‏(א) **כלי חיפוש ההיסטוריה** הוא `session_search`, רשום כ־toolset בשם זהה
+(‏`tools/session_search_tool.py:1143-1146`; ‏`toolsets.py:254-258`) ומפתח
+קונפיגורציה חוקי ל־whatsapp (‏`tools_config.py:114`, אין הגבלת פלטפורמה —
+‏`tools_config.py:216-219`). **היקף ברירת־המחדל שלו תחום־פרופיל**: בלי
+ארגומנט `profile`, ‏db=None ⇒ ‏`SessionDB()` ⇒ ‏`_default_db_path()` =
+‏`get_hermes_home()/state.db` (‏`hermes_state.py:366-383`), ו־
+`get_hermes_home()` מכבד את ה־override של `_profile_runtime_scope`
+(‏`hermes_constants.py:114-139`; ‏`run.py:2065-2098`) — כלומר discovery/
+browse/scroll מחפשים רק ב־state.db של פרופיל התור. **אבל** לכלי שני
+פתחים חוצי־פרופיל מובנים ללא שער קונפיגורציה: פרמטר `profile=` שפותח כל
+פרופיל לקריאה (‏`session_search_tool.py:298-318`) ו־fallback שסורק את כל
+הפרופילים לפי session-id גולמי (‏`:343-384`) — שניהם נפתרים דרך
+`get_default_hermes_root()` שקורא את env התהליכי ו**מתעלם** מה־override
+(‏`hermes_constants.py:173-209`). גזירה: המרחב המשותף מקבל `session_search`
+(החיפוש כברירת מחדל = המרחב עצמו — בדיוק העיצוב); מרחב מבודד **לא** מקבל
+אותו (fail-closed: לקבוצה רגישה אין סיבה לקבל כלי שנושא דלת קריאה
+למרחבים אחרים). **פער מנוע מתועד:** בידוד מול תור village שהוזרק לו prompt
+אינו מוחלט — מודל שיתבקש במפורש `profile=<slug>` יוכל לקרוא מרחב מבודד
+(קריאה בלבד); ה־SOUL המשותף אוסר זאת טקסטואלית, אך לפי דוקטרינת §6.1
+גבול טקסטואלי אינו אכיפה — מועמד PR מנוע: דגל קונפיג שמנטרל קריאה
+חוצת־פרופיל בכלי. ‏(ב) **N ‏routes → פרופיל אחד** נתמך בלי שום ייחודיות:
+‏`parse_profile_routes` לא אוכף ייחודיות `name` (משמש ללוגים בלבד) ולא
+מגביל כמה routes מצביעים לאותו profile; ההתאמה per-chat_id ממילא בוחרת
+route אחד להודעה (‏`gateway/profile_routing.py:109-170`). ‏(ג) **sessions
+בתוך פרופיל ממופתחים פר־צ'אט**: מפתח קבוצה =
+`agent:<profile>:whatsapp:group:<chat_id>[:<participant>]`
+(‏`gateway/session.py:1070-1087,1090-1211`) — איחוד קבוצות לפרופיל אחד
+משתף את **מאגר** ה־sessions (חיפוש הדדי) בלי למזג **שרשורי** שיחה.
 
 **מגבלה מתועדת — גילוי JID בפריסה פעילה:** כשהגשר פתוח (`*`), הודעה
 מקבוצה לא־מוגדרת מגיעה ל־gateway ונבלעת בשקט בלי שום רישום (אין endpoint

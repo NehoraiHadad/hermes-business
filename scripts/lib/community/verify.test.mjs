@@ -4,6 +4,8 @@ import { generateArtifacts } from './generate.mjs'
 import {
   GROUP_TOOLSET,
   OWNED_ENV,
+  SHARED_SPACE,
+  SHARED_TOOLSET,
   contentChecksum,
   diffOwnedViews,
   effectiveEnvOwnedView,
@@ -27,6 +29,7 @@ function contract() {
         name: 'ראשית',
         purpose: 'מידע כללי',
         tone: 'default',
+        isolated: false,
         knowledge: ['general']
       },
       {
@@ -35,6 +38,7 @@ function contract() {
         name: 'צח"י',
         purpose: 'חירום בלבד',
         tone: 'strict',
+        isolated: true,
         knowledge: []
       }
     ],
@@ -72,8 +76,9 @@ describe('verifyArtifacts — clean home', () => {
     expect(report.artifacts.map(a => a.status)).toEqual(report.artifacts.map(() => 'ok'))
     expect(report.artifacts.map(a => a.path)).toContain('config.yaml')
     expect(report.artifacts.map(a => a.path)).toContain('.env')
-    expect(report.artifacts.map(a => a.path)).toContain('profiles/main/config.yaml')
-    expect(report.artifacts.map(a => a.path)).toContain('profiles/main/skills/general/SKILL.md')
+    expect(report.artifacts.map(a => a.path)).toContain(`profiles/${SHARED_SPACE}/config.yaml`)
+    expect(report.artifacts.map(a => a.path)).toContain(`profiles/${SHARED_SPACE}/skills/general/SKILL.md`)
+    expect(report.artifacts.map(a => a.path)).toContain('profiles/emergency/config.yaml')
     expect(report.artifacts.map(a => a.path)).toContain('skills/community-admin/SKILL.md')
   })
 })
@@ -170,10 +175,10 @@ describe('verifyArtifacts — the engine REWRITES config.yaml (values, not text)
   })
 })
 
-describe('verifyArtifacts — profile configs (fenced toolset is an owned gate, §6.1)', () => {
+describe('verifyArtifacts — space profile configs (per-space fence is an owned gate, §6.1 + §2.1)', () => {
   it('tolerates an engine rewrite of a profile config (owned VALUES unchanged)', () => {
     const artifacts = gen()
-    const parsed = yaml.load(artifacts['profiles/main/config.yaml'])
+    const parsed = yaml.load(artifacts[`profiles/${SHARED_SPACE}/config.yaml`])
     const rewritten = yaml.dump(
       {
         skills: parsed.skills,
@@ -183,18 +188,42 @@ describe('verifyArtifacts — profile configs (fenced toolset is an owned gate, 
       },
       { sortKeys: false }
     )
-    const home = { ...artifacts, 'profiles/main/config.yaml': rewritten }
+    const home = { ...artifacts, [`profiles/${SHARED_SPACE}/config.yaml`]: rewritten }
     const report = verifyArtifacts(contract(), artifacts, { readFile: homeReader(home) })
     expect(report.ok, JSON.stringify(report.artifacts, null, 2)).toBe(true)
   })
 
-  it('flags a widened profile toolset as drift (the group would gain terminal/file)', () => {
+  it('flags a widened shared-space toolset as drift (the space would gain terminal/file)', () => {
     const artifacts = gen()
-    const parsed = yaml.load(artifacts['profiles/main/config.yaml'])
-    parsed.platform_toolsets.whatsapp = [...GROUP_TOOLSET, 'terminal']
-    const home = { ...artifacts, 'profiles/main/config.yaml': yaml.dump(parsed) }
+    const parsed = yaml.load(artifacts[`profiles/${SHARED_SPACE}/config.yaml`])
+    parsed.platform_toolsets.whatsapp = [...SHARED_TOOLSET, 'terminal']
+    const home = { ...artifacts, [`profiles/${SHARED_SPACE}/config.yaml`]: yaml.dump(parsed) }
     const entry = verifyArtifacts(contract(), artifacts, { readFile: homeReader(home) }).artifacts.find(
-      a => a.path === 'profiles/main/config.yaml'
+      a => a.path === `profiles/${SHARED_SPACE}/config.yaml`
+    )
+    expect(entry.status).toBe('drift')
+    expect(entry.detail).toContain('platform_toolsets.whatsapp')
+  })
+
+  it('flags session_search ADDED to an isolated space as drift (isolation is the point)', () => {
+    const artifacts = gen()
+    const parsed = yaml.load(artifacts['profiles/emergency/config.yaml'])
+    parsed.platform_toolsets.whatsapp = [...GROUP_TOOLSET, 'session_search']
+    const home = { ...artifacts, 'profiles/emergency/config.yaml': yaml.dump(parsed) }
+    const entry = verifyArtifacts(contract(), artifacts, { readFile: homeReader(home) }).artifacts.find(
+      a => a.path === 'profiles/emergency/config.yaml'
+    )
+    expect(entry.status).toBe('drift')
+    expect(entry.detail).toContain('platform_toolsets.whatsapp')
+  })
+
+  it('flags session_search REMOVED from the shared space as drift (cross-group recall is the design)', () => {
+    const artifacts = gen()
+    const parsed = yaml.load(artifacts[`profiles/${SHARED_SPACE}/config.yaml`])
+    parsed.platform_toolsets.whatsapp = [...GROUP_TOOLSET]
+    const home = { ...artifacts, [`profiles/${SHARED_SPACE}/config.yaml`]: yaml.dump(parsed) }
+    const entry = verifyArtifacts(contract(), artifacts, { readFile: homeReader(home) }).artifacts.find(
+      a => a.path === `profiles/${SHARED_SPACE}/config.yaml`
     )
     expect(entry.status).toBe('drift')
     expect(entry.detail).toContain('platform_toolsets.whatsapp')
@@ -259,9 +288,10 @@ describe('verifyArtifacts — .env (owned keys only)', () => {
 describe('verifyArtifacts — text artifacts by checksum', () => {
   it('flags an edited SOUL.md as drift', () => {
     const artifacts = gen()
-    const home = { ...artifacts, 'profiles/main/SOUL.md': artifacts['profiles/main/SOUL.md'] + '\nעריכה ידנית\n' }
+    const soulPath = `profiles/${SHARED_SPACE}/SOUL.md`
+    const home = { ...artifacts, [soulPath]: artifacts[soulPath] + '\nעריכה ידנית\n' }
     const report = verifyArtifacts(contract(), artifacts, { readFile: homeReader(home) })
-    const entry = report.artifacts.find(a => a.path === 'profiles/main/SOUL.md')
+    const entry = report.artifacts.find(a => a.path === soulPath)
     expect(entry.status).toBe('drift')
     expect(report.ok).toBe(false)
   })
@@ -280,20 +310,20 @@ describe('verifyArtifacts — text artifacts by checksum', () => {
 
   it('reports a deleted knowledge skill as missing', () => {
     const artifacts = gen()
-    const home = Object.fromEntries(
-      Object.entries(artifacts).filter(([p]) => p !== 'profiles/main/skills/general/SKILL.md')
-    )
+    const skillPath = `profiles/${SHARED_SPACE}/skills/general/SKILL.md`
+    const home = Object.fromEntries(Object.entries(artifacts).filter(([p]) => p !== skillPath))
     const entry = verifyArtifacts(contract(), artifacts, { readFile: homeReader(home) }).artifacts.find(
-      a => a.path === 'profiles/main/skills/general/SKILL.md'
+      a => a.path === skillPath
     )
     expect(entry.status).toBe('missing')
   })
 
   it('tolerates CRLF line endings on disk (Windows checkout of a generated file)', () => {
     const artifacts = gen()
-    const home = { ...artifacts, 'profiles/main/SOUL.md': artifacts['profiles/main/SOUL.md'].replace(/\n/g, '\r\n') }
+    const soulPath = `profiles/${SHARED_SPACE}/SOUL.md`
+    const home = { ...artifacts, [soulPath]: artifacts[soulPath].replace(/\n/g, '\r\n') }
     const entry = verifyArtifacts(contract(), artifacts, { readFile: homeReader(home) }).artifacts.find(
-      a => a.path === 'profiles/main/SOUL.md'
+      a => a.path === soulPath
     )
     expect(entry.status).toBe('ok')
   })
@@ -305,19 +335,22 @@ describe('verifyArtifacts — text artifacts by checksum', () => {
 })
 
 describe('effective owned view', () => {
-  it('expectedOwnedView is derived from the contract alone', () => {
+  it('expectedOwnedView is derived from the contract alone (routes target SPACES)', () => {
     const view = expectedOwnedView(contract())
     expect(view['gateway.multiplex_profiles']).toBe(true)
     expect(view['whatsapp.dm_policy']).toBe('allowlist')
     expect(view['whatsapp.allow_from']).toEqual(['972501234567'])
-    expect(view.profile_routes.map(r => r.profile).sort()).toEqual(['emergency', 'main'])
+    expect(view.profile_routes.map(r => r.profile).sort()).toEqual(['emergency', SHARED_SPACE])
   })
 
-  it('expectedProfileOwnedView pins the fenced toolset + write approvals', () => {
-    const view = expectedProfileOwnedView()
-    expect(view['platform_toolsets.whatsapp']).toEqual([...GROUP_TOOLSET].sort())
-    expect(view['memory.write_approval']).toBe(true)
-    expect(view['skills.write_approval']).toBe(true)
+  it('expectedProfileOwnedView pins the PER-SPACE toolset + write approvals', () => {
+    const isolated = expectedProfileOwnedView('emergency')
+    expect(isolated['platform_toolsets.whatsapp']).toEqual([...GROUP_TOOLSET].sort())
+    expect(isolated['memory.write_approval']).toBe(true)
+    expect(isolated['skills.write_approval']).toBe(true)
+    const shared = expectedProfileOwnedView(SHARED_SPACE)
+    expect(shared['platform_toolsets.whatsapp']).toEqual([...SHARED_TOOLSET].sort())
+    expect(shared['platform_toolsets.whatsapp']).toContain('session_search')
     expect(effectiveProfileOwnedView(undefined)['memory.write_approval']).toBe(false)
   })
 

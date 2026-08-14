@@ -86,4 +86,15 @@ describe('shipped admin skill assets', () => {
     expect(text).toContain('המומלץ')
     expect(text).toContain('סוכן מלא')
   })
+
+  it('both skills teach the context-space model (§2.1): shared village default, isolated: true opt-in', () => {
+    for (const name of ADMIN_SKILLS) {
+      const text = readTemplate(name)
+      expect(text, `${name} must name the shared space`).toContain('village')
+      expect(text, `${name} must teach the isolation opt-in`).toContain('isolated: true')
+    }
+    // The privacy consequence is spelled out for the operator interview.
+    expect(readTemplate('community-bootstrap')).toContain('מרחבי הקשר')
+    expect(readTemplate('community-admin')).toContain('מרחבי הקשר')
+  })
 })

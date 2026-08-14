@@ -6,6 +6,7 @@ import {
   GROUP_TOOLSET,
   HISTORY_BACKFILL_LIMIT,
   OWNED_ENV,
+  SHARED_TOOLSET,
   buildEnvFile,
   buildGatewayConfig,
   buildProfileConfig,
@@ -16,7 +17,8 @@ import {
   renderKnowledgeSkill,
   wakeWordPattern
 } from './generate.mjs'
-import { renderSoul } from './persona.mjs'
+import { SHARED_SPACE } from './contract.mjs'
+import { renderSharedSoul, renderSoul } from './persona.mjs'
 
 function contract() {
   return {
@@ -30,6 +32,7 @@ function contract() {
         name: 'קבוצת היישוב הראשית',
         purpose: 'שאלות כלליות, מידע יישובי',
         tone: 'default',
+        isolated: false,
         knowledge: ['general']
       },
       {
@@ -38,6 +41,7 @@ function contract() {
         name: 'צח"י',
         purpose: 'חירום בלבד',
         tone: 'strict',
+        isolated: true,
         knowledge: ['general', 'emergency']
       }
     ],
@@ -104,11 +108,29 @@ describe('gateway config generation', () => {
     expect(cfg().gateway.multiplex_profiles).toBe(true)
   })
 
-  it('emits one route per group: platform whatsapp, chat_id=JID, profile=slug, name=<slug>-route', () => {
+  it('emits one route per group onto its SPACE profile (§2.1): shared → village, isolated → own slug', () => {
     expect(cfg().profile_routes).toEqual([
-      { name: 'main-route', platform: 'whatsapp', chat_id: '120363000000000001@g.us', profile: 'main' },
+      { name: 'main-route', platform: 'whatsapp', chat_id: '120363000000000001@g.us', profile: SHARED_SPACE },
       { name: 'emergency-route', platform: 'whatsapp', chat_id: '120363000000000002@g.us', profile: 'emergency' }
     ])
+  })
+
+  it('several shared groups route onto ONE village profile with unique per-group route names', () => {
+    const c = contract()
+    c.groups.push({
+      slug: 'parents',
+      jid: '120363000000000003@g.us',
+      name: 'הורים',
+      purpose: 'בית ספר וגנים',
+      tone: 'default',
+      isolated: false,
+      knowledge: []
+    })
+    const routes = buildRoutes(c)
+    expect(routes.map(r => r.profile)).toEqual([SHARED_SPACE, 'emergency', SHARED_SPACE])
+    // Route names stay unique per group (engine treats name as log-only, but
+    // uniqueness keeps the logs unambiguous).
+    expect(new Set(routes.map(r => r.name)).size).toBe(routes.length)
   })
 
   it('allowlists the UNION of all group JIDs (acceptance is GLOBAL — fact 4)', () => {
@@ -244,8 +266,8 @@ describe('.env generation (bridge posture — proven pilot pattern)', () => {
   })
 })
 
-describe('per-group artifacts', () => {
-  it('produces exactly the expected artifact paths (incl. profile configs + admin skills)', () => {
+describe('per-space artifacts (§2.1)', () => {
+  it('produces exactly the expected artifact paths: profiles are per SPACE, not per group', () => {
     expect(Object.keys(gen()).sort()).toEqual([
       '.env',
       'config.yaml',
@@ -253,71 +275,115 @@ describe('per-group artifacts', () => {
       'profiles/emergency/config.yaml',
       'profiles/emergency/skills/emergency/SKILL.md',
       'profiles/emergency/skills/general/SKILL.md',
-      'profiles/main/SOUL.md',
-      'profiles/main/config.yaml',
-      'profiles/main/skills/general/SKILL.md',
+      `profiles/${SHARED_SPACE}/SOUL.md`,
+      `profiles/${SHARED_SPACE}/config.yaml`,
+      `profiles/${SHARED_SPACE}/skills/general/SKILL.md`,
       'skills/community-admin/SKILL.md',
       'skills/community-bootstrap/SKILL.md'
     ])
   })
 
-  it('every group profile pins the FENCED toolset in its own config.yaml (§6.1 — absent config = FULL default toolset)', () => {
-    for (const slug of ['main', 'emergency']) {
-      const pc = yaml.load(gen()[`profiles/${slug}/config.yaml`])
-      expect(pc.platform_toolsets.whatsapp).toEqual([...GROUP_TOOLSET])
-      expect(pc.memory.write_approval).toBe(true)
-      expect(pc.skills.write_approval).toBe(true)
-    }
+  it('the SHARED space pins the fence PLUS session_search; an ISOLATED space stays without it (§6.1.1 verification 4)', () => {
+    const shared = yaml.load(gen()[`profiles/${SHARED_SPACE}/config.yaml`])
+    expect(shared.platform_toolsets.whatsapp).toEqual([...SHARED_TOOLSET])
+    expect(shared.platform_toolsets.whatsapp).toContain('session_search')
+    expect(shared.memory.write_approval).toBe(true)
+    expect(shared.skills.write_approval).toBe(true)
+
+    const isolated = yaml.load(gen()['profiles/emergency/config.yaml'])
+    expect(isolated.platform_toolsets.whatsapp).toEqual([...GROUP_TOOLSET])
+    expect(isolated.platform_toolsets.whatsapp).not.toContain('session_search')
+    expect(isolated.memory.write_approval).toBe(true)
+    expect(isolated.skills.write_approval).toBe(true)
   })
 
-  it('the fenced GROUP toolset exposes no config/file/terminal capability (hard audience boundary)', () => {
+  it('the fenced toolsets expose no config/file/terminal capability (hard audience boundary)', () => {
     for (const banned of ['terminal', 'file', 'code_execution', 'delegation', 'cronjob', 'memory']) {
       expect(GROUP_TOOLSET).not.toContain(banned)
+      expect(SHARED_TOOLSET).not.toContain(banned)
     }
+    // The shared toolset is exactly the fence + history search, nothing more.
+    expect(SHARED_TOOLSET).toEqual([...GROUP_TOOLSET, 'session_search'])
   })
 
-  it('profile config merges over an existing profile config, preserving non-owned keys', () => {
+  it('unions the knowledge packs of ALL shared-space member groups into the village profile', () => {
+    const c = contract()
+    c.groups[1].isolated = false // emergency joins the shared space
+    c.groups[1].tone = 'default' // (validation would demand tone coherence)
+    const artifacts = generateArtifacts(c, {
+      readKnowledgeSource: readSource,
+      readAdminSkillTemplate: name => adminTemplates[name],
+      deployPaths
+    })
+    expect(artifacts[`profiles/${SHARED_SPACE}/skills/general/SKILL.md`]).toBeDefined()
+    expect(artifacts[`profiles/${SHARED_SPACE}/skills/emergency/SKILL.md`]).toBeDefined()
+    expect(artifacts['profiles/emergency/config.yaml']).toBeUndefined() // no per-group profile
+    expect(artifacts['profiles/main/config.yaml']).toBeUndefined()
+  })
+
+  it('profile config merges over an existing SPACE profile config, preserving non-owned keys', () => {
     const merged = yaml.load(
       gen({
-        readProfileConfigText: slug =>
-          slug === 'main' ? yaml.dump({ model: { name: 'per-group-model' }, platform_toolsets: { whatsapp: ['terminal'] } }) : undefined
-      })['profiles/main/config.yaml']
+        readProfileConfigText: space =>
+          space === SHARED_SPACE
+            ? yaml.dump({ model: { name: 'per-space-model' }, platform_toolsets: { whatsapp: ['terminal'] } })
+            : undefined
+      })[`profiles/${SHARED_SPACE}/config.yaml`]
     )
-    expect(merged.model).toEqual({ name: 'per-group-model' })
-    expect(merged.platform_toolsets.whatsapp).toEqual([...GROUP_TOOLSET]) // owned: rewritten
+    expect(merged.model).toEqual({ name: 'per-space-model' })
+    expect(merged.platform_toolsets.whatsapp).toEqual([...SHARED_TOOLSET]) // owned: rewritten
   })
 
   it('buildProfileConfig refuses a non-mapping existing profile config', () => {
     expect(() => buildProfileConfig('- nope\n')).toThrow(/not a YAML mapping/)
   })
 
-  it('SOUL.md embeds the community name, wake word, group name and purpose', () => {
-    const soul = gen()['profiles/main/SOUL.md']
+  it('the SHARED SOUL.md represents the whole community: lists member groups + purposes, teaches shared memory', () => {
+    const soul = gen()[`profiles/${SHARED_SPACE}/SOUL.md`]
     expect(soul).toContain('כפר הדגמה')
     expect(soul).toContain('תכלס')
+    // Member group listed with its purpose…
     expect(soul).toContain('קבוצת היישוב הראשית')
     expect(soul).toContain('שאלות כלליות, מידע יישובי')
-    // The no-invention anchor from the proven pilot persona.
+    // …but the ISOLATED group is NOT part of the shared persona.
+    expect(soul).not.toContain('צח"י')
+    // Shared-memory model + the no-invention anchor.
+    expect(soul).toContain('זיכרון קהילתי משותף')
+    expect(soul).toContain('חיפוש ההיסטוריה')
     expect(soul).toContain('אל תמציא')
   })
 
-  it('strict tone renders a terser, refer-to-admins-first persona; default does not', () => {
+  it('the ISOLATED space keeps the per-group SOUL (strict tone) and never the shared-memory section', () => {
     const strict = gen()['profiles/emergency/SOUL.md']
-    const relaxed = gen()['profiles/main/SOUL.md']
-    expect(strict).not.toBe(relaxed)
+    const shared = gen()[`profiles/${SHARED_SPACE}/SOUL.md`]
+    expect(strict).not.toBe(shared)
+    expect(strict).toContain('צח"י')
     expect(strict).toContain('בכל ספק')
     expect(strict).toContain('משפט אחד או שניים')
-    expect(relaxed).toContain('1–4 משפטים')
-    expect(relaxed).not.toContain('משפט אחד או שניים')
+    expect(strict).not.toContain('זיכרון קהילתי משותף')
+    expect(shared).toContain('1–4 משפטים')
+    expect(shared).not.toContain('משפט אחד או שניים')
   })
 
-  it('renderSoul is deterministic', () => {
+  it('a uniformly strict shared space renders the strict register in the shared SOUL', () => {
+    const soul = renderSharedSoul({
+      communityName: 'x',
+      wakeWord: 'y',
+      groups: [{ name: 'a', purpose: 'p' }],
+      tone: 'strict'
+    })
+    expect(soul).toContain('משפט אחד או שניים')
+  })
+
+  it('renderSoul and renderSharedSoul are deterministic', () => {
     const args = { communityName: 'x', wakeWord: 'y', group: contract().groups[0] }
     expect(renderSoul(args)).toBe(renderSoul(args))
+    const sharedArgs = { communityName: 'x', wakeWord: 'y', groups: contract().groups, tone: 'default' }
+    expect(renderSharedSoul(sharedArgs)).toBe(renderSharedSoul(sharedArgs))
   })
 
   it('knowledge skills carry valid frontmatter and the source content', () => {
-    const skill = gen()['profiles/main/skills/general/SKILL.md']
+    const skill = gen()[`profiles/${SHARED_SPACE}/skills/general/SKILL.md`]
     expect(skill.startsWith('---\nname: general\ndescription: ')).toBe(true)
     const [, frontmatter] = skill.split('---\n')
     const fm = yaml.load(frontmatter)
@@ -327,8 +393,8 @@ describe('per-group artifacts', () => {
     expect(skill).toContain('שעות מזכירות: 08:00-12:00')
   })
 
-  it('a shared pack renders IDENTICAL bytes into every declaring profile', () => {
-    const a = gen()['profiles/main/skills/general/SKILL.md']
+  it('a pack declared in several spaces renders IDENTICAL bytes into each', () => {
+    const a = gen()[`profiles/${SHARED_SPACE}/skills/general/SKILL.md`]
     const b = gen()['profiles/emergency/skills/general/SKILL.md']
     expect(a).toBe(b)
   })
@@ -361,12 +427,12 @@ describe('per-group artifacts', () => {
 })
 
 describe('admin skills (default profile only)', () => {
-  it('installs every ADMIN_SKILLS entry under skills/ (default profile), never under group profiles', () => {
+  it('installs every ADMIN_SKILLS entry under skills/ (default profile), never under space profiles', () => {
     const artifacts = gen()
     for (const name of ADMIN_SKILLS) {
       expect(artifacts[`skills/${name}/SKILL.md`]).toBeDefined()
-      for (const slug of ['main', 'emergency']) {
-        expect(artifacts[`profiles/${slug}/skills/${name}/SKILL.md`]).toBeUndefined()
+      for (const space of [SHARED_SPACE, 'emergency']) {
+        expect(artifacts[`profiles/${space}/skills/${name}/SKILL.md`]).toBeUndefined()
       }
     }
   })

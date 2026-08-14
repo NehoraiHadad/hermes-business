@@ -6,9 +6,11 @@
 // as VALUES:
 //   * the ROOT config.yaml compares the full owned-gate view (routes, global
 //     acceptance gates, admin DM allowlist, admin toolset, write approvals);
-//   * each profiles/<slug>/config.yaml compares the PROFILE owned view (fenced
-//     toolset + write approvals) — spec §6.1: an absent/drifted profile config
-//     silently reopens the FULL default whatsapp toolset for that group;
+//   * each profiles/<space>/config.yaml compares the PROFILE owned view for
+//     THAT space (§2.1: the shared `village` space's toolset includes
+//     session_search, isolated spaces stay on the fenced set without it) —
+//     spec §6.1: an absent/drifted profile config silently reopens the FULL
+//     default whatsapp toolset for that space;
 //   * `.env` compares the owned KEYS only (the engine appends its own entries,
 //     e.g. pairing writes — those are not drift);
 //   * profile_routes is read from EITHER the top-level or gateway.profile_routes
@@ -23,11 +25,13 @@
 
 import { createHash } from 'node:crypto'
 import yaml from 'js-yaml'
+import { SHARED_SPACE } from './contract.mjs'
 import {
   ADMIN_TOOLSET,
   GROUP_TOOLSET,
   HISTORY_BACKFILL_LIMIT,
   OWNED_ENV,
+  SHARED_TOOLSET,
   buildGatewayConfig,
   buildProfileConfig,
   buildRoutes,
@@ -95,9 +99,12 @@ export function effectiveProfileOwnedView(cfgData) {
   }
 }
 
-/** The profile owned view is contract-independent (same fence for every group). */
-export function expectedProfileOwnedView() {
-  return effectiveProfileOwnedView(buildProfileConfig(undefined))
+/** The owned view a SPACE profile must carry: the shared space's fence
+ * includes session_search, every other (isolated) space keeps the plain
+ * fenced set (§2.1). */
+export function expectedProfileOwnedView(spaceSlug) {
+  const toolset = spaceSlug === SHARED_SPACE ? SHARED_TOOLSET : GROUP_TOOLSET
+  return effectiveProfileOwnedView(buildProfileConfig(undefined, toolset))
 }
 
 const ENV_LINE_RE = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)$/
@@ -135,7 +142,7 @@ export function diffOwnedViews(expected, actual) {
   return drifted
 }
 
-const PROFILE_CONFIG_RE = /^profiles\/[^/]+\/config\.yaml$/
+const PROFILE_CONFIG_RE = /^profiles\/([^/]+)\/config\.yaml$/
 
 function verifyConfigEntry(relPath, actualText, expectedView, effectiveView) {
   let parsed
@@ -176,8 +183,11 @@ export function verifyArtifacts(contract, artifacts, { readFile } = {}) {
       report.push(verifyConfigEntry(relPath, actual, expectedOwnedView(contract), effectiveOwnedView))
       continue
     }
-    if (PROFILE_CONFIG_RE.test(relPath)) {
-      report.push(verifyConfigEntry(relPath, actual, expectedProfileOwnedView(), effectiveProfileOwnedView))
+    const profileConfig = PROFILE_CONFIG_RE.exec(relPath)
+    if (profileConfig) {
+      report.push(
+        verifyConfigEntry(relPath, actual, expectedProfileOwnedView(profileConfig[1]), effectiveProfileOwnedView)
+      )
       continue
     }
     if (relPath === '.env') {
@@ -200,4 +210,13 @@ export function verifyArtifacts(contract, artifacts, { readFile } = {}) {
 
 // Re-exported so CLI/test callers can assert the exact contract constants
 // without importing the generator internals separately.
-export { ADMIN_TOOLSET, GROUP_TOOLSET, HISTORY_BACKFILL_LIMIT, OWNED_ENV, buildRoutes, wakeWordPattern }
+export {
+  ADMIN_TOOLSET,
+  GROUP_TOOLSET,
+  HISTORY_BACKFILL_LIMIT,
+  OWNED_ENV,
+  SHARED_SPACE,
+  SHARED_TOOLSET,
+  buildRoutes,
+  wakeWordPattern
+}

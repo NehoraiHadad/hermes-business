@@ -10,9 +10,12 @@
 //           non-owned config keys (model block etc.) and non-owned .env lines
 //           are preserved. The shipped admin skills (assets/community-skills/)
 //           are installed into the DEFAULT profile's skills dir with the real
-//           deployment paths substituted; each group profile gets its own
-//           config.yaml pinning the fenced toolset (spec §6.1 — without it a
-//           routed turn falls back to the engine's FULL default toolset).
+//           deployment paths substituted. Profiles are per context SPACE
+//           (spec §2.1): non-isolated groups share profiles/village/ (shared
+//           session memory + session_search), isolated groups get their own
+//           slug-profile; each space profile gets its own config.yaml pinning
+//           its toolset fence (spec §6.1 — without it a routed turn falls
+//           back to the engine's FULL default toolset).
 // verify:   re-derive the expected artifacts and report per-artifact drift.
 //           config files compare EFFECTIVE owned keys (the engine rewrites
 //           them, stripping comments and reordering keys), .env compares owned
@@ -25,7 +28,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
-import { ContractError, loadContract } from './lib/community/contract.mjs'
+import { ContractError, contractSpaces, loadContract } from './lib/community/contract.mjs'
 import { generateArtifacts } from './lib/community/generate.mjs'
 import { verifyArtifacts } from './lib/community/verify.mjs'
 import { ApplyRefusedError, applyArtifacts } from './lib/community/apply.mjs'
@@ -105,7 +108,7 @@ function main() {
     deployPaths,
     existingConfigText: readIfFile(path.join(opts.home, 'config.yaml')),
     existingEnvText: readIfFile(path.join(opts.home, '.env')),
-    readProfileConfigText: slug => readIfFile(path.join(opts.home, 'profiles', slug, 'config.yaml'))
+    readProfileConfigText: space => readIfFile(path.join(opts.home, 'profiles', space, 'config.yaml'))
   })
 
   if (opts.command === 'generate') {
@@ -122,7 +125,7 @@ function main() {
     for (const p of result.written) console.log(`written    ${p}`)
     for (const p of result.unchanged) console.log(`unchanged  ${p}`)
     console.log(
-      `community-generate: OK — ${result.written.length} written, ${result.unchanged.length} unchanged for ${contract.groups.length} group(s)`
+      `community-generate: OK — ${result.written.length} written, ${result.unchanged.length} unchanged for ${contract.groups.length} group(s) in ${contractSpaces(contract).length} space(s)`
     )
     return
   }

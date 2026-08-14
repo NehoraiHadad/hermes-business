@@ -14,12 +14,19 @@
 // added — is preserved verbatim. This is what makes re-running the generator
 // on a live home safe and idempotent. The same model applies to `.env`
 // (owned KEYS replaced in place, all other lines preserved) and to the
-// per-profile `profiles/<slug>/config.yaml` files.
+// per-space `profiles/<space>/config.yaml` files.
 //
 // The owned keys implement the spec's verified engine facts (§2, §6.1):
 //   * gateway.multiplex_profiles: true — without it profile_routes is ignored
 //     entirely (fact 1).
-//   * one route per group (platform: whatsapp, chat_id: JID → profile: slug);
+//   * one route per group (platform: whatsapp, chat_id: JID → profile: the
+//     group's context SPACE, §2.1 — the shared `village` profile by default,
+//     the group's own slug-profile when `isolated: true`). The engine accepts
+//     N routes onto one profile with no uniqueness constraint beyond the
+//     per-route chat_id match (gateway/profile_routing.py:109-170 — `name` is
+//     log-only), and sessions inside one profile stay per-chat
+//     (`agent:<profile>:whatsapp:group:<chat_id>...`, gateway/session.py:
+//     1070-1211), so consolidation shares MEMORY without merging THREADS;
 //     routes are written at the TOP-LEVEL `profile_routes` (both forms are
 //     accepted by the engine; we canonicalize to one so effective-config
 //     comparison has a single place to look, and drop a stale
@@ -44,10 +51,11 @@
 //     profile config falls back to the platform DEFAULT toolset — the full
 //     hermes-whatsapp core set incl. terminal/write_file/execute_code
 //     (tools_config.py:2279-2286, toolsets.py:531-533) — NOT to the root
-//     config. So every group profile gets its own config.yaml pinning the
-//     fenced GROUP_TOOLSET, and the ROOT config (default profile = the
-//     admin-DM channel) gets the ADMIN_TOOLSET with terminal+file so the
-//     agent can run the community CLIs.
+//     config. So every SPACE profile gets its own config.yaml pinning its
+//     fence (SHARED_TOOLSET for the shared space, GROUP_TOOLSET for isolated
+//     ones), and the ROOT config (default profile = the admin-DM channel)
+//     gets the ADMIN_TOOLSET with terminal+file so the agent can run the
+//     community CLIs.
 //   * memory/skills write approvals stay ON so resident chatter can never
 //     silently become bot "knowledge" (spec §5.1).
 //   * the shipped admin skills (assets/community-skills/) are installed into
@@ -56,11 +64,27 @@
 //     description enforced fail-closed (fact 9).
 
 import yaml from 'js-yaml'
-import { renderSoul } from './persona.mjs'
-import { SKILL_DESCRIPTION_ROUTING_MAX } from './contract.mjs'
+import { renderSharedSoul, renderSoul } from './persona.mjs'
+import { SHARED_SPACE, SKILL_DESCRIPTION_ROUTING_MAX, contractSpaces } from './contract.mjs'
 
-// Fenced toolset for GROUP profiles: public-group-safe, no terminal/file/exec.
+// Fenced toolset for ISOLATED space profiles: public-group-safe, no
+// terminal/file/exec — and deliberately NO session_search: the engine tool's
+// `profile` parameter and bare-id fallback can open OTHER profiles' state.db
+// read-only (tools/session_search_tool.py:298-318,343-384 resolve profiles
+// via get_default_hermes_root(), which ignores the per-turn scope override —
+// hermes_constants.py:173-209), so granting it to a sensitive group would
+// hand a prompt-injected turn a cross-space read door. Fail closed.
 export const GROUP_TOOLSET = Object.freeze(['web', 'skills', 'vision', 'clarify'])
+// The SHARED space additionally gets the engine's session-history search
+// toolset (`session_search`, tools/session_search_tool.py:1143-1146; a
+// configurable key valid for whatsapp, hermes_cli/tools_config.py:114). Its
+// DEFAULT scope is the CURRENT profile's state.db (SessionDB() →
+// _default_db_path() → get_hermes_home()/state.db, hermes_state.py:366-383,
+// which honors the _profile_runtime_scope override, gateway/run.py:2065-2098)
+// — that is exactly the shared space, so an answer given in group A is
+// findable from group B. The cross-profile `profile=` parameter remains an
+// engine-level residual risk documented in the spec (§6.1.1 verification 4).
+export const SHARED_TOOLSET = Object.freeze([...GROUP_TOOLSET, 'session_search'])
 // Management toolset for the DEFAULT profile (admin DMs + host chat): terminal
 // + file are required to run the community CLIs; still no code_execution or
 // delegation. All names are engine "configurable keys" valid for whatsapp
@@ -88,13 +112,16 @@ export function wakeWordPattern(wakeWord) {
   return `^${wakeWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`
 }
 
-/** The deterministic route list: one per group, in contract order. */
+/** The deterministic route list: one per group, in contract order. Each
+ * group's JID routes to its context SPACE's profile (§2.1) — several routes
+ * onto one profile is engine-supported (profile_routing.py:109-170; `name`
+ * is log-only and stays unique per group anyway). */
 export function buildRoutes(contract) {
   return contract.groups.map(g => ({
     name: `${g.slug}-route`,
     platform: 'whatsapp',
     chat_id: g.jid,
-    profile: g.slug
+    profile: g.isolated === true ? g.slug : SHARED_SPACE
   }))
 }
 
@@ -166,16 +193,18 @@ export function buildGatewayConfig(contract, existingConfigText) {
 }
 
 /**
- * Merge the owned PROFILE keys into (a clone of) an existing group-profile
- * config. Every group profile pins the fenced toolset — an absent profile
- * config would fall back to the engine's FULL default whatsapp toolset, not
- * to the root config (M2 verification, §6.1).
+ * Merge the owned PROFILE keys into (a clone of) an existing space-profile
+ * config. Every space profile pins its toolset — an absent profile config
+ * would fall back to the engine's FULL default whatsapp toolset, not to the
+ * root config (M2 verification, §6.1). `toolset` selects the fence: the
+ * shared space passes SHARED_TOOLSET (adds session_search), isolated spaces
+ * keep the default GROUP_TOOLSET.
  */
-export function buildProfileConfig(existingConfigText) {
+export function buildProfileConfig(existingConfigText, toolset = GROUP_TOOLSET) {
   const cfg = clone(parseExistingConfig(existingConfigText, 'profile config.yaml')) ?? {}
 
   const toolsets = asMapping(clone(cfg.platform_toolsets))
-  toolsets.whatsapp = [...GROUP_TOOLSET]
+  toolsets.whatsapp = [...toolset]
   cfg.platform_toolsets = toolsets
 
   const memory = asMapping(clone(cfg.memory))
@@ -333,13 +362,19 @@ export function renderAdminSkill({ name, template, deployPaths }) {
  * The full artifact map for a deployment. Pure: knowledge sources arrive via
  * `readKnowledgeSource(sourcePath)`, admin skill templates via
  * `readAdminSkillTemplate(name)`, current config/env texts as strings, and an
- * optional `readProfileConfigText(slug)` for merge-preserving profile configs.
+ * optional `readProfileConfigText(space)` for merge-preserving profile configs.
+ *
+ * Profiles are per context SPACE (§2.1), not per group: all non-isolated
+ * groups share `profiles/village/` (union of their knowledge packs, one
+ * shared-community SOUL, toolset with session_search); each `isolated: true`
+ * group gets `profiles/<slug>/` with the per-group SOUL and the fenced
+ * toolset WITHOUT session_search.
  *
  * Returns `{ 'config.yaml': text, '.env': text,
  *            'skills/<admin skill>/SKILL.md': text,
- *            'profiles/<slug>/config.yaml': text,
- *            'profiles/<slug>/SOUL.md': text,
- *            'profiles/<slug>/skills/<pack>/SKILL.md': text, ... }`.
+ *            'profiles/<space>/config.yaml': text,
+ *            'profiles/<space>/SOUL.md': text,
+ *            'profiles/<space>/skills/<pack>/SKILL.md': text, ... }`.
  */
 export function generateArtifacts(
   contract,
@@ -383,17 +418,24 @@ export function generateArtifacts(
     })
   }
 
-  for (const group of contract.groups) {
-    artifacts[`profiles/${group.slug}/config.yaml`] = dumpConfig(
-      buildProfileConfig(readProfileConfig(group.slug))
+  for (const space of contractSpaces(contract)) {
+    artifacts[`profiles/${space.slug}/config.yaml`] = dumpConfig(
+      buildProfileConfig(readProfileConfig(space.slug), space.shared ? SHARED_TOOLSET : GROUP_TOOLSET)
     )
-    artifacts[`profiles/${group.slug}/SOUL.md`] = renderSoul({
-      communityName: contract.name,
-      wakeWord: contract.wakeWord,
-      group
-    })
-    for (const pack of group.knowledge) {
-      artifacts[`profiles/${group.slug}/skills/${pack}/SKILL.md`] = rendered[pack]
+    artifacts[`profiles/${space.slug}/SOUL.md`] = space.shared
+      ? renderSharedSoul({
+          communityName: contract.name,
+          wakeWord: contract.wakeWord,
+          groups: space.groups,
+          tone: space.tone
+        })
+      : renderSoul({
+          communityName: contract.name,
+          wakeWord: contract.wakeWord,
+          group: space.groups[0]
+        })
+    for (const pack of space.knowledge) {
+      artifacts[`profiles/${space.slug}/skills/${pack}/SKILL.md`] = rendered[pack]
     }
   }
   return artifacts

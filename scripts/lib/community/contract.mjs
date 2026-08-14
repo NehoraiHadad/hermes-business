@@ -16,6 +16,11 @@
 //     index (spec §2 fact 9) — enforced here, at validation time.
 //   * acceptance gates are global (spec §2 fact 4): one wake word for all
 //     groups, so `wake_word` lives at community level, not per group.
+//   * groups map to CONTEXT SPACES (spec §2.1): by default every group shares
+//     the `village` space (one profile, shared session memory, history search
+//     across the member groups); a group marked `isolated: true` gets a space
+//     (= profile) of its own. The slug stays the group's IDENTITY (SOUL text,
+//     knowledge attachment, route names) — the PROFILE is per-space.
 
 import yaml from 'js-yaml'
 
@@ -45,9 +50,18 @@ export const SKILL_DESCRIPTION_ROUTING_MAX = 60
 
 export const TONES = ['default', 'strict']
 
-// 'default' is the profile that OWNS the WhatsApp connection (spec §2 fact 5);
-// routing a group onto it would collide with the default-profile state dir.
-export const RESERVED_SLUGS = new Set(['default'])
+// The shared context space (spec §2.1): every non-isolated group routes to
+// this one profile, so their session memory is mutually searchable.
+export const SHARED_SPACE = 'village'
+
+// Reserved group slugs:
+//   * 'default' — the profile that OWNS the WhatsApp connection (spec §2
+//     fact 5); routing a group onto it would collide with the default-profile
+//     state dir.
+//   * 'village' (SHARED_SPACE) — names the shared context-space profile; an
+//     isolated group with this slug would collide with it, and a non-isolated
+//     one would shadow the space/group distinction.
+export const RESERVED_SLUGS = new Set(['default', SHARED_SPACE])
 
 export class ContractError extends Error {
   constructor(errors) {
@@ -193,7 +207,11 @@ export function validateContract(raw, { fileExists } = {}) {
       if (!isNonEmptyString(slug) || !SLUG_RE.test(slug) || slug.length > SLUG_MAX) {
         errors.push(`${at('slug')}: must match ${SLUG_RE} and be ≤${SLUG_MAX} chars (it becomes profiles/<slug>/)`)
       } else if (RESERVED_SLUGS.has(slug)) {
-        errors.push(`${at('slug')}: "${slug}" is reserved — the default profile owns the WhatsApp connection (engine fact 5)`)
+        errors.push(
+          slug === SHARED_SPACE
+            ? `${at('slug')}: "${slug}" is reserved — it names the shared context-space profile (spec §2.1)`
+            : `${at('slug')}: "${slug}" is reserved — the default profile owns the WhatsApp connection (engine fact 5)`
+        )
       } else if (seenSlugs.has(slug)) {
         errors.push(`${at('slug')}: duplicate slug "${slug}"`)
       } else {
@@ -215,8 +233,13 @@ export function validateContract(raw, { fileExists } = {}) {
       if (!isNonEmptyString(g.name)) errors.push(`${at('name')}: required non-empty string`)
       if (!isNonEmptyString(g.purpose)) errors.push(`${at('purpose')}: required non-empty string`)
       const tone = g.tone ?? 'default'
-      if (!TONES.includes(tone)) {
+      const toneValid = TONES.includes(tone)
+      if (!toneValid) {
         errors.push(`${at('tone')}: "${tone}" is not a known tone (${TONES.join('|')})`)
+      }
+      const isolated = g.isolated ?? false
+      if (typeof isolated !== 'boolean') {
+        errors.push(`${at('isolated')}: must be true or false (default false — the group shares the "${SHARED_SPACE}" context space)`)
       }
       const knowledge = g.knowledge ?? []
       if (!Array.isArray(knowledge)) {
@@ -228,16 +251,38 @@ export function validateContract(raw, { fileExists } = {}) {
           }
         }
       }
+      const normalizedSlug = isNonEmptyString(slug) ? slug : `group-${i}`
+      const isIsolated = isolated === true
       groups.push({
-        slug: isNonEmptyString(slug) ? slug : `group-${i}`,
+        slug: normalizedSlug,
         jid: isNonEmptyString(jid) ? jid.trim() : '',
         name: isNonEmptyString(g.name) ? g.name.trim() : '',
         purpose: isNonEmptyString(g.purpose) ? g.purpose.trim() : '',
-        tone: TONES.includes(tone) ? tone : 'default',
+        tone: toneValid ? tone : 'default',
+        toneValid,
+        isolated: isIsolated,
+        // The profile this group's turns run under (spec §2.1): shared space
+        // by default, its own slug-named space when isolated.
+        space: isIsolated ? normalizedSlug : SHARED_SPACE,
         knowledge: Array.isArray(knowledge) ? knowledge.filter(r => isNonEmptyString(r) && r in packs) : []
       })
     }
   }
+
+  // ── shared-space tone coherence (spec §2.1) ──
+  // The shared space renders ONE SOUL.md for all its member groups, so their
+  // tones must agree. Only tones that individually validated participate —
+  // an invalid tone already has its own error and must not double-report.
+  const sharedMembers = groups.filter(g => !g.isolated && g.toneValid)
+  const sharedTones = [...new Set(sharedMembers.map(g => g.tone))].sort()
+  if (sharedTones.length > 1) {
+    const strictSlugs = sharedMembers.filter(g => g.tone === 'strict').map(g => g.slug)
+    errors.push(
+      `groups: the shared "${SHARED_SPACE}" space mixes tones (${sharedTones.join(', ')}) — one shared persona cannot be both; ` +
+        `mark the strict group(s) as isolated: true instead (${strictSlugs.join(', ')})`
+    )
+  }
+  for (const g of groups) delete g.toneValid
 
   if (errors.length > 0) return { ok: false, errors }
   return {
@@ -250,6 +295,43 @@ export function validateContract(raw, { fileExists } = {}) {
       knowledge: packs
     }
   }
+}
+
+/**
+ * Derive the CONTEXT SPACES of a validated contract (spec §2.1): the shared
+ * `village` space first (when at least one group is non-isolated), then one
+ * space per isolated group, in contract order. Each space is
+ * `{ slug, shared, groups, tone, knowledge }` where `knowledge` is the UNION
+ * of the member groups' packs (first-appearance order, deduplicated) and
+ * `tone` is the space's uniform tone (validation refuses a mixed shared
+ * space, so the first member's tone is authoritative there).
+ *
+ * Groups built by hand (tests) may omit `isolated`; absent means false.
+ */
+export function contractSpaces(contract) {
+  const spaces = []
+  const shared = contract.groups.filter(g => g.isolated !== true)
+  if (shared.length > 0) {
+    spaces.push({
+      slug: SHARED_SPACE,
+      shared: true,
+      groups: shared,
+      tone: shared[0].tone ?? 'default',
+      knowledge: [...new Set(shared.flatMap(g => g.knowledge ?? []))]
+    })
+  }
+  for (const g of contract.groups) {
+    if (g.isolated === true) {
+      spaces.push({
+        slug: g.slug,
+        shared: false,
+        groups: [g],
+        tone: g.tone ?? 'default',
+        knowledge: [...new Set(g.knowledge ?? [])]
+      })
+    }
+  }
+  return spaces
 }
 
 /** Parse + validate in one throw-on-failure step (CLI convenience). */
