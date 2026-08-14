@@ -63,8 +63,10 @@ knowledge:                      # חבילות ידע → skills
 
 קלט: `community.yaml` + תבנית פרסונה. פלט אידמפוטנטי לתוך HERMES_HOME של הפריסה:
 
-1. **`config.yaml` של ה־gateway:** ‏`multiplex_profiles: true`; ‏`profile_routes` — ‏route פר קבוצה (platform: whatsapp, ‏chat_id: jid → profile: slug); ‏`group_allow_from` = איחוד כל ה־JIDים; ‏`group_allow_admin_from`+`allow_admin_from` = admins (חובה — הגנרטור **נכשל** על רשימה ריקה, עובדה 8); ‏`platform_toolsets.whatsapp` מצומצם; ‏`dm_policy: disabled`; ‏`require_mention` + תבנית ההשכמה.
-2. **`profiles/<slug>/`** לכל קבוצה: `SOUL.md` מתבנית הפרסונה (זהות תכל'ס + ייעוד הקבוצה + tone), ‏`skills/` מחבילות הידע המוצהרות (תיאור ≤60 תווים — נאכף, עובדה 9), קונפיג פרופיל בסיסי.
+1. **`config.yaml` של ה־gateway:** ‏`multiplex_profiles: true`; ‏`profile_routes` — ‏route פר קבוצה (platform: whatsapp, ‏chat_id: jid → profile: slug); ‏`group_allow_from` = איחוד כל ה־JIDים; ‏`group_allow_admin_from`+`allow_admin_from` = admins (חובה — הגנרטור **נכשל** על רשימה ריקה, עובדה 8); ‏`platform_toolsets.whatsapp` ניהולי (פרופיל ברירת־המחדל = ערוץ המנהלים, ר' 6.1.1); ‏`dm_policy: allowlist` + ‏`allow_from` = admins (‏DM למנהלים בלבד — עודכן במימוש M2 מ־`disabled`, ר' אימות 1 ב־6.1.1); ‏`require_mention` + תבנית ההשכמה.
+2. **`profiles/<slug>/`** לכל קבוצה: `SOUL.md` מתבנית הפרסונה (זהות תכל'ס + ייעוד הקבוצה + tone), ‏`skills/` מחבילות הידע המוצהרות (תיאור ≤60 תווים — נאכף, עובדה 9), ו־`config.yaml` פרופילי שמגדר את ה־toolset הקבוצתי (חובה — בלעדיו התור הקבוצתי מקבל את ה־toolset המלא של המנוע, ר' אימות 2 ב־6.1.1).
+2a. **`.env` של ה־HOME:** שלושה מפתחות בבעלות הגנרטור — `WHATSAPP_ENABLED=true`, ‏`WHATSAPP_MODE=bot`, ‏`WHATSAPP_ALLOWED_USERS=*` (שער הגשר נפתח, האכיפה ב־gateway — ר' אימות 1 ב־6.1.1); שאר השורות נשמרות כלשונן.
+2b. **`skills/<community-bootstrap|community-admin>/`** בפרופיל ברירת־המחדל: skills הניהול המוצריים עם נתיבי הפריסה מוחלפים (מימוש M2).
 3. **אימות:** checksums לכל artifact שנוצר + פקודת `verify` שמזהה drift (בתבנית ה־business-context skill). המנוע משכתב `config.yaml` ומוחק הערות (נצפה חי 2026-08-14) — לכן ה־verify משווה **מפתחות אפקטיביים**, לא טקסט.
 
 ### 3.3 מה נשאר מחוץ לתחולה (שלבים הבאים)
@@ -112,22 +114,100 @@ true` — כדי שאמירות של תושבים לא יהפכו בשקט ל"י
 
 **מימוש M1 (2026-08-14):** ‏`scripts/lib/community/provision.mjs` (ליבה טהורה: descriptor ‏→ תוכנית צעדים עם `check()` פר־צעד, executor מוזרק, ‏`applyPlan` ‏fail-closed אידמפוטנטי, ‏`verifyDeployment`) + ‏CLI ‏`scripts/community-provision.mjs` ‏(`plan|apply|verify`). התוכנית: clone+checkout של התג הנעוץ (`community-engine-v0.1.0`) ‏→ ‏venv ‏→ ‏`pip install -e .` ‏→ ‏`npm ci` בגשר ‏→ הגנרטור (סעיף 3, בשימוש חוזר דרך ה־CLI הקיים) ‏→ ‏`hermes gateway install --no-start-now --start-on-login` עם ‏`HERMES_HOME` בסביבת התהליך (המנוע אופה אותו לתוך משגרי ה־Scheduled Task). בטיחות: סירוב לכל נתיב שנוגע ב־HOME החי, בקלון הייחוס או בפיילוט; אף gateway לא מותנע. **גבולות תחולה:** אימות ספק (OAuth אינטראקטיבי) וצימוד QR הם עניין האשף (M2) — ה־provisioning רק מאמת ומדווח (auth.json/creds.json, צעדי report בלבד).
 
-### 6.1 עקרון הממשק: הרמס מקנפג את עצמו, ה־skill מנחה (נהוראי, 2026-08-14)
+**מימוש M2 (2026-08-14):** שני skills מוצריים ב־`assets/community-skills/`
+(‏`community-bootstrap` — ראיון ההקמה; ‏`community-admin` — ניהול שוטף;
+עברית, תיאורי ניתוב ≤60 נאכפים בבדיקות מול הקבצים עצמם), מותקנים ע"י
+הגנרטור **לפרופיל ברירת־המחדל בלבד** עם נתיבי הפריסה האמיתיים מוחלפים
+בתבנית (`{{HOME_DIR}}`/`{{CONTRACT_PATH}}`/`{{INSTALL_ROOT}}`/
+`{{GENERATE_CLI}}`/`{{PROVISION_CLI}}` — placeholder לא פתור = סירוב).
+הגנרטור מרחיב את מפת ה־artifacts (ר' 3.2 ואימותי 6.1.1): ‏`.env` (שלושה
+מפתחות בבעלות, שאר השורות נשמרות), ‏`profiles/<slug>/config.yaml` (גידור
+toolset פר־קבוצה), ו־toolset ניהולי + ‏DM־למנהלים בקונפיג השורש. ‏verify
+משווה קונפיגים (שורש ופרופיל) לפי מפתחות אפקטיביים, ‏`.env` לפי מפתחות
+בבעלות בלבד, וכל השאר לפי checksum.
 
-`community.yaml` הוא **מצע, לא ממשק** — אף אדם לא עורך אותו. שלוש שכבות:
+### 6.1 עקרון הממשק: הרמס מקנפג את עצמו, ה־skill מנחה (נהוראי, 2026-08-14; עודכן במימוש M2)
+
+`community.yaml` הוא **מצע, לא ממשק** — אף אדם לא עורך אותו ביד. שלוש שכבות:
 1. **‏skill = הנחיה** — "הקמת קהילה" (ראיון מפעיל: קבוצות, מנהלים, ידע) ו"ניהול
    קהילה" (הוסף קבוצה / עדכן ידע / הצג מצב) — תיאורי ניתוב ≤60 תווים.
 2. **הסוכן = מבצע** — כותב את החוזה ומריץ את הכלי; עונה למנהל בשפה טבעית.
-3. **הגנרטור = כלי דטרמיניסטי fail-closed** — הסוכן לעולם לא עורך config.yaml
-   ידנית; רק דרך `community-generate` (שמסרב לקלט פסול) + ‏`verify`.
+3. **הגנרטור = כלי דטרמיניסטי fail-closed** — `community-generate` (מסרב לקלט
+   פסול) + ‏`verify`.
+
+**כלי מומלץ, לא איסור — הגבול הקשיח הוא ברמת הקהל** (תיקון עיצוב,
+2026-08-14): בערוץ הניהול הרמס נשאר סוכן מלא — ה־skills מציגים את הגנרטור
+כדרך המומלצת (מאמת מנהלים/JIDs, לא דורס מפתחות), אבל מותר לסוכן לקרוא
+ולערוך קבצים ישירות כשהכלי לא מכסה מקרה, ואז להריץ `verify` לאישור עקביות.
+הגבול שאינו נתון לפרשנות הוא **קהל הקבוצות**: פרופילי הקבוצות לא חושפים
+כלל יכולות קונפיג/קבצים/טרמינל — נאכף ב־**היעדר toolset** (ר' אימות 2
+להלן), לא בהנחיות טקסט (שטח prompt-injection).
 
 ערוצי השיחה: הקמה — צ'אט תכל'ס / ‏CLI; שוטף — **DM וואטסאפ למנהלים בלבד**:
 ‏DM לא תואם אף route ⇒ נופל לפרופיל ברירת־המחדל, שמקבל toolset ניהולי +
-‏skills הניהול; פרופילי הקבוצות נשארים מגודרים (בלי כלי ניהול). דורש מעבר
-מ־`dm_policy: disabled` ל־DM מוגבל למנהלים — **סמנטיקת `dm_policy`/`allow_from`
-טעונה אימות מקור לפני מימוש**, וכן אימות שה־toolset המגודר נאכף דרך קונפיג
-הפרופיל בזמן תור קבוצתי (עובדה 3). הערת פיילוט: כל עוד הבוט על מספר המפעיל,
-‏DM ניהולי = self-chat — הערוץ נהיה טבעי עם המספר הייעודי.
+‏skills הניהול; פרופילי הקבוצות נשארים מגודרים. הערת פיילוט: כל עוד הבוט על
+מספר המפעיל, ‏DM ניהולי = self-chat — הערוץ נהיה טבעי עם המספר הייעודי.
+
+#### 6.1.1 אימותי מקור (2026-08-14, הקלון על ענף pilot) — גוזרים את מימוש M2
+
+**אימות 1 — ‏DM למנהלים בלבד ניתן לביטוי נייטיבי, אבל כקונפיג דו־שכבתי.**
+ערכי `dm_policy` בשער ה־gateway: ‏`disabled | allowlist | pairing | open`
+(‏`whatsapp_common.py:266-289`; ברירת מחדל `pairing` — ‏`adapter.py:435`).
+‏`dm_policy: allowlist` + ‏`allow_from: [<מנהלים>]` בבלוק `whatsapp` נותן
+בדיוק את הרצוי: התאמה מול `allow_from` בלבד, כולל פתרון phone↔LID
+(‏`whatsapp_common.py:227-264`), ודחייה **שקטה** — ‏`_should_process_message`
+מחזיר False בלי שום תגובה, ו־DM לעולם לא נכנס ל־buffer
+(‏`adapter.py:1473-1477`; ‏`whatsapp_common.py:498-499`). קונפיג גובר על env:
+נוכחות `allow_from` ב־config בוחרת source="config" ומתעלמת מ־
+`WHATSAPP_ALLOWED_USERS` (‏`adapter.py:442-454`; ‏`_live_dm_allow_from`,
+‏`whatsapp_common.py:160-180`). **אבל** לגשר יש שער מוקדם משלו: במצב bot,
+כש־`WHATSAPP_DM_POLICY != 'pairing'`, כל הודעה נכנסת — **כולל של משתתפי
+קבוצות** — נבדקת מול allowlist השולחים של הגשר, ורשימה ריקה = דחיית הכל
+(‏`bridge.js:652`, ‏`allowlist.js:66-88`). לכן החלוקה: ‏`.env` נושא
+`WHATSAPP_ALLOWED_USERS=*` (+`WHATSAPP_MODE=bot`, ‏`WHATSAPP_ENABLED=true` —
+דפוס הפיילוט המוכח, ‏`start-pilot.ps1`) כדי שתעבורת קבוצות תעבור את הגשר,
+וה־gateway הוא נקודת האכיפה היחידה. ‏`.env` נטען עם override באתחול
+(‏`env_loader.py:495-500`), ולכן גם חוסם את שיקוף הקונפיג ל־env
+(‏`adapter.py:1892-1898` משקף רק כשה־env לא מוגדר). **פער M1 שהתגלה
+ותוקן:** בלי מפתחות ‏`.env` האלה, פריסת M1 הייתה נדחית כולה בשער הגשר
+(allowlist ריק) — הגנרטור מחזיק כעת בעלות על שלושת המפתחות.
+
+**אימות 2 — toolset פר־פרופיל אמיתי, אבל מחייב config.yaml פר־פרופיל.**
+‏`platform_toolsets` נפתר **בזמן התור**, לא באתחול: התור רץ תחת
+`_profile_runtime_scope` (‏`run.py:14350,17168,19548,20788`), ‏
+`_load_gateway_config()` קורא את ה־config של ה־HOME הסקופי
+(‏`run.py:3304-3312`), ומשם `_resolve_enabled_toolsets_for_source`
+(‏`run.py:20793-20826`) → ‏`_get_platform_tools` (‏`tools_config.py:2262`).
+**אין נפילה לקונפיג השורש**: פרופיל בלי `config.yaml` מקבל `{}` → ‏toolset
+ברירת־המחדל של הפלטפורמה `hermes-whatsapp` = **כל** ‏`_HERMES_CORE_TOOLS`
+כולל terminal/write_file/execute_code (‏`tools_config.py:2279-2286`;
+‏`toolsets.py:531-533,31-92`). **פער M1 שהתגלה ותוקן:** פלט M1 (פרופילים בלי
+config) נתן בפועל לתורים קבוצתיים את ה־toolset המלא. מימוש M2: הגנרטור
+כותב `profiles/<slug>/config.yaml` עם הגדר המגודר
+(`[web, skills, vision, clarify]` + write_approval), וקונפיג השורש (פרופיל
+ברירת־המחדל = ערוץ ה־DM הניהולי) מקבל toolset ניהולי
+(`[terminal, file, skills, web, clarify, todo]` — ‏terminal+file נחוצים להרצת
+ה־CLIs; אין מגבלת פלטפורמה על אלה בוואטסאפ, ‏`tools_config.py:216-228`).
+
+**אימות 3 — ‏skills נטענים מה־HOME של הפרופיל בתור מנותב.** אינדקס
+ה־skills נבנה מ־`get_skills_dir()` = ‏`get_hermes_home()/skills`
+(‏`prompt_builder.py:1742`; ‏`hermes_constants.py:1314-1316`), ו־
+`get_hermes_home()` מכבד את ה־override הקונטקסטואלי של הסקופ
+(‏`hermes_constants.py:114-134`). לכן פרופילי קבוצות רואים רק את
+`profiles/<slug>/skills` (ידע בלבד), ופרופיל ברירת־המחדל רואה את
+`<home>/skills` — לשם הגנרטור מתקין את skills הניהול. אגב־אימות:
+credentials לתורים מנותבים נפתרים עם fallback לקריאה־בלבד אל
+`auth.json` של השורש (‏`auth.py:1060-1124`; ‏`get_default_hermes_root` קורא
+את env ‏HERMES_HOME התהליכי — ‏`hermes_constants.py:173-198`), כך שפרופילי
+קבוצות עובדים בלי auth משלהם.
+
+**מגבלה מתועדת — גילוי JID בפריסה פעילה:** כשהגשר פתוח (`*`), הודעה
+מקבוצה לא־מוגדרת מגיעה ל־gateway ונבלעת בשקט בלי שום רישום (אין endpoint
+רשימת קבוצות בגשר; ‏debug של הגשר מצניע JID). טריק הלוג
+(`platforms/whatsapp/bridge.log`, שורות `event:ignored` עם JID מלא) עובד רק
+כשהגשר דוחה — מצב self-chat טרום־הגדרה או allowlist לא־תואם. ה־skills
+מתעדים זאת ביושר ומנחים חלון גילוי מבוקר; מועמד PR מנוע עתידי: endpoint
+‏`/groups` בגשר.
 
 **אילוצים חיצוניים שאינם "חוב" אלא מציאות המוצר** (מתועדים ללקוח): מספר
 וואטסאפ ייעודי פר קהילה (סיכון חסימה — Baileys), מכונה דלוקה 24/7 (מחשב

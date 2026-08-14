@@ -1,12 +1,18 @@
 import { describe, expect, it } from 'vitest'
 import yaml from 'js-yaml'
 import {
+  ADMIN_SKILLS,
+  ADMIN_TOOLSET,
+  GROUP_TOOLSET,
   HISTORY_BACKFILL_LIMIT,
-  WHATSAPP_TOOLSET,
+  OWNED_ENV,
+  buildEnvFile,
   buildGatewayConfig,
+  buildProfileConfig,
   buildRoutes,
   dumpConfig,
   generateArtifacts,
+  renderAdminSkill,
   renderKnowledgeSkill,
   wakeWordPattern
 } from './generate.mjs'
@@ -48,8 +54,48 @@ const sources = {
 }
 const readSource = p => sources[p]
 
-const gen = (existingConfigText = undefined) =>
-  generateArtifacts(contract(), { readKnowledgeSource: readSource, existingConfigText })
+// Hermetic admin-skill template fakes (the SHIPPED assets are validated by
+// admin-skills.test.mjs against the real files).
+const adminTemplates = {
+  'community-bootstrap': [
+    '---',
+    'name: community-bootstrap',
+    'description: "הקמת קהילה"',
+    '---',
+    '',
+    'הבית: {{HOME_DIR}}',
+    'החוזה: {{CONTRACT_PATH}}',
+    'גנרטור: {{GENERATE_CLI}}',
+    'provisioning: {{PROVISION_CLI}}',
+    'שורש: {{INSTALL_ROOT}}',
+    ''
+  ].join('\n'),
+  'community-admin': [
+    '---',
+    'name: community-admin',
+    'description: "ניהול קהילה"',
+    '---',
+    '',
+    'node "{{GENERATE_CLI}}" verify --contract "{{CONTRACT_PATH}}" --home "{{HOME_DIR}}"',
+    ''
+  ].join('\n')
+}
+
+const deployPaths = {
+  HOME_DIR: 'C:\\Community\\home',
+  CONTRACT_PATH: 'C:\\Community\\community.yaml',
+  INSTALL_ROOT: 'C:\\Community',
+  GENERATE_CLI: 'C:\\App\\scripts\\community-generate.mjs',
+  PROVISION_CLI: 'C:\\App\\scripts\\community-provision.mjs'
+}
+
+const gen = (overrides = {}) =>
+  generateArtifacts(contract(), {
+    readKnowledgeSource: readSource,
+    readAdminSkillTemplate: name => adminTemplates[name],
+    deployPaths,
+    ...overrides
+  })
 
 describe('gateway config generation', () => {
   const cfg = () => yaml.load(gen()['config.yaml'])
@@ -78,7 +124,11 @@ describe('gateway config generation', () => {
     const c = contract()
     c.groups[1].jid = c.groups[0].jid // hypothetical duplicate (validation forbids it; generation still must not double)
     const wa = yaml.load(
-      generateArtifacts(c, { readKnowledgeSource: readSource })['config.yaml']
+      generateArtifacts(c, {
+        readKnowledgeSource: readSource,
+        readAdminSkillTemplate: name => adminTemplates[name],
+        deployPaths
+      })['config.yaml']
     ).whatsapp
     expect(wa.group_allow_from).toEqual(['120363000000000001@g.us'])
   })
@@ -89,11 +139,24 @@ describe('gateway config generation', () => {
     expect(wa.group_allow_admin_from).toEqual(['972501234567', '972529876543'])
   })
 
-  it('requires a mention with the wake-word pattern, and disables DMs', () => {
+  it('requires a mention with the wake-word pattern', () => {
     const wa = cfg().whatsapp
     expect(wa.require_mention).toBe(true)
     expect(wa.mention_patterns).toEqual(['^תכלס'])
-    expect(wa.dm_policy).toBe('disabled')
+  })
+
+  it('admin-only DMs (§6.1): gateway dm_policy=allowlist over the admins, bridge stays open via .env', () => {
+    const wa = cfg().whatsapp
+    // Gateway layer: config allowlist wins over the env var at the adapter
+    // (adapter.py:442-454) — only admins may DM, everything else is silently
+    // dropped (whatsapp_common.py:276-289).
+    expect(wa.dm_policy).toBe('allowlist')
+    expect(wa.allow_from).toEqual(['972501234567', '972529876543'])
+    // Bridge layer: the bot-mode sender gate applies to GROUP participants too
+    // (bridge.js:652, empty allowlist = deny-all) — '*' keeps resident group
+    // traffic flowing so the gateway is the single enforcement point.
+    expect(OWNED_ENV.WHATSAPP_ALLOWED_USERS).toBe('*')
+    expect(OWNED_ENV.WHATSAPP_MODE).toBe('bot')
   })
 
   it('escapes regex metacharacters in the wake word', () => {
@@ -106,11 +169,18 @@ describe('gateway config generation', () => {
     expect(wa.history_backfill_limit).toBe(HISTORY_BACKFILL_LIMIT)
   })
 
-  it('pins the reduced public-group toolset and the write-approval gates (spec §5.1)', () => {
+  it('pins the ADMIN toolset on the ROOT config (default profile = admin DM channel, §6.1)', () => {
     const c = cfg()
-    expect(c.platform_toolsets.whatsapp).toEqual([...WHATSAPP_TOOLSET])
+    expect(c.platform_toolsets.whatsapp).toEqual([...ADMIN_TOOLSET])
     expect(c.memory.write_approval).toBe(true)
     expect(c.skills.write_approval).toBe(true)
+  })
+
+  it('the ADMIN toolset can run the CLIs (terminal+file) but never code_execution/delegation', () => {
+    expect(ADMIN_TOOLSET).toContain('terminal')
+    expect(ADMIN_TOOLSET).toContain('file')
+    expect(ADMIN_TOOLSET).not.toContain('code_execution')
+    expect(ADMIN_TOOLSET).not.toContain('delegation')
   })
 
   it('preserves the model block and other non-owned keys from an existing config', () => {
@@ -121,11 +191,11 @@ describe('gateway config generation', () => {
       memory: { memory_enabled: false },
       gateway: { port: 18789, profile_routes: [{ name: 'stale', platform: 'whatsapp', chat_id: 'x@g.us', profile: 'old' }] }
     })
-    const merged = yaml.load(gen(existing)['config.yaml'])
+    const merged = yaml.load(gen({ existingConfigText: existing })['config.yaml'])
     expect(merged.model).toEqual({ provider: 'anthropic', name: 'claude-x' })
     expect(merged.api_keys).toEqual({ anthropic: 'sk-test' })
     expect(merged.whatsapp.bridge_dir).toBe('/opt/bridge') // non-owned whatsapp key survives
-    expect(merged.whatsapp.dm_policy).toBe('disabled') // owned key is REWRITTEN from the contract
+    expect(merged.whatsapp.dm_policy).toBe('allowlist') // owned key is REWRITTEN from the contract
     expect(merged.memory.memory_enabled).toBe(false)
     expect(merged.memory.write_approval).toBe(true)
     expect(merged.gateway.port).toBe(18789)
@@ -143,16 +213,82 @@ describe('gateway config generation', () => {
   })
 })
 
+describe('.env generation (bridge posture — proven pilot pattern)', () => {
+  it('a fresh home gets exactly the owned keys', () => {
+    expect(gen()['.env']).toBe('WHATSAPP_ENABLED=true\nWHATSAPP_MODE=bot\nWHATSAPP_ALLOWED_USERS=*\n')
+  })
+
+  it('preserves non-owned lines (comments, other keys, engine-written entries) verbatim', () => {
+    const existing = '# operator note\nOPENAI_API_KEY=sk-abc\nWHATSAPP_MODE=self-chat\nCUSTOM=1\n'
+    const out = buildEnvFile(existing)
+    expect(out).toContain('# operator note')
+    expect(out).toContain('OPENAI_API_KEY=sk-abc')
+    expect(out).toContain('CUSTOM=1')
+    expect(out).toContain('WHATSAPP_MODE=bot') // owned key rewritten IN PLACE
+    expect(out).not.toContain('self-chat')
+  })
+
+  it('drops stale duplicates of an owned key (dotenv last-wins would override us)', () => {
+    const out = buildEnvFile('WHATSAPP_ALLOWED_USERS=*\nX=1\nWHATSAPP_ALLOWED_USERS=972501234567\n')
+    expect(out.match(/WHATSAPP_ALLOWED_USERS/g)).toHaveLength(1)
+    expect(out).toContain('WHATSAPP_ALLOWED_USERS=*')
+    expect(out).not.toContain('972501234567')
+  })
+
+  it('appends missing owned keys and ends with exactly one trailing newline', () => {
+    const out = buildEnvFile('FOO=bar')
+    expect(out.startsWith('FOO=bar\n')).toBe(true)
+    for (const [k, v] of Object.entries(OWNED_ENV)) expect(out).toContain(`${k}=${v}`)
+    expect(out.endsWith('\n')).toBe(true)
+    expect(out.endsWith('\n\n')).toBe(false)
+  })
+})
+
 describe('per-group artifacts', () => {
-  it('produces exactly the expected artifact paths', () => {
+  it('produces exactly the expected artifact paths (incl. profile configs + admin skills)', () => {
     expect(Object.keys(gen()).sort()).toEqual([
+      '.env',
       'config.yaml',
       'profiles/emergency/SOUL.md',
+      'profiles/emergency/config.yaml',
       'profiles/emergency/skills/emergency/SKILL.md',
       'profiles/emergency/skills/general/SKILL.md',
       'profiles/main/SOUL.md',
-      'profiles/main/skills/general/SKILL.md'
+      'profiles/main/config.yaml',
+      'profiles/main/skills/general/SKILL.md',
+      'skills/community-admin/SKILL.md',
+      'skills/community-bootstrap/SKILL.md'
     ])
+  })
+
+  it('every group profile pins the FENCED toolset in its own config.yaml (§6.1 — absent config = FULL default toolset)', () => {
+    for (const slug of ['main', 'emergency']) {
+      const pc = yaml.load(gen()[`profiles/${slug}/config.yaml`])
+      expect(pc.platform_toolsets.whatsapp).toEqual([...GROUP_TOOLSET])
+      expect(pc.memory.write_approval).toBe(true)
+      expect(pc.skills.write_approval).toBe(true)
+    }
+  })
+
+  it('the fenced GROUP toolset exposes no config/file/terminal capability (hard audience boundary)', () => {
+    for (const banned of ['terminal', 'file', 'code_execution', 'delegation', 'cronjob', 'memory']) {
+      expect(GROUP_TOOLSET).not.toContain(banned)
+    }
+  })
+
+  it('profile config merges over an existing profile config, preserving non-owned keys', () => {
+    const merged = yaml.load(
+      gen({
+        readProfileConfigText: slug =>
+          slug === 'main' ? yaml.dump({ model: { name: 'per-group-model' }, platform_toolsets: { whatsapp: ['terminal'] } }) : undefined
+      })['profiles/main/config.yaml']
+    )
+    expect(merged.model).toEqual({ name: 'per-group-model' })
+    expect(merged.platform_toolsets.whatsapp).toEqual([...GROUP_TOOLSET]) // owned: rewritten
+  })
+
+  it('buildProfileConfig refuses a non-mapping existing profile config', () => {
+    expect(() => buildProfileConfig('- nope\n')).toThrow(/not a YAML mapping/)
   })
 
   it('SOUL.md embeds the community name, wake word, group name and purpose', () => {
@@ -219,7 +355,70 @@ describe('per-group artifacts', () => {
   })
 
   it('fails closed when a knowledge source cannot be read', () => {
-    expect(() => generateArtifacts(contract(), { readKnowledgeSource: () => undefined })).toThrow(/could not be read/)
+    expect(() => gen({ readKnowledgeSource: () => undefined })).toThrow(/could not be read/)
     expect(() => generateArtifacts(contract(), {})).toThrow(TypeError)
+  })
+})
+
+describe('admin skills (default profile only)', () => {
+  it('installs every ADMIN_SKILLS entry under skills/ (default profile), never under group profiles', () => {
+    const artifacts = gen()
+    for (const name of ADMIN_SKILLS) {
+      expect(artifacts[`skills/${name}/SKILL.md`]).toBeDefined()
+      for (const slug of ['main', 'emergency']) {
+        expect(artifacts[`profiles/${slug}/skills/${name}/SKILL.md`]).toBeUndefined()
+      }
+    }
+  })
+
+  it('substitutes every deployment path into the installed skill', () => {
+    const boot = gen()['skills/community-bootstrap/SKILL.md']
+    for (const value of Object.values(deployPaths)) expect(boot).toContain(value)
+    expect(boot).not.toMatch(/\{\{[A-Z_]+\}\}/)
+  })
+
+  it('fails closed when a template is missing', () => {
+    expect(() => gen({ readAdminSkillTemplate: () => undefined })).toThrow(/could not be read/)
+    expect(() => generateArtifacts(contract(), { readKnowledgeSource: readSource })).toThrow(TypeError)
+  })
+
+  it('renderAdminSkill refuses a missing deploy path (unresolved commands are worse than an error)', () => {
+    expect(() =>
+      renderAdminSkill({
+        name: 'community-admin',
+        template: adminTemplates['community-admin'],
+        deployPaths: { ...deployPaths, HOME_DIR: '' }
+      })
+    ).toThrow(/HOME_DIR is required/)
+  })
+
+  it('renderAdminSkill refuses an unknown placeholder', () => {
+    expect(() =>
+      renderAdminSkill({
+        name: 'community-admin',
+        template: '---\nname: community-admin\ndescription: "x"\n---\n{{NOPE}}\n',
+        deployPaths
+      })
+    ).toThrow(/unknown placeholder/)
+  })
+
+  it('renderAdminSkill refuses a frontmatter name that differs from the skill directory', () => {
+    expect(() =>
+      renderAdminSkill({
+        name: 'community-admin',
+        template: '---\nname: other\ndescription: "x"\n---\nbody\n',
+        deployPaths
+      })
+    ).toThrow(/must equal the skill directory name/)
+  })
+
+  it('renderAdminSkill enforces the 60-char routing budget on the description (fact 9)', () => {
+    expect(() =>
+      renderAdminSkill({
+        name: 'community-admin',
+        template: `---\nname: community-admin\ndescription: "${'א'.repeat(61)}"\n---\nbody\n`,
+        deployPaths
+      })
+    ).toThrow(/routing budget/)
   })
 })

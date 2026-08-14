@@ -1,21 +1,38 @@
 // Community-mode drift verification. PURE — reads arrive via callbacks.
 //
 // The engine REWRITES config.yaml (comments stripped, keys reordered — observed
-// live 2026-08-14, spec §3.2), so config.yaml is never compared as text.
+// live 2026-08-14, spec §3.2), so config files are never compared as text.
 // Instead both sides are parsed and only the generator-OWNED keys are compared
 // as VALUES:
+//   * the ROOT config.yaml compares the full owned-gate view (routes, global
+//     acceptance gates, admin DM allowlist, admin toolset, write approvals);
+//   * each profiles/<slug>/config.yaml compares the PROFILE owned view (fenced
+//     toolset + write approvals) — spec §6.1: an absent/drifted profile config
+//     silently reopens the FULL default whatsapp toolset for that group;
+//   * `.env` compares the owned KEYS only (the engine appends its own entries,
+//     e.g. pairing writes — those are not drift);
 //   * profile_routes is read from EITHER the top-level or gateway.profile_routes
 //     (the engine accepts both spellings — docs/profile-routing.md);
 //   * list-valued gates (group_allow_from, admins, toolsets, mention_patterns)
 //     compare as order-insensitive sets — a reorder is not drift;
 //   * routes compare as a set of normalized {name, platform, chat_id, profile}.
 //
-// SOUL.md and knowledge skills are OURS alone — the engine does not rewrite
-// them — so they compare by SHA-256 over line-ending-normalized content.
+// SOUL.md, knowledge skills and the installed admin skills are OURS alone —
+// the engine does not rewrite them — so they compare by SHA-256 over
+// line-ending-normalized content.
 
 import { createHash } from 'node:crypto'
 import yaml from 'js-yaml'
-import { buildGatewayConfig, buildRoutes, wakeWordPattern, WHATSAPP_TOOLSET, HISTORY_BACKFILL_LIMIT } from './generate.mjs'
+import {
+  ADMIN_TOOLSET,
+  GROUP_TOOLSET,
+  HISTORY_BACKFILL_LIMIT,
+  OWNED_ENV,
+  buildGatewayConfig,
+  buildProfileConfig,
+  buildRoutes,
+  wakeWordPattern
+} from './generate.mjs'
 
 export function contentChecksum(text) {
   return createHash('sha256').update(text.replace(/\r\n/g, '\n'), 'utf8').digest('hex')
@@ -23,7 +40,7 @@ export function contentChecksum(text) {
 
 const sortedSet = list => [...new Set((list ?? []).map(String))].sort()
 
-/** Extract the generator-owned EFFECTIVE view from parsed config data. */
+/** Extract the generator-owned EFFECTIVE view from parsed ROOT config data. */
 export function effectiveOwnedView(cfgData) {
   const cfg = cfgData && typeof cfgData === 'object' && !Array.isArray(cfgData) ? cfgData : {}
   const gateway = cfg.gateway && typeof cfg.gateway === 'object' ? cfg.gateway : {}
@@ -47,6 +64,7 @@ export function effectiveOwnedView(cfgData) {
     'gateway.multiplex_profiles': gateway.multiplex_profiles === true,
     profile_routes: routes,
     'whatsapp.dm_policy': whatsapp.dm_policy,
+    'whatsapp.allow_from': sortedSet(whatsapp.allow_from),
     'whatsapp.group_policy': whatsapp.group_policy,
     'whatsapp.group_allow_from': sortedSet(whatsapp.group_allow_from),
     'whatsapp.allow_admin_from': sortedSet(whatsapp.allow_admin_from),
@@ -67,6 +85,47 @@ export function expectedOwnedView(contract) {
   return effectiveOwnedView(buildGatewayConfig(contract, undefined))
 }
 
+/** The generator-owned EFFECTIVE view of a PROFILE config (fenced toolset). */
+export function effectiveProfileOwnedView(cfgData) {
+  const cfg = cfgData && typeof cfgData === 'object' && !Array.isArray(cfgData) ? cfgData : {}
+  return {
+    'platform_toolsets.whatsapp': sortedSet(cfg.platform_toolsets?.whatsapp),
+    'memory.write_approval': cfg.memory?.write_approval === true,
+    'skills.write_approval': cfg.skills?.write_approval === true
+  }
+}
+
+/** The profile owned view is contract-independent (same fence for every group). */
+export function expectedProfileOwnedView() {
+  return effectiveProfileOwnedView(buildProfileConfig(undefined))
+}
+
+const ENV_LINE_RE = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)$/
+
+/** Parse `.env` text into the OWNED-key view (last occurrence wins — dotenv
+ * semantics — with surrounding quotes stripped). Non-owned lines are ignored:
+ * the engine legitimately appends its own entries. */
+export function effectiveEnvOwnedView(envText) {
+  const view = Object.fromEntries(Object.keys(OWNED_ENV).map(k => [k, undefined]))
+  for (const line of String(envText ?? '').split(/\r?\n/)) {
+    const m = ENV_LINE_RE.exec(line)
+    if (!m || !(m[1] in view)) continue
+    let value = m[2].trim()
+    if (
+      value.length >= 2 &&
+      ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'")))
+    ) {
+      value = value.slice(1, -1)
+    }
+    view[m[1]] = value
+  }
+  return view
+}
+
+export function expectedEnvOwnedView() {
+  return { ...OWNED_ENV }
+}
+
 /** Compare two owned views; returns the list of drifted key paths. */
 export function diffOwnedViews(expected, actual) {
   const drifted = []
@@ -76,12 +135,29 @@ export function diffOwnedViews(expected, actual) {
   return drifted
 }
 
+const PROFILE_CONFIG_RE = /^profiles\/[^/]+\/config\.yaml$/
+
+function verifyConfigEntry(relPath, actualText, expectedView, effectiveView) {
+  let parsed
+  try {
+    parsed = yaml.load(actualText)
+  } catch (err) {
+    return { path: relPath, status: 'drift', detail: `not parseable YAML: ${err.message}` }
+  }
+  const drifted = diffOwnedViews(expectedView, effectiveView(parsed))
+  return drifted.length === 0
+    ? { path: relPath, status: 'ok' }
+    : { path: relPath, status: 'drift', detail: `owned keys differ: ${drifted.join(', ')}` }
+}
+
 /**
  * Verify a FULL artifact map (from generateArtifacts) against a home — this is
- * THE verify surface: config.yaml by effective owned keys, every other
- * artifact (SOUL.md AND knowledge skills) by checksum. An absent file reports
- * `missing`, never `ok` (`readFile(relPath)` → text or null when absent; a
- * real read ERROR must throw in the caller, absence is the only soft outcome).
+ * THE verify surface: config files by effective owned keys (root and profile
+ * views respectively), `.env` by owned env keys, every other artifact
+ * (SOUL.md, knowledge skills AND admin skills) by checksum. An absent file
+ * reports `missing`, never `ok` (`readFile(relPath)` → text or null when
+ * absent; a real read ERROR must throw in the caller, absence is the only
+ * soft outcome).
  *
  * Returns `{ ok, artifacts: [{ path, status: 'ok'|'drift'|'missing', detail? }] }`.
  */
@@ -97,18 +173,19 @@ export function verifyArtifacts(contract, artifacts, { readFile } = {}) {
       continue
     }
     if (relPath === 'config.yaml') {
-      let parsed
-      try {
-        parsed = yaml.load(actual)
-      } catch (err) {
-        report.push({ path: relPath, status: 'drift', detail: `not parseable YAML: ${err.message}` })
-        continue
-      }
-      const drifted = diffOwnedViews(expectedOwnedView(contract), effectiveOwnedView(parsed))
+      report.push(verifyConfigEntry(relPath, actual, expectedOwnedView(contract), effectiveOwnedView))
+      continue
+    }
+    if (PROFILE_CONFIG_RE.test(relPath)) {
+      report.push(verifyConfigEntry(relPath, actual, expectedProfileOwnedView(), effectiveProfileOwnedView))
+      continue
+    }
+    if (relPath === '.env') {
+      const drifted = diffOwnedViews(expectedEnvOwnedView(), effectiveEnvOwnedView(actual))
       report.push(
         drifted.length === 0
           ? { path: relPath, status: 'ok' }
-          : { path: relPath, status: 'drift', detail: `owned keys differ: ${drifted.join(', ')}` }
+          : { path: relPath, status: 'drift', detail: `owned env keys differ: ${drifted.join(', ')}` }
       )
       continue
     }
@@ -123,4 +200,4 @@ export function verifyArtifacts(contract, artifacts, { readFile } = {}) {
 
 // Re-exported so CLI/test callers can assert the exact contract constants
 // without importing the generator internals separately.
-export { buildRoutes, wakeWordPattern, WHATSAPP_TOOLSET, HISTORY_BACKFILL_LIMIT }
+export { ADMIN_TOOLSET, GROUP_TOOLSET, HISTORY_BACKFILL_LIMIT, OWNED_ENV, buildRoutes, wakeWordPattern }

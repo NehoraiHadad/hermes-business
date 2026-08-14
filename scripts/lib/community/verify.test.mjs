@@ -2,10 +2,16 @@ import { describe, expect, it } from 'vitest'
 import yaml from 'js-yaml'
 import { generateArtifacts } from './generate.mjs'
 import {
+  GROUP_TOOLSET,
+  OWNED_ENV,
   contentChecksum,
   diffOwnedViews,
+  effectiveEnvOwnedView,
   effectiveOwnedView,
+  effectiveProfileOwnedView,
+  expectedEnvOwnedView,
   expectedOwnedView,
+  expectedProfileOwnedView,
   verifyArtifacts
 } from './verify.mjs'
 
@@ -37,7 +43,23 @@ function contract() {
 }
 
 const sources = { 'knowledge/general.md': '# ידע\nתוכן\n' }
-const gen = () => generateArtifacts(contract(), { readKnowledgeSource: p => sources[p] })
+const adminTemplates = {
+  'community-bootstrap': '---\nname: community-bootstrap\ndescription: "הקמה"\n---\n\nבית: {{HOME_DIR}} חוזה: {{CONTRACT_PATH}} כלי: {{GENERATE_CLI}} {{PROVISION_CLI}} שורש: {{INSTALL_ROOT}}\n',
+  'community-admin': '---\nname: community-admin\ndescription: "ניהול"\n---\n\nnode "{{GENERATE_CLI}}" verify --contract "{{CONTRACT_PATH}}" --home "{{HOME_DIR}}" ({{PROVISION_CLI}} {{INSTALL_ROOT}})\n'
+}
+const deployPaths = {
+  HOME_DIR: 'C:\\Community\\home',
+  CONTRACT_PATH: 'C:\\Community\\community.yaml',
+  INSTALL_ROOT: 'C:\\Community',
+  GENERATE_CLI: 'C:\\App\\scripts\\community-generate.mjs',
+  PROVISION_CLI: 'C:\\App\\scripts\\community-provision.mjs'
+}
+const gen = () =>
+  generateArtifacts(contract(), {
+    readKnowledgeSource: p => sources[p],
+    readAdminSkillTemplate: name => adminTemplates[name],
+    deployPaths
+  })
 
 // A fake home: relPath → content (null = absent).
 const homeReader = files => relPath => (relPath in files ? files[relPath] : null)
@@ -49,7 +71,10 @@ describe('verifyArtifacts — clean home', () => {
     expect(report.ok).toBe(true)
     expect(report.artifacts.map(a => a.status)).toEqual(report.artifacts.map(() => 'ok'))
     expect(report.artifacts.map(a => a.path)).toContain('config.yaml')
+    expect(report.artifacts.map(a => a.path)).toContain('.env')
+    expect(report.artifacts.map(a => a.path)).toContain('profiles/main/config.yaml')
     expect(report.artifacts.map(a => a.path)).toContain('profiles/main/skills/general/SKILL.md')
+    expect(report.artifacts.map(a => a.path)).toContain('skills/community-admin/SKILL.md')
   })
 })
 
@@ -68,7 +93,8 @@ describe('verifyArtifacts — the engine REWRITES config.yaml (values, not text)
           platform_toolsets: { whatsapp: [...parsed.platform_toolsets.whatsapp].reverse() },
           whatsapp: {
             ...parsed.whatsapp,
-            group_allow_from: [...parsed.whatsapp.group_allow_from].reverse()
+            group_allow_from: [...parsed.whatsapp.group_allow_from].reverse(),
+            allow_from: [...parsed.whatsapp.allow_from].reverse()
           },
           gateway: {
             ...parsed.gateway,
@@ -93,6 +119,18 @@ describe('verifyArtifacts — the engine REWRITES config.yaml (values, not text)
     const entry = report.artifacts.find(a => a.path === 'config.yaml')
     expect(entry.status).toBe('drift')
     expect(entry.detail).toContain('whatsapp.require_mention')
+  })
+
+  it('flags a widened DM allowlist (admin-only DM is an owned gate — §6.1)', () => {
+    const artifacts = gen()
+    const parsed = yaml.load(artifacts['config.yaml'])
+    parsed.whatsapp.allow_from = ['972501234567', '972000000000'] // stranger added
+    const home = { ...artifacts, 'config.yaml': yaml.dump(parsed) }
+    const entry = verifyArtifacts(contract(), artifacts, { readFile: homeReader(home) }).artifacts.find(
+      a => a.path === 'config.yaml'
+    )
+    expect(entry.status).toBe('drift')
+    expect(entry.detail).toContain('whatsapp.allow_from')
   })
 
   it('flags a JID missing from the allowlist union', () => {
@@ -132,6 +170,92 @@ describe('verifyArtifacts — the engine REWRITES config.yaml (values, not text)
   })
 })
 
+describe('verifyArtifacts — profile configs (fenced toolset is an owned gate, §6.1)', () => {
+  it('tolerates an engine rewrite of a profile config (owned VALUES unchanged)', () => {
+    const artifacts = gen()
+    const parsed = yaml.load(artifacts['profiles/main/config.yaml'])
+    const rewritten = yaml.dump(
+      {
+        skills: parsed.skills,
+        platform_toolsets: { whatsapp: [...parsed.platform_toolsets.whatsapp].reverse() },
+        memory: parsed.memory,
+        model: { name: 'engine-added' } // engine/operator addition is not drift
+      },
+      { sortKeys: false }
+    )
+    const home = { ...artifacts, 'profiles/main/config.yaml': rewritten }
+    const report = verifyArtifacts(contract(), artifacts, { readFile: homeReader(home) })
+    expect(report.ok, JSON.stringify(report.artifacts, null, 2)).toBe(true)
+  })
+
+  it('flags a widened profile toolset as drift (the group would gain terminal/file)', () => {
+    const artifacts = gen()
+    const parsed = yaml.load(artifacts['profiles/main/config.yaml'])
+    parsed.platform_toolsets.whatsapp = [...GROUP_TOOLSET, 'terminal']
+    const home = { ...artifacts, 'profiles/main/config.yaml': yaml.dump(parsed) }
+    const entry = verifyArtifacts(contract(), artifacts, { readFile: homeReader(home) }).artifacts.find(
+      a => a.path === 'profiles/main/config.yaml'
+    )
+    expect(entry.status).toBe('drift')
+    expect(entry.detail).toContain('platform_toolsets.whatsapp')
+  })
+
+  it('reports a deleted profile config as missing (the fence would silently open)', () => {
+    const artifacts = gen()
+    const home = Object.fromEntries(
+      Object.entries(artifacts).filter(([p]) => p !== 'profiles/emergency/config.yaml')
+    )
+    const entry = verifyArtifacts(contract(), artifacts, { readFile: homeReader(home) }).artifacts.find(
+      a => a.path === 'profiles/emergency/config.yaml'
+    )
+    expect(entry.status).toBe('missing')
+  })
+})
+
+describe('verifyArtifacts — .env (owned keys only)', () => {
+  it('tolerates engine-appended entries (pairing writes are not drift)', () => {
+    const artifacts = gen()
+    const home = { ...artifacts, '.env': artifacts['.env'] + 'OPENAI_API_KEY=sk-live\n# engine note\n' }
+    const report = verifyArtifacts(contract(), artifacts, { readFile: homeReader(home) })
+    expect(report.ok).toBe(true)
+  })
+
+  it('flags a narrowed bridge allowlist (residents would be dropped at the bridge)', () => {
+    const artifacts = gen()
+    const home = { ...artifacts, '.env': 'WHATSAPP_ENABLED=true\nWHATSAPP_MODE=bot\nWHATSAPP_ALLOWED_USERS=972501234567\n' }
+    const entry = verifyArtifacts(contract(), artifacts, { readFile: homeReader(home) }).artifacts.find(
+      a => a.path === '.env'
+    )
+    expect(entry.status).toBe('drift')
+    expect(entry.detail).toContain('WHATSAPP_ALLOWED_USERS')
+  })
+
+  it('flags a mode flip back to self-chat', () => {
+    const artifacts = gen()
+    const home = { ...artifacts, '.env': 'WHATSAPP_ENABLED=true\nWHATSAPP_MODE=self-chat\nWHATSAPP_ALLOWED_USERS=*\n' }
+    const entry = verifyArtifacts(contract(), artifacts, { readFile: homeReader(home) }).artifacts.find(
+      a => a.path === '.env'
+    )
+    expect(entry.status).toBe('drift')
+    expect(entry.detail).toContain('WHATSAPP_MODE')
+  })
+
+  it('reports a deleted .env as missing', () => {
+    const artifacts = gen()
+    const home = Object.fromEntries(Object.entries(artifacts).filter(([p]) => p !== '.env'))
+    const entry = verifyArtifacts(contract(), artifacts, { readFile: homeReader(home) }).artifacts.find(
+      a => a.path === '.env'
+    )
+    expect(entry.status).toBe('missing')
+  })
+
+  it('effectiveEnvOwnedView: last occurrence wins, quotes stripped, non-owned ignored', () => {
+    const view = effectiveEnvOwnedView('WHATSAPP_MODE="self-chat"\nOTHER=x\nWHATSAPP_MODE=\'bot\'\nWHATSAPP_ENABLED=true\nWHATSAPP_ALLOWED_USERS=*\n')
+    expect(view).toEqual(expectedEnvOwnedView())
+    expect(expectedEnvOwnedView()).toEqual({ ...OWNED_ENV })
+  })
+})
+
 describe('verifyArtifacts — text artifacts by checksum', () => {
   it('flags an edited SOUL.md as drift', () => {
     const artifacts = gen()
@@ -140,6 +264,18 @@ describe('verifyArtifacts — text artifacts by checksum', () => {
     const entry = report.artifacts.find(a => a.path === 'profiles/main/SOUL.md')
     expect(entry.status).toBe('drift')
     expect(report.ok).toBe(false)
+  })
+
+  it('flags an edited INSTALLED admin skill as drift (the shipped asset is authoritative)', () => {
+    const artifacts = gen()
+    const home = {
+      ...artifacts,
+      'skills/community-admin/SKILL.md': artifacts['skills/community-admin/SKILL.md'].replace('verify', 'destroy')
+    }
+    const entry = verifyArtifacts(contract(), artifacts, { readFile: homeReader(home) }).artifacts.find(
+      a => a.path === 'skills/community-admin/SKILL.md'
+    )
+    expect(entry.status).toBe('drift')
   })
 
   it('reports a deleted knowledge skill as missing', () => {
@@ -172,8 +308,17 @@ describe('effective owned view', () => {
   it('expectedOwnedView is derived from the contract alone', () => {
     const view = expectedOwnedView(contract())
     expect(view['gateway.multiplex_profiles']).toBe(true)
-    expect(view['whatsapp.dm_policy']).toBe('disabled')
+    expect(view['whatsapp.dm_policy']).toBe('allowlist')
+    expect(view['whatsapp.allow_from']).toEqual(['972501234567'])
     expect(view.profile_routes.map(r => r.profile).sort()).toEqual(['emergency', 'main'])
+  })
+
+  it('expectedProfileOwnedView pins the fenced toolset + write approvals', () => {
+    const view = expectedProfileOwnedView()
+    expect(view['platform_toolsets.whatsapp']).toEqual([...GROUP_TOOLSET].sort())
+    expect(view['memory.write_approval']).toBe(true)
+    expect(view['skills.write_approval']).toBe(true)
+    expect(effectiveProfileOwnedView(undefined)['memory.write_approval']).toBe(false)
   })
 
   it('reads routes from either the top-level or nested gateway form', () => {

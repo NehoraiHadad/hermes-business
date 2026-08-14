@@ -7,17 +7,24 @@
 // generate: validate the contract (fail-closed: empty/placeholder admins, bad
 //           JIDs, missing knowledge sources, >60-char skill descriptions all
 //           refuse), build the artifact map, write it idempotently. Existing
-//           non-owned config keys (model block etc.) are preserved.
+//           non-owned config keys (model block etc.) and non-owned .env lines
+//           are preserved. The shipped admin skills (assets/community-skills/)
+//           are installed into the DEFAULT profile's skills dir with the real
+//           deployment paths substituted; each group profile gets its own
+//           config.yaml pinning the fenced toolset (spec §6.1 — without it a
+//           routed turn falls back to the engine's FULL default toolset).
 // verify:   re-derive the expected artifacts and report per-artifact drift.
-//           config.yaml compares EFFECTIVE owned keys (the engine rewrites the
-//           file, stripping comments and reordering keys); SOUL.md/skills
-//           compare by checksum. Exit 1 on any drift/missing artifact.
+//           config files compare EFFECTIVE owned keys (the engine rewrites
+//           them, stripping comments and reordering keys), .env compares owned
+//           env keys; SOUL.md/skills compare by checksum. Exit 1 on any
+//           drift/missing artifact.
 //
 // Never starts a gateway, never deletes files.
 
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
 import process from 'node:process'
+import { fileURLToPath } from 'node:url'
 import { ContractError, loadContract } from './lib/community/contract.mjs'
 import { generateArtifacts } from './lib/community/generate.mjs'
 import { verifyArtifacts } from './lib/community/verify.mjs'
@@ -76,11 +83,29 @@ function main() {
     throw err
   }
 
-  const homeConfigPath = path.join(opts.home, 'config.yaml')
-  const existingConfigText = existsSync(homeConfigPath) ? readFileSync(homeConfigPath, 'utf8') : undefined
+  const readIfFile = p => (isFile(p) ? readFileSync(p, 'utf8') : undefined)
+
+  // Deployment paths baked into the installed admin skills. generateCli is
+  // THIS script; provisionCli is its sibling; installRoot is the home's parent
+  // (the provisioning layout: <root>/engine + <root>/home — provision.mjs).
+  const generateCli = fileURLToPath(import.meta.url)
+  const homeDir = path.resolve(opts.home)
+  const deployPaths = {
+    HOME_DIR: homeDir,
+    CONTRACT_PATH: path.resolve(opts.contract),
+    INSTALL_ROOT: path.dirname(homeDir),
+    GENERATE_CLI: generateCli,
+    PROVISION_CLI: path.join(path.dirname(generateCli), 'community-provision.mjs')
+  }
+  const assetsDir = path.join(path.dirname(generateCli), '..', 'assets', 'community-skills')
+
   const artifacts = generateArtifacts(contract, {
     readKnowledgeSource: source => readFileSync(resolveSource(source), 'utf8'),
-    existingConfigText
+    readAdminSkillTemplate: name => readIfFile(path.join(assetsDir, name, 'SKILL.md')),
+    deployPaths,
+    existingConfigText: readIfFile(path.join(opts.home, 'config.yaml')),
+    existingEnvText: readIfFile(path.join(opts.home, '.env')),
+    readProfileConfigText: slug => readIfFile(path.join(opts.home, 'profiles', slug, 'config.yaml'))
   })
 
   if (opts.command === 'generate') {
