@@ -83,6 +83,97 @@ class PolicyNormalization(TempHomeCase, unittest.TestCase):
         )
 
 
+class CommunitySources(TempHomeCase, unittest.TestCase):
+    """Community-contract grants (written by the Tachles community generator).
+
+    Live finding 2026-08-16: the gate skipped the pilot group's first triggered
+    reply (`business_whatsapp_read_only`) because only the owner surface could
+    authorize chats. `community_sources` authorizes EXACTLY the contract's
+    chats for process+reply without touching the owner's mode/behavior."""
+
+    def _write(self, payload):
+        business = self.home / "business"
+        business.mkdir(exist_ok=True)
+        (business / "whatsapp-policy.json").write_text(
+            json.dumps(payload), encoding="utf-8"
+        )
+
+    def test_community_group_processes_and_replies_under_owner_read_only(self):
+        self._write({
+            "mode": "read_only",
+            "reply_chats": [],
+            "reply_groups": [],
+            "sources": [],
+            "community_sources": [
+                {"id": "120363428948689789@g.us", "type": "group", "platform": "whatsapp"},
+                {"id": "972547401660@s.whatsapp.net", "type": "dm", "platform": "whatsapp"},
+            ],
+        })
+        policy = load_policy(self.home)
+        self.assertTrue(can_process(policy, "120363428948689789@g.us", platform="whatsapp"))
+        self.assertTrue(can_reply(policy, "120363428948689789@g.us", platform="whatsapp"))
+        self.assertTrue(can_reply(policy, "972547401660", platform="whatsapp"))
+        # A chat outside the contract stays fully governed by the owner surface.
+        self.assertFalse(can_process(policy, "9725231386456762@g.us", platform="whatsapp"))
+        self.assertFalse(can_reply(policy, "15551234567", platform="whatsapp"))
+
+    def test_community_grant_is_platform_scoped_and_does_not_leak_to_cloud(self):
+        self._write({
+            "mode": "read_only",
+            "reply_chats": [],
+            "reply_groups": [],
+            "sources": [],
+            "community_sources": [
+                {"id": "972547401660@s.whatsapp.net", "type": "dm", "platform": "whatsapp"},
+            ],
+        })
+        policy = load_policy(self.home)
+        self.assertTrue(can_reply(policy, "972547401660", platform="whatsapp"))
+        self.assertFalse(can_reply(policy, "972547401660", platform="whatsapp_cloud"))
+
+    def test_community_sources_do_not_widen_the_owner_surface(self):
+        self._write({
+            "mode": "selected_chats",
+            "behavior": "monitor",
+            "reply_chats": ["15551234567"],
+            "reply_groups": [],
+            "sources": [{"id": "15551234567", "type": "dm", "platform": "whatsapp"}],
+            "community_sources": [
+                {"id": "120363428948689789@g.us", "type": "group", "platform": "whatsapp"},
+            ],
+        })
+        policy = load_policy(self.home)
+        # Owner chat: monitor still blocks replies exactly as before.
+        self.assertTrue(can_process(policy, "15551234567", platform="whatsapp"))
+        self.assertFalse(can_reply(policy, "15551234567", platform="whatsapp"))
+        # Community chat: replies allowed.
+        self.assertTrue(can_reply(policy, "120363428948689789@g.us", platform="whatsapp"))
+
+    def test_malformed_community_entries_fail_closed(self):
+        self._write({
+            "mode": "read_only",
+            "reply_chats": [],
+            "reply_groups": [],
+            "sources": [],
+            "community_sources": [
+                "bare-string",
+                {"id": "", "type": "group", "platform": "whatsapp"},
+                {"id": "x@g.us", "type": "group", "platform": "telegram"},
+                {"id": "y@g.us", "type": "group", "platform": "whatsapp_cloud"},
+            ],
+        })
+        policy = load_policy(self.home)
+        self.assertEqual(policy["community_sources"], [])
+        self.assertFalse(can_reply(policy, "x@g.us", platform="whatsapp"))
+        # A corrupt file still fails closed for community chats too.
+        (self.home / "business" / "whatsapp-policy.json").write_text(
+            "{ not json", encoding="utf-8"
+        )
+        fallback = load_policy(self.home)
+        self.assertEqual(fallback["community_sources"], [])
+        self.assertFalse(can_reply(fallback, "120363428948689789@g.us", platform="whatsapp"))
+
+
 class PassiveIngest(TempHomeCase, unittest.TestCase):
     def test_preserves_alternation(self):
         store = Store()

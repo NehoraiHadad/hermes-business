@@ -174,6 +174,38 @@ re-verify on a clean machine.
   line-ending noise) — verify `git checkout --detach` is not blocked by them
   before the live overlay; if it is, stash is acceptable (docs-only paths).
 
+## Live pilot E2E (2026-08-16 evening) — in progress
+
+Contract applied to the LIVE home (user-authorized): group "נסיון - הרמס -
+תכלס קהילה" `120363428948689789@g.us` → village, admin 972547401660 → admin
+space, dms=admins; the family group `972523664504-1386456762@g.us` is
+deliberately OUT of the contract (negative test). Overlay + engine-deps ran
+exactly as designed (0.19.1→0.20.1, cryptography 48→50). Gateway restarted:
+whatsapp+telegram connected, multiplex ticks default/admin/village.
+
+VERIFIED LIVE: ambient group message observed with no trigger (session
+`20260816_180504_aaa4d41c`, profile_name=village, NO_REPLY stored).
+
+FOUND+FIXED live: the companion business-whatsapp-policy egress gate skipped
+the first triggered reply (`pre_gateway_dispatch skip:
+business_whatsapp_read_only`) — the owner-surface policy (selected_chats/
+monitor + stale placeholder sources) governs ALL WhatsApp egress and community
+turns share the gateway process. Fix: new generator-owned `community_sources`
+section in `business/whatsapp-policy.json` (exact contract groups + admin
+DMs, regenerated each apply, owner mode/behavior/sources preserved verbatim,
+unparseable file refused) + plugin `can_process`/`can_reply` grant community
+chats regardless of owner mode. KNOWN GAP: dms 'open' resident PRIVATE
+replies cannot be enumerated → still egress-blocked (groups unaffected);
+needs a dm-open grant flag if/when a community opts into open DMs.
+
+Group-discovery note: Tachles' native mechanism (readWhatsappDirectory ←
+official channel_directory.json) was consulted FIRST and was legitimately
+empty (Hermes only lists processed channels; groups were never allowed
+before). Bootstrap fallback used: user sends a message in the group, JID
+recovered from the Baileys session sender-key files
+(platforms/whatsapp/session/sender-key-<jid>--*.json) + bridge /chat/:id for
+the friendly name. After first processed group turn the directory lists it.
+
 ## Remaining work, in priority order
 
 1. Commit the single-home migration (exclude `.artifacts/`, `.claude/`,

@@ -12,6 +12,7 @@ import {
   SHARED_TOOLSET,
   buildEnvFile,
   buildArchivePolicy,
+  buildEgressPolicy,
   buildGatewayConfig,
   buildProfileConfig,
   buildRoutes,
@@ -353,6 +354,7 @@ describe('per-space artifacts (§2.1)', () => {
   it('produces exactly the expected artifact paths: profiles are per SPACE, not per group', () => {
     expect(Object.keys(gen()).sort()).toEqual([
       '.env',
+      'business/whatsapp-policy.json',
       'community/archive-policy.json',
       'config.yaml',
       'profiles/emergency/SOUL.md',
@@ -423,6 +425,61 @@ describe('per-space artifacts (§2.1)', () => {
       groups: [{ id: '120363000000000001@g.us', name: 'קבוצת היישוב הראשית' }]
     })
     expect(JSON.parse(gen()['community/archive-policy.json'])).toEqual(buildArchivePolicy(contract()))
+  })
+
+  // Live finding 2026-08-16: the companion business-whatsapp-policy gate held
+  // ALL WhatsApp egress read-only, so the pilot group's first triggered reply
+  // was skipped at dispatch. Community turns share the gateway process — the
+  // contract must authorize its chats in that gate too.
+  describe('egress policy (business-whatsapp-policy gate authorization)', () => {
+    it('grants exactly the contract groups + admin DMs as generator-owned community_sources', () => {
+      const policy = buildEgressPolicy(contract(), undefined)
+      expect(policy.community_sources).toEqual([
+        { id: '120363000000000001@g.us', type: 'group', platform: 'whatsapp' },
+        { id: '120363000000000002@g.us', type: 'group', platform: 'whatsapp' },
+        { id: '972501234567@s.whatsapp.net', type: 'dm', platform: 'whatsapp' },
+        { id: '972529876543@s.whatsapp.net', type: 'dm', platform: 'whatsapp' }
+      ])
+      // Absent file → the plugin's own fail-closed defaults for the OWNER surface.
+      expect(policy.mode).toBe('read_only')
+      expect(policy.behavior).toBe('monitor')
+      expect(policy.sources).toEqual([])
+    })
+
+    it('preserves the owner surface verbatim and only replaces community_sources (fixpoint)', () => {
+      const owner = {
+        version: 2,
+        mode: 'selected_chats',
+        behavior: 'assist',
+        instructions: 'עסקי',
+        reply_chats: ['972501111111'],
+        reply_groups: [],
+        sources: [{ id: '972501111111@s.whatsapp.net', name: 'לקוח', type: 'dm', platform: 'whatsapp' }],
+        community_sources: [{ id: 'stale@g.us', type: 'group', platform: 'whatsapp' }]
+      }
+      const merged = buildEgressPolicy(contract(), JSON.stringify(owner))
+      expect(merged.mode).toBe('selected_chats')
+      expect(merged.behavior).toBe('assist')
+      expect(merged.instructions).toBe('עסקי')
+      expect(merged.sources).toEqual(owner.sources)
+      expect(merged.community_sources.map(s => s.id)).not.toContain('stale@g.us')
+      // Re-running on the merged output is a no-op (fixpoint).
+      expect(buildEgressPolicy(contract(), JSON.stringify(merged))).toEqual(merged)
+    })
+
+    it('refuses to overwrite an unparseable policy file', () => {
+      expect(() => buildEgressPolicy(contract(), 'not json {')).toThrow(/refusing/)
+      expect(() => buildEgressPolicy(contract(), '[1,2]')).toThrow(/refusing/)
+    })
+
+    it('ships the policy as a generated artifact fed by the existing disk text', () => {
+      const artifacts = gen({
+        existingEgressPolicyText: JSON.stringify({ version: 2, mode: 'selected_chats', behavior: 'monitor', reply_chats: [], reply_groups: [], sources: [] })
+      })
+      const parsed = JSON.parse(artifacts['business/whatsapp-policy.json'])
+      expect(parsed.mode).toBe('selected_chats')
+      expect(parsed.community_sources.length).toBeGreaterThan(0)
+    })
   })
 
   // Pilot group, 2026-08-14: a clarify call parked the turn for 21+ minutes at

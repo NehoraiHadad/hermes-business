@@ -111,6 +111,7 @@ function main() {
     deployPaths,
     existingConfigText: readIfFile(path.join(opts.home, 'config.yaml')),
     existingEnvText: readIfFile(path.join(opts.home, '.env')),
+    existingEgressPolicyText: readIfFile(path.join(opts.home, 'business', 'whatsapp-policy.json')),
     readProfileConfigText: space => readIfFile(path.join(opts.home, 'profiles', space, 'config.yaml'))
   })
 

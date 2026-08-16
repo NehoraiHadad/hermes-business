@@ -303,6 +303,58 @@ export function buildGatewayConfig(contract, existingConfigText) {
   return cfg
 }
 
+/**
+ * The companion business-whatsapp-policy plugin holds ALL WhatsApp egress
+ * read-only/selected (native outbound ships unguarded — the gate is the
+ * layer's core value). Community turns run in the SAME gateway process, so
+ * contract-approved chats must be authorized there too, or every community
+ * reply is skipped (observed live 2026-08-16: `pre_gateway_dispatch skip:
+ * business_whatsapp_read_only` on the pilot group).
+ *
+ * `community_sources` is the GENERATOR-OWNED section of the policy file:
+ * exactly the contract's group JIDs + admin DMs, regenerated on every apply
+ * (an exact fence, like observe_allowed_chats). Everything else — the owner's
+ * mode/behavior/sources for the business surface — is preserved verbatim; an
+ * absent file starts from the plugin's own fail-closed defaults. A
+ * present-but-unparseable file is REFUSED, never overwritten.
+ *
+ * KNOWN GAP: under dms 'open', resident DMs cannot be enumerated here, so
+ * resident PRIVATE replies stay egress-blocked until the plugin learns a
+ * dm-open grant; group replies are unaffected.
+ */
+export function buildEgressPolicy(contract, existingPolicyText) {
+  let existing = null
+  if (typeof existingPolicyText === 'string' && existingPolicyText.trim()) {
+    let parsed
+    try {
+      parsed = JSON.parse(existingPolicyText)
+    } catch {
+      throw new Error('existing business/whatsapp-policy.json is not valid JSON — refusing to merge over it')
+    }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new Error('existing business/whatsapp-policy.json is not a JSON object — refusing to merge over it')
+    }
+    existing = parsed
+  }
+  const base = existing ?? {
+    // Mirrors the plugin's default_policy(): behavior-neutral for the owner
+    // surface (everything denied) until the owner configures it.
+    version: 2,
+    mode: 'read_only',
+    behavior: 'monitor',
+    reply_chats: [],
+    reply_groups: [],
+    sources: []
+  }
+  return {
+    ...base,
+    community_sources: [
+      ...contract.groups.map(g => ({ id: g.jid, type: 'group', platform: 'whatsapp' })),
+      ...contract.admins.map(a => ({ id: `${a}@s.whatsapp.net`, type: 'dm', platform: 'whatsapp' }))
+    ]
+  }
+}
+
 /** Server-owned allowlist for the read-only archive facade. Sensitive/isolated
  * groups are deliberately absent, so shared resident turns cannot query them. */
 export function buildArchivePolicy(contract) {
@@ -574,6 +626,7 @@ export function generateArtifacts(
     deployPaths,
     existingConfigText,
     existingEnvText,
+    existingEgressPolicyText,
     readProfileConfigText
   } = {}
 ) {
@@ -598,6 +651,9 @@ export function generateArtifacts(
   // runtime to route to — the community capability is active exactly when the
   // generated fences + archive policy exist in this home.
   artifacts['community/archive-policy.json'] = `${JSON.stringify(buildArchivePolicy(contract), null, 2)}\n`
+  // Egress authorization for contract chats in the companion WhatsApp gate —
+  // without it, community replies are silently skipped at dispatch.
+  artifacts['business/whatsapp-policy.json'] = `${JSON.stringify(buildEgressPolicy(contract, existingEgressPolicyText), null, 2)}\n`
 
   for (const name of COMMUNITY_ARCHIVE_PLUGIN_FILES) {
     const source = readCommunityPluginFile(name)
