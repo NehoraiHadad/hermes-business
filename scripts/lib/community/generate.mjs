@@ -111,12 +111,6 @@ export const ADMIN_TOOLSET = Object.freeze([
 ])
 export const HISTORY_BACKFILL_LIMIT = 50
 export const COMMUNITY_ARCHIVE_PLUGIN = 'community-archive'
-export const COMMUNITY_ACTIVATION_FILE = '.tachles-community.json'
-export const COMMUNITY_ACTIVATION = Object.freeze({
-  schema: 1,
-  mode: 'community',
-  active: true
-})
 export const COMMUNITY_ARCHIVE_PLUGIN_FILES = Object.freeze([
   '__init__.py',
   'filters.py',
@@ -180,10 +174,29 @@ function parseExistingConfig(existingConfigText, label) {
   return {}
 }
 
+/** Order-preserving union of an existing list value with owned additions. */
+const unionList = (existing, additions) => [
+  ...new Set([...(Array.isArray(existing) ? existing.map(String) : []), ...additions.map(String)])
+]
+
 /**
  * Merge the contract-owned keys into (a clone of) the existing ROOT config
- * object. Existing non-owned keys — including the model block — survive
- * verbatim.
+ * object — ADDITIVELY. This runs against the user's ONE real HERMES_HOME
+ * (user decision 2026-08-16: community is a capability of the single Hermes,
+ * never a second installation), so a pre-existing business deployment must
+ * keep working:
+ *   * allow/admin lists and mention patterns are UNIONED, never replaced;
+ *   * the root toolset, write approvals, dm_policy and history backfill are
+ *     written only when ABSENT — an explicit existing choice is the owner's;
+ *   * `session_search` stays ENABLED at root (the owner's own assistant);
+ *     the fence lives in the group profiles (buildProfileConfig);
+ *   * hard fences stay OWNED (exact): group_policy allowlist, the observation
+ *     retention list, require_mention, and the empty group slash surface —
+ *     observation gating is meaningless without them;
+ *   * profile_routes: routes claimed by the contract (whatsapp routes onto our
+ *     space profiles or onto contract group ids) are regenerated; any other
+ *     existing route survives verbatim.
+ * Existing non-owned keys — including the model block — survive verbatim.
  */
 export function buildGatewayConfig(contract, existingConfigText) {
   const cfg = clone(parseExistingConfig(existingConfigText, 'config.yaml')) ?? {}
@@ -194,52 +207,59 @@ export function buildGatewayConfig(contract, existingConfigText) {
   delete gateway.profile_routes
   cfg.gateway = gateway
 
-  cfg.profile_routes = buildRoutes(contract)
+  const ownedSlugs = new Set(contractSpaces(contract).map(space => space.slug))
+  const ownedJids = new Set(contract.groups.map(g => g.jid))
+  const existingRoutes = Array.isArray(cfg.profile_routes) ? cfg.profile_routes : []
+  const foreignRoutes = existingRoutes.filter(route => {
+    if (!route || typeof route !== 'object') return false
+    if (String(route.platform ?? '') !== 'whatsapp') return true
+    return !ownedSlugs.has(String(route.profile ?? '')) && !ownedJids.has(String(route.chat_id ?? ''))
+  })
+  cfg.profile_routes = [...foreignRoutes, ...buildRoutes(contract)]
 
   const whatsapp = asMapping(clone(cfg.whatsapp))
-  // Admin-only DMs (M2): gateway-level allowlist. The bridge stays open via
+  // Admin DMs (M2): gateway-level allowlist. The bridge stays open via
   // OWNED_ENV's WHATSAPP_ALLOWED_USERS=* — config presence wins at the
   // adapter, so this allowlist never leaks into the bridge sender gate.
-  whatsapp.dm_policy = 'allowlist'
-  whatsapp.allow_from = [...contract.admins]
+  // dm_policy is set only when absent: an existing home's explicit DM policy
+  // belongs to its owner.
+  if (whatsapp.dm_policy === undefined) whatsapp.dm_policy = 'allowlist'
+  whatsapp.allow_from = unionList(whatsapp.allow_from, contract.admins)
   whatsapp.group_policy = 'allowlist'
-  whatsapp.group_allow_from = [...new Set(contract.groups.map(g => g.jid))]
-  whatsapp.allow_admin_from = [...contract.admins]
-  whatsapp.group_allow_admin_from = [...contract.admins]
+  whatsapp.group_allow_from = unionList(whatsapp.group_allow_from, contract.groups.map(g => g.jid))
+  whatsapp.allow_admin_from = unionList(whatsapp.allow_admin_from, contract.admins)
+  whatsapp.group_allow_admin_from = unionList(whatsapp.group_allow_admin_from, contract.admins)
   // Residents get no slash-command surface in public groups. Allowlisted
   // admin DMs still retain Hermes' built-in /help and /whoami floor, which is
   // enough to discover/administer the agent without exposing group controls.
+  // OWNED (not merged): this is a fence, and the engine key is global.
   whatsapp.group_user_allowed_commands = []
   whatsapp.require_mention = true
-  whatsapp.mention_patterns = [wakeWordPattern(contract.wakeWord)]
+  whatsapp.mention_patterns = unionList(whatsapp.mention_patterns, [wakeWordPattern(contract.wakeWord)])
   whatsapp.observe_unmentioned_group_messages = true
+  // The retention fence is EXACT, never unioned: only non-isolated contract
+  // groups may have ambient traffic durably observed.
   whatsapp.observe_allowed_chats = contract.groups
     .filter(group => group.isolated !== true)
     .map(group => group.jid)
-  whatsapp.history_backfill = true
-  whatsapp.history_backfill_limit = HISTORY_BACKFILL_LIMIT
+  if (whatsapp.history_backfill === undefined) whatsapp.history_backfill = true
+  if (whatsapp.history_backfill_limit === undefined) whatsapp.history_backfill_limit = HISTORY_BACKFILL_LIMIT
   cfg.whatsapp = whatsapp
 
+  // Root toolset / approvals: seed the community defaults on a FRESH home,
+  // keep the owner's explicit configuration on an existing one. The group
+  // fences do not live here — they live in every space profile's config.
   const toolsets = asMapping(clone(cfg.platform_toolsets))
-  toolsets.whatsapp = [...ADMIN_TOOLSET]
+  if (toolsets.whatsapp === undefined) toolsets.whatsapp = [...ADMIN_TOOLSET]
   cfg.platform_toolsets = toolsets
 
   const memory = asMapping(clone(cfg.memory))
-  memory.write_approval = true
+  if (memory.write_approval === undefined) memory.write_approval = true
   cfg.memory = memory
 
   const skills = asMapping(clone(cfg.skills))
-  skills.write_approval = true
+  if (skills.write_approval === undefined) skills.write_approval = true
   cfg.skills = skills
-
-  const agent = asMapping(clone(cfg.agent))
-  agent.disabled_toolsets = [
-    ...new Set([
-      ...(Array.isArray(agent.disabled_toolsets) ? agent.disabled_toolsets : []),
-      ...DISABLED_COMMUNITY_TOOLSETS
-    ])
-  ]
-  cfg.agent = agent
 
   const plugins = asMapping(clone(cfg.plugins))
   plugins.enabled = [...new Set([...(Array.isArray(plugins.enabled) ? plugins.enabled : []), COMMUNITY_ARCHIVE_PLUGIN])]
@@ -532,7 +552,9 @@ export function generateArtifacts(
   const rootConfig = buildGatewayConfig(contract, existingConfigText)
   artifacts['config.yaml'] = dumpConfig(rootConfig)
   artifacts['.env'] = buildEnvFile(existingEnvText)
-  artifacts[COMMUNITY_ACTIVATION_FILE] = `${JSON.stringify(COMMUNITY_ACTIVATION, null, 2)}\n`
+  // No activation marker: under the single-home model there is no second
+  // runtime to route to — the community capability is active exactly when the
+  // generated fences + archive policy exist in this home.
   artifacts['community/archive-policy.json'] = `${JSON.stringify(buildArchivePolicy(contract), null, 2)}\n`
 
   for (const name of COMMUNITY_ARCHIVE_PLUGIN_FILES) {

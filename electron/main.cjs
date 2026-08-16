@@ -17,7 +17,6 @@ const { registerIpc } = require('./ipc.cjs')
 const { getRuntimeMode } = require('./runtime-mode.cjs')
 const { recordQaNamespaceApplied } = require('./qa-diagnostics.cjs')
 const { checkCompanionUpdate, isPassiveUpdateCheckDisabled, getLastCheckedAt } = require('./companion-update.cjs')
-const { startCommunityRuntime, stopCommunityWebSurface } = require('./community-runtime.cjs')
 
 // Application entry point. Owns only process lifecycle; every feature lives in a
 // dedicated module (runtime, windows, ipc, google-setup, plugin-install,
@@ -157,12 +156,6 @@ app.whenReady().then(async () => {
     rememberLog(`Gateway background setup failed: ${error.message || error}`)
   }
   await startHermes()
-  // A provisioned community deployment owns a separate pinned engine/home.
-  // Start its local pairing surface and its hash-scoped Hermes gateway without
-  // delaying the primary assistant when no community contract exists.
-  startCommunityRuntime().catch(error => {
-    rememberLog(`Community runtime startup failed: ${error.message || error}`)
-  })
   // Recover FIRST: finish any restart transaction a previous crash/quit left mid-flight BEFORE
   // activation runs. Activation can supersede or clear the journal, so recovery must complete
   // (or honestly fail) an interrupted transaction before that happens.
@@ -246,10 +239,6 @@ app.on('window-all-closed', () => {
 app.on('before-quit', event => {
   if (lifecycle.quitting) return
   lifecycle.quitting = true
-  // Only the local `hermes serve` pairing surface belongs to this Electron
-  // process. The separately registered community gateway keeps serving
-  // residents after the window/app exits.
-  stopCommunityWebSurface()
   if (hasRunningProcess()) {
     event.preventDefault()
     void stopHermes().finally(() => app.quit())

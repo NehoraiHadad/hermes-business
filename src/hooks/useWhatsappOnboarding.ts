@@ -17,13 +17,6 @@ export function useWhatsappOnboarding(mode: 'bot' | 'self-chat') {
   const pairing = useRef<string | null>(null)
   const appliedAllowedUsers = useRef('')
   const pollFailures = useRef(0)
-  const target = useRef<'main' | 'community'>('main')
-
-  const communityApi = useCallback(<T,>(endpoint: string, init?: { method?: string; body?: unknown }) => {
-    const api = window.hermesDesktop?.communityApi
-    if (!api) throw new Error('משטח החיבור של הקהילה אינו זמין. סגור ופתח את תכל׳ס מחדש.')
-    return api<T>(endpoint, init)
-  }, [])
 
   const stopPolling = useCallback(() => {
     if (timer.current !== null) {
@@ -35,9 +28,7 @@ export function useWhatsappOnboarding(mode: 'bot' | 'self-chat') {
   const poll = useCallback(
     async (id: string) => {
       try {
-        const next = target.current === 'community'
-          ? await communityApi<WhatsappOnboarding>(`/api/messaging/whatsapp/onboarding/${encodeURIComponent(id)}`)
-          : await hermesClient.pollWhatsappOnboarding(id)
+        const next = await hermesClient.pollWhatsappOnboarding(id)
         pollFailures.current = 0
         setError('')
         setOnboarding(next)
@@ -52,7 +43,7 @@ export function useWhatsappOnboarding(mode: 'bot' | 'self-chat') {
         }
       }
     },
-    [communityApi]
+    []
   )
 
   const start = useCallback(async () => {
@@ -61,27 +52,6 @@ export function useWhatsappOnboarding(mode: 'bot' | 'self-chat') {
     stopPolling()
     pollFailures.current = 0
     try {
-      const community = await window.hermesDesktop?.getCommunityRuntime?.()
-      if (community?.active === true && community.target === 'community') {
-        const ready = await window.hermesDesktop!.startCommunityRuntime()
-        if (!ready.running || !ready.gatewayStarted) {
-          throw new Error(ready.error || 'Hermes הקהילתי אינו פועל במלואו.')
-        }
-        target.current = 'community'
-        // The generated community contract owns the real DM/group allowlists.
-        // The bridge-level value stays open so those server-side gates can see
-        // every approved group message, including passive observations.
-        appliedAllowedUsers.current = '*'
-        const started = await communityApi<WhatsappOnboarding>(
-          '/api/messaging/whatsapp/onboarding/start',
-          { method: 'POST', body: { mode, allowed_users: '*', profile: 'default' } }
-        )
-        pairing.current = started.pairing_id
-        setOnboarding(started)
-        if (!isTerminalOnboardingStatus(started.status)) poll(started.pairing_id)
-        return
-      }
-      target.current = 'main'
       // Safety precondition, enforced identically in every mode: the messaging-policy
       // guard must be live before a channel may be paired, and the allow-list comes
       // from the policy the guard actually enforces — never from the form state.
@@ -104,25 +74,18 @@ export function useWhatsappOnboarding(mode: 'bot' | 'self-chat') {
     } finally {
       setBusy(false)
     }
-  }, [communityApi, mode, poll, stopPolling])
+  }, [mode, poll, stopPolling])
 
   const apply = useCallback(async () => {
     if (!pairing.current) return false
     setBusy(true)
     setError('')
     try {
-      if (target.current === 'community') {
-        await communityApi(`/api/messaging/whatsapp/onboarding/${encodeURIComponent(pairing.current)}/apply`, {
-          method: 'POST',
-          body: { mode, allowed_users: appliedAllowedUsers.current, profile: 'default' }
-        })
-      } else {
-        await hermesClient.applyWhatsappOnboarding(
-          pairing.current,
-          mode,
-          appliedAllowedUsers.current
-        )
-      }
+      await hermesClient.applyWhatsappOnboarding(
+        pairing.current,
+        mode,
+        appliedAllowedUsers.current
+      )
       pairing.current = null
       return true
     } catch (caught) {
@@ -131,34 +94,24 @@ export function useWhatsappOnboarding(mode: 'bot' | 'self-chat') {
     } finally {
       setBusy(false)
     }
-  }, [communityApi, mode])
+  }, [mode])
 
   const cancel = useCallback(() => {
     stopPolling()
     const id = pairing.current
     pairing.current = null
-    if (id) {
-      const request = target.current === 'community'
-        ? communityApi(`/api/messaging/whatsapp/onboarding/${encodeURIComponent(id)}`, { method: 'DELETE' })
-        : hermesClient.cancelWhatsappOnboarding(id)
-      request.catch(() => undefined)
-    }
+    if (id) hermesClient.cancelWhatsappOnboarding(id).catch(() => undefined)
     setOnboarding(null)
-  }, [communityApi, stopPolling])
+  }, [stopPolling])
 
   useEffect(
     () => () => {
       stopPolling()
       const id = pairing.current
       pairing.current = null
-      if (id) {
-        const request = target.current === 'community'
-          ? communityApi(`/api/messaging/whatsapp/onboarding/${encodeURIComponent(id)}`, { method: 'DELETE' })
-          : hermesClient.cancelWhatsappOnboarding(id)
-        request.catch(() => undefined)
-      }
+      if (id) hermesClient.cancelWhatsappOnboarding(id).catch(() => undefined)
     },
-    [communityApi, stopPolling]
+    [stopPolling]
   )
 
   return { onboarding, error, busy, start, apply, cancel }

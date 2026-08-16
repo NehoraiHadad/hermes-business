@@ -27,30 +27,28 @@ function Install-BusinessPayload {
     @{ Source = $partnerSkillSource;  Target = (Join-Path $HermesHome 'skills\business\business-partner\SKILL.md') }
   )
 
-  # Community tooling is callable by the official admin Hermes, but it always
-  # provisions a SEPARATE pinned engine + HERMES_HOME. The patched observer is
-  # therefore never mixed into, or selected as an update for, the official
-  # business runtime.
+  # Community capability tooling (SINGLE HOME, 2026-08-16 decision): the
+  # community generator/provisioner and their Skill entry points live inside
+  # the SAME HERMES_HOME the business assistant uses. Nothing here creates a
+  # second engine or home — the provisioner overlays the reviewed engine SHA
+  # onto the official editable checkout only when a community contract is
+  # actually applied (temporary until upstream PR #85490 merges).
   $communitySource = Join-Path $PayloadRoot 'community'
   if (-not (Test-Path -LiteralPath $communitySource -PathType Container)) {
-    throw "The community runtime payload is missing at $communitySource. No changes were made."
+    throw "The community tooling payload is missing at $communitySource. No changes were made."
   }
   $communityTarget = Join-Path $HermesHome 'tachles\community'
   $communityPayloadFiles = @(Get-ChildItem -LiteralPath $communitySource -File -Recurse)
   if ($communityPayloadFiles.Count -eq 0) {
-    throw "The community runtime payload is empty at $communitySource. No changes were made."
+    throw "The community tooling payload is empty at $communitySource. No changes were made."
   }
   foreach ($sourceFile in $communityPayloadFiles) {
     $relative = $sourceFile.FullName.Substring($communitySource.Length).TrimStart('\', '/')
     $files += @{ Source = $sourceFile.FullName; Target = (Join-Path $communityTarget $relative) }
   }
 
-  if ([string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) {
-    throw 'LOCALAPPDATA is unavailable; cannot choose an isolated community runtime root. No changes were made.'
-  }
-  $communityInstallRoot = Join-Path $env:LOCALAPPDATA 'TachlesCommunity'
-  $communityHome = Join-Path $communityInstallRoot 'home'
-  $communityContract = Join-Path $communityInstallRoot 'community.yaml'
+  $communityContract = Join-Path $HermesHome 'tachles\community.yaml'
+  $communityEngineDir = Join-Path $HermesHome 'hermes-agent'
   $communityGenerator = Join-Path $communityTarget 'scripts\community-generate.mjs'
   $communityProvisioner = Join-Path $communityTarget 'scripts\community-provision.mjs'
   foreach ($skillName in @('community-bootstrap', 'community-admin')) {
@@ -59,9 +57,9 @@ function Install-BusinessPayload {
       throw "The community Skill template is missing: $template. No changes were made."
     }
     $rendered = Get-Content -Raw -LiteralPath $template
-    $rendered = $rendered.Replace('{{HOME_DIR}}', $communityHome)
+    $rendered = $rendered.Replace('{{HOME_DIR}}', $HermesHome)
     $rendered = $rendered.Replace('{{CONTRACT_PATH}}', $communityContract)
-    $rendered = $rendered.Replace('{{INSTALL_ROOT}}', $communityInstallRoot)
+    $rendered = $rendered.Replace('{{INSTALL_ROOT}}', $communityEngineDir)
     $rendered = $rendered.Replace('{{GENERATE_CLI}}', $communityGenerator)
     $rendered = $rendered.Replace('{{PROVISION_CLI}}', $communityProvisioner)
     if ($rendered -match '\{\{[A-Z_]+\}\}') {

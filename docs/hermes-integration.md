@@ -18,11 +18,15 @@
 
 ## החלטה
 
-לעסק הפתרון נשאר **Hybrid דק מעל התקנת Hermes הרשמית**. מצב הקהילה משתמש
-זמנית ב־engine וב־`HERMES_HOME` נפרדים תחת `%LOCALAPPDATA%\TachlesCommunity`,
-מפני שה־WhatsApp observer עדיין ממתין למיזוג upstream. ההפרדה אינה מנוע סוכן
-חדש: זה אותו Hermes עם patch queue מקובע ומאומת; לאחר המיזוג חוזרים למהדורה
-הרשמית ומסירים את הפיצול.
+הפתרון הוא **Hybrid דק מעל התקנת Hermes רשמית אחת** — עסק וקהילה כאחד
+(החלטת משתמש 2026-08-16: התקנה אחת, gateway אחד, חיבור WhatsApp אחד,
+`HERMES_HOME` אחד). יכולת הקהילה היא תוספת על אותו Hermes: ‏profiles
+ו־`profile_routes` המקוריים מפרידים בין מרחבי הקבוצות, והכלי הסקופי
+`community_archive` קורא מאותו `state.db`. ה־WhatsApp observer שעדיין ממתין
+למיזוג upstream (‏PR ‏#85490) מוחל כ־overlay זמני: ‏checkout של SHA מאומת
+(‏`community-engine-v0.2.2`) בתוך אותו checkout רשמי (התקנה editable —
+נכנס לתוקף ללא התקנה מחדש), וה־updater מסרב לעדכן install נעוץ. לאחר
+המיזוג ה־overlay נמחק ו־`git checkout main` מחזיר למהדורה הרשמית.
 
 1. `business-shell` — Desktop Plugin בתוך Hermes המלא.
 2. Companion קטן — Electron client שמתחבר ל־`hermes serve`.

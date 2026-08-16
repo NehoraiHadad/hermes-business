@@ -1,45 +1,54 @@
-// Community-mode M1 provisioning core: deployment descriptor → step plan.
+// Community-mode provisioning core: deployment descriptor → step plan.
 // PURE — every effect and every filesystem/command probe goes through an
 // injected io interface, so the whole planner is unit-testable without disk,
-// network, git, python or schtasks (docs/specs/community-mode.md §6, M1).
+// network, git, python or schtasks (docs/specs/community-mode.md §6).
 //
-// The plan provisions a COMPLETE community deployment on a Windows machine:
-//   1. engine-clone      git clone of the pinned fork
-//   2. engine-checkout   fetch tags + detached checkout of the pinned ref
-//   3. venv-create       python -m venv <engine>/.venv (engine's own
-//                        _detect_venv_dir probes ".venv" under PROJECT_ROOT —
-//                        hermes_cli/gateway.py:2623 — so the service launcher
-//                        the engine later bakes finds this interpreter)
-//   4. engine-install    pip install -e . into the venv
-//   5. bridge-deps       npm ci in scripts/whatsapp-bridge
-//   6. home-generate     community generator apply (scripts/community-generate.mjs
-//                        — REUSED as a child process, never reimplemented; its
-//                        own refusal logic guards the HERMES_HOME target)
-//   7. gateway-service   hermes gateway install as a Windows auto-start
+// SINGLE-HOME MODEL (user decision 2026-08-16): community is a CAPABILITY of
+// the user's ONE Hermes installation — one engine, one gateway, one WhatsApp
+// connection, one HERMES_HOME. Nothing is cloned and no venv is created here;
+// the official Tachles bootstrap installs official Hermes (`pip install -e .`
+// into <engine>/venv — editable, so a git checkout below takes effect without
+// a reinstall), and this plan only ADDS the community capability:
+//   1. official-install  GATE (no commands): the official editable git
+//                        checkout + venv must already exist. A ZIP/non-git
+//                        install fails closed here — the overlay would
+//                        otherwise silently have no effect.
+//   2. engine-overlay    TEMPORARY until upstream PR #85490 merges: fetch the
+//                        reviewed fork tag BY URL (no remote bookkeeping —
+//                        idempotent) and detach-checkout the pinned SHA in the
+//                        SAME official checkout. The desktop updater already
+//                        classifies a detached/non-upstream checkout as
+//                        'pinned' and refuses to auto-update over it. When
+//                        the PR lands in an official release, this step is
+//                        deleted and `git checkout main` restores stock.
+//   3. profile-create    one `hermes profile create <slug> --no-alias
+//                        --no-skills` per contract space — Hermes' OWN profile
+//                        lifecycle, never a hand-rolled mkdir.
+//   4. home-generate     community generator apply (scripts/community-generate.mjs
+//                        — REUSED as a child process, never reimplemented). It
+//                        merges ADDITIVELY into the existing home (see
+//                        buildGatewayConfig) — a pre-existing business
+//                        deployment keeps working.
+//   5. gateway-service   hermes gateway install as a Windows auto-start
 //                        (Scheduled Task /SC ONLOGON w/ restart handling, or the
 //                        engine's Startup-folder fallback on locked-down boxes).
 //                        HERMES_HOME is threaded via the child process env: the
 //                        engine's install() → _write_task_script() reads
 //                        get_hermes_home() (env HERMES_HOME —
 //                        hermes_constants.py:_hermes_home_from_env) and BAKES it
-//                        into the generated launchers (`set "HERMES_HOME=…"` in
-//                        gateway.cmd, `env.Item("HERMES_HOME") = "…"` in
-//                        gateway.vbs — hermes_cli/gateway_windows.py:411,496),
-//                        so the logon task always starts the gateway on OUR home.
-//   8. auth-state        REPORT-ONLY: auth.json presence + openai-codex provider.
-//                        `hermes auth add openai-codex --type oauth` is an
-//                        INTERACTIVE device flow — a wizard (M2) concern.
-//                        Provisioning verifies and reports, never performs it.
-//   9. pairing-state     REPORT-ONLY: WhatsApp creds.json presence. QR pairing
-//                        is likewise a wizard concern.
+//                        into the generated launchers, so the logon task always
+//                        starts the gateway on THIS home.
+//   6. auth-state        REPORT-ONLY: auth.json presence + provider state.
+//                        Interactive OAuth is the companion UI's concern.
+//   7. pairing-state     REPORT-ONLY: WhatsApp creds.json presence. QR pairing
+//                        is likewise a UI concern.
 //
 // Fail-closed rules:
 //   * apply stops at the FIRST failing command; later steps are not attempted.
 //   * after a step's commands run, its check() is re-evaluated — a command that
 //     "succeeded" without producing the satisfied state is an error, not a pass.
-//   * safety: refuses any installRoot/homeDir inside (or containing) the live
-//     business install (%LOCALAPPDATA%\hermes), the read-only engine reference
-//     checkout, or the manual community pilot.
+//   * safety: refuses any engineDir/homeDir inside (or containing) the
+//     read-only reference checkouts or the manual pilot.
 //
 // io interface (all injected):
 //   io.isDir(absPath)  -> boolean
@@ -55,9 +64,6 @@ export const DEFAULT_ENGINE_REPO_URL = 'https://github.com/NehoraiHadad/hermes-a
 export const DEFAULT_ENGINE_REF = 'community-engine-v0.2.2'
 export const DEFAULT_ENGINE_SHA = 'af04eb8bb85e0a5b6333cd0104921b7e49bcf1f9'
 
-// Python range the engine accepts (pyproject.toml: requires-python >=3.11,<3.14),
-// newest-first so the venv gets the best interpreter available.
-export const PYTHON_MINORS = [13, 12, 11]
 
 export class ProvisionRefusedError extends Error {
   constructor(message) {
@@ -81,15 +87,17 @@ export class ProvisionStepError extends Error {
 // Safety: forbidden roots
 // ---------------------------------------------------------------------------
 
-/** Directories this provisioner must NEVER touch (spec M1 safety posture). */
-export function defaultForbiddenRoots(env = process.env) {
-  const roots = [
+/** Directories this provisioner must NEVER touch (spec M1 safety posture).
+ * NOTE: the live install (%LOCALAPPDATA%\hermes) is intentionally NOT listed —
+ * under the single-home model it IS the target. The read-only development
+ * checkouts and the manual pilot stay protected. */
+export function defaultForbiddenRoots() {
+  return [
     'C:\\projects\\hermes-agent', // read-only engine reference checkout
+    'C:\\projects\\hermes-agent-community-release', // fork release worktree
+    'C:\\projects\\hermes-agent-upstream-audit', // upstream PR audit worktree
     'C:\\projects\\hermes-community-pilot' // manual pilot deployment
   ]
-  const localAppData = (env.LOCALAPPDATA ?? '').trim()
-  if (localAppData) roots.push(path.join(localAppData, 'hermes')) // live business install
-  return roots
 }
 
 /** Windows-first path identity: resolved, no trailing separators, case-folded. */
@@ -111,8 +119,8 @@ export function isInsideOrEqual(candidate, root) {
  * CONTAINING one would put protected state inside a directory this tool treats
  * as its own install area.
  */
-export function assertSafeDeploymentPaths({ installRoot, homeDir }, forbiddenRoots = defaultForbiddenRoots()) {
-  for (const [label, target] of [['installRoot', installRoot], ['homeDir', homeDir]]) {
+export function assertSafeDeploymentPaths({ engineDir, homeDir }, forbiddenRoots = defaultForbiddenRoots()) {
+  for (const [label, target] of [['engineDir', engineDir], ['homeDir', homeDir]]) {
     if (typeof target !== 'string' || target.trim() === '') {
       throw new ProvisionRefusedError(`${label} is required`)
     }
@@ -144,37 +152,39 @@ export function venvPythonPath(venvDir, platform = process.platform) {
 
 /**
  * Normalize a deployment descriptor into the absolute-path layout every step
- * agrees on:
- *   <installRoot>/engine        pinned engine checkout
- *   <installRoot>/engine/.venv  its virtualenv
- *   <homeDir>                   HERMES_HOME (default <installRoot>/home)
+ * agrees on. SINGLE-HOME: the official Tachles/Hermes layout is reused as-is.
+ *   <homeDir>                     the ONE real HERMES_HOME
+ *   <homeDir>/hermes-agent        the official editable engine checkout
+ *   <homeDir>/hermes-agent/venv   the official venv (installer-created)
+ * `engineDir` may be overridden for non-standard installs; nothing else may.
  */
 export function normalizeDeployment(descriptor, { platform = process.platform } = {}) {
-  const { installRoot, contractPath } = descriptor ?? {}
-  if (typeof installRoot !== 'string' || installRoot.trim() === '') {
-    throw new ProvisionRefusedError('descriptor.installRoot is required')
+  const { homeDir, contractPath } = descriptor ?? {}
+  if (typeof homeDir !== 'string' || homeDir.trim() === '') {
+    throw new ProvisionRefusedError('descriptor.homeDir is required (the one real HERMES_HOME)')
   }
   if (typeof contractPath !== 'string' || contractPath.trim() === '') {
     throw new ProvisionRefusedError('descriptor.contractPath is required')
   }
-  const root = path.resolve(installRoot)
-  const engineDir = path.join(root, 'engine')
-  const venvDir = path.join(engineDir, '.venv')
+  const home = path.resolve(homeDir)
+  const engineDir = path.resolve(descriptor.engineDir || path.join(home, 'hermes-agent'))
+  const venvDir = path.join(engineDir, 'venv')
   const engineSha = descriptor.engineSha || DEFAULT_ENGINE_SHA
   if (!/^[0-9a-f]{40}$/i.test(engineSha)) {
     throw new ProvisionRefusedError('descriptor.engineSha must be a full 40-character commit SHA')
   }
+  if (isInsideOrEqual(home, engineDir)) {
+    throw new ProvisionRefusedError('homeDir must not live inside the engine checkout')
+  }
   return {
-    installRoot: root,
     engineRepoUrl: descriptor.engineRepoUrl || DEFAULT_ENGINE_REPO_URL,
     engineRef: descriptor.engineRef || DEFAULT_ENGINE_REF,
     engineSha: engineSha.toLowerCase(),
-    homeDir: path.resolve(descriptor.homeDir || path.join(root, 'home')),
+    homeDir: home,
     contractPath: path.resolve(contractPath),
     engineDir,
     venvDir,
-    venvPython: venvPythonPath(venvDir, platform),
-    bridgeDir: path.join(engineDir, 'scripts', 'whatsapp-bridge')
+    venvPython: venvPythonPath(venvDir, platform)
   }
 }
 
@@ -192,23 +202,9 @@ function probeVersion(probe, argv) {
   return null
 }
 
-/** Find a Python 3.11–3.13 launcher: `py -3.13` … then bare python/python3. */
-export function discoverPython(probe) {
-  const candidates = [
-    ...PYTHON_MINORS.map(minor => ['py', `-3.${minor}`]),
-    ['python'],
-    ['python3']
-  ]
-  for (const argv of candidates) {
-    const out = probeVersion(probe, argv)
-    if (!out) continue
-    const m = /Python\s+3\.(\d+)\.\d+/.exec(out)
-    if (m && PYTHON_MINORS.includes(Number(m[1]))) {
-      return { argv, version: out }
-    }
-  }
-  return null
-}
+// NOTE: no python discovery here on purpose — the single-home model uses the
+// official install's own venv interpreter (deployment.venvPython), never a
+// system Python.
 
 export function discoverTool(probe, name) {
   const out = probeVersion(probe, [name])
@@ -262,99 +258,87 @@ function defaultGeneratorScript() {
  * check() returns { satisfied, detail } for execute steps and
  * { satisfied, status: 'ok'|'missing'|'degraded', detail } for report steps.
  */
-export function buildPlan(deployment, tools, { generatorScript } = {}) {
+export function buildPlan(deployment, tools, { generatorScript, spaces = [] } = {}) {
   const d = deployment
   const git = tools?.git ?? ['git']
-  const python = tools?.python ?? ['py', '-3.13']
-  const npm = tools?.npm ?? ['npm']
   const node = tools?.node ?? [process.execPath]
   const genScript = generatorScript ?? defaultGeneratorScript()
   const gitDir = path.join(d.engineDir, '.git')
 
   const steps = []
 
+  // GATE — no commands on purpose: when unsatisfied, applyPlan runs nothing
+  // and the re-check still fails, aborting the whole apply with this detail.
+  // A ZIP/non-git official install MUST stop here: the overlay would checkout
+  // nothing and the plan would otherwise "succeed" on stock engine behavior.
   steps.push({
-    id: 'engine-clone',
+    id: 'official-install',
     kind: 'execute',
-    description: `clone pinned engine fork into ${d.engineDir}`,
-    commands: [{ argv: [...git, 'clone', d.engineRepoUrl, d.engineDir] }],
+    description: 'verify the official editable Hermes install (git checkout + venv)',
+    commands: [],
     check(io) {
-      return io.isDir(gitDir)
-        ? { satisfied: true, detail: `git checkout present at ${d.engineDir}` }
-        : { satisfied: false, detail: `no git checkout at ${d.engineDir}` }
+      if (!io.isDir(gitDir)) {
+        return {
+          satisfied: false,
+          detail:
+            `no git checkout at ${d.engineDir} — install official Hermes first (the Tachles installer does this); ` +
+            'a ZIP/non-git Hermes install cannot take the community engine overlay'
+        }
+      }
+      if (!io.isFile(d.venvPython)) {
+        return { satisfied: false, detail: `no venv interpreter at ${d.venvPython} — the official install is incomplete` }
+      }
+      return { satisfied: true, detail: `official editable install present at ${d.engineDir}` }
     }
   })
 
+  // TEMPORARY until upstream #85490 (WhatsApp observer) ships in an official
+  // release: overlay the reviewed fork SHA onto the SAME official checkout.
+  // Fetching BY URL keeps this idempotent with zero remote bookkeeping, and
+  // the editable install means the checkout takes effect with no reinstall.
   steps.push({
-    id: 'engine-checkout',
+    id: 'engine-overlay',
     kind: 'execute',
-    description: `pin engine to ${d.engineRef} at ${d.engineSha.slice(0, 12)} (fetch tags + detached checkout)`,
+    description: `overlay ${d.engineRef} at ${d.engineSha.slice(0, 12)} onto the official checkout (temporary until PR #85490 merges)`,
     commands: [
-      { argv: [...git, 'fetch', '--tags', 'origin'], cwd: d.engineDir },
+      { argv: [...git, 'fetch', d.engineRepoUrl, `refs/tags/${d.engineRef}`], cwd: d.engineDir },
       { argv: [...git, 'checkout', '--detach', d.engineSha], cwd: d.engineDir }
     ],
     check(io) {
-      if (!io.isDir(gitDir)) return { satisfied: false, detail: 'engine is not cloned yet' }
+      if (!io.isDir(gitDir)) return { satisfied: false, detail: 'official checkout is not present yet' }
       const head = io.probe({ argv: [...git, 'rev-parse', 'HEAD'], cwd: d.engineDir })
-      const want = io.probe({ argv: [...git, 'rev-parse', `${d.engineRef}^{commit}`], cwd: d.engineDir })
-      if (head.code !== 0 || want.code !== 0) {
-        return { satisfied: false, detail: `pinned ref ${d.engineRef} is not resolvable in the checkout yet` }
+      if (head.code !== 0) return { satisfied: false, detail: 'cannot resolve HEAD in the official checkout' }
+      const headSha = head.stdout.trim().toLowerCase()
+      return headSha === d.engineSha
+        ? { satisfied: true, detail: `HEAD is the pinned overlay ${d.engineRef} (${d.engineSha.slice(0, 12)})` }
+        : { satisfied: false, detail: `HEAD ${headSha.slice(0, 12)} != pinned ${d.engineSha.slice(0, 12)}` }
+    }
+  })
+
+  // Hermes' OWN profile lifecycle — never a hand-rolled mkdir (user principle
+  // 2026-08-16: use native mechanisms wherever one exists). --no-alias keeps
+  // PATH clean; --no-skills keeps bundled skills out of group spaces. The
+  // generator then writes each profile's fenced config.yaml on top.
+  for (const space of spaces) {
+    steps.push({
+      id: `profile-create:${space.slug}`,
+      kind: 'execute',
+      description: `hermes profile create ${space.slug} (native profile lifecycle)`,
+      commands: [
+        {
+          argv: [d.venvPython, '-m', 'hermes_cli.main', 'profile', 'create', space.slug, '--no-alias', '--no-skills'],
+          cwd: d.engineDir,
+          env: { ...PYTHON_ENV, HERMES_HOME: d.homeDir, HERMES_NONINTERACTIVE: '1' }
+        }
+      ],
+      check(io) {
+        const dir = path.join(d.homeDir, 'profiles', space.slug)
+        return io.isDir(dir)
+          ? { satisfied: true, detail: `profile directory present: ${dir}` }
+          : { satisfied: false, detail: `no profile directory at ${dir}` }
       }
-      const headSha = head.stdout.trim()
-      const wantSha = want.stdout.trim()
-      const expectedSha = d.engineSha.toLowerCase()
-      return headSha.toLowerCase() === expectedSha && wantSha.toLowerCase() === expectedSha
-        ? { satisfied: true, detail: `HEAD is ${d.engineRef} (${expectedSha.slice(0, 12)})` }
-        : {
-            satisfied: false,
-            detail: `HEAD ${headSha.slice(0, 12)} / ${d.engineRef} ${wantSha.slice(0, 12)} != pinned ${expectedSha.slice(0, 12)}`
-          }
-    }
-  })
-
-  steps.push({
-    id: 'venv-create',
-    kind: 'execute',
-    description: `create Python venv at ${d.venvDir}`,
-    commands: [{ argv: [...python, '-m', 'venv', d.venvDir], env: { ...PYTHON_ENV } }],
-    check(io) {
-      return io.isFile(d.venvPython)
-        ? { satisfied: true, detail: `venv interpreter present: ${d.venvPython}` }
-        : { satisfied: false, detail: `no venv interpreter at ${d.venvPython}` }
-    }
-  })
-
-  steps.push({
-    id: 'engine-install',
-    kind: 'execute',
-    description: 'pip install -e . (engine + hermes CLI into the venv)',
-    commands: [
-      { argv: [d.venvPython, '-m', 'pip', 'install', '-e', '.'], cwd: d.engineDir, env: { ...PYTHON_ENV } }
-    ],
-    check(io) {
-      if (!io.isFile(d.venvPython)) return { satisfied: false, detail: 'venv does not exist yet' }
-      const r = io.probe({
-        argv: [d.venvPython, '-c', 'import hermes_cli'],
-        cwd: d.engineDir,
-        env: { ...PYTHON_ENV }
-      })
-      return r.code === 0
-        ? { satisfied: true, detail: 'hermes_cli imports from the venv' }
-        : { satisfied: false, detail: 'hermes_cli is not importable from the venv' }
-    }
-  })
-
-  steps.push({
-    id: 'bridge-deps',
-    kind: 'execute',
-    description: `npm ci in ${d.bridgeDir}`,
-    commands: [{ argv: [...npm, 'ci'], cwd: d.bridgeDir }],
-    check(io) {
-      return io.isDir(path.join(d.bridgeDir, 'node_modules', '@whiskeysockets', 'baileys'))
-        ? { satisfied: true, detail: 'bridge node_modules present (baileys installed)' }
-        : { satisfied: false, detail: 'bridge node_modules missing or incomplete' }
-    }
-  })
+    })
+  }
 
   steps.push({
     id: 'home-generate',

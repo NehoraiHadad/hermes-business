@@ -39,14 +39,14 @@ function stageResource(resource: { from: string; to: string; filter: string[] },
   visit(sourceRoot)
 }
 
-describe('community installer isolation contract', () => {
-  it('renders the admin skills against a dedicated LocalAppData deployment', () => {
-    expect(installer).toContain("$communityInstallRoot = Join-Path $env:LOCALAPPDATA 'TachlesCommunity'")
-    expect(installer).toContain("$communityHome = Join-Path $communityInstallRoot 'home'")
-    expect(installer).toContain("$communityContract = Join-Path $communityInstallRoot 'community.yaml'")
-    expect(installer).toContain(".Replace('{{HOME_DIR}}', $communityHome)")
-    expect(installer).toContain(".Replace('{{INSTALL_ROOT}}', $communityInstallRoot)")
-    expect(installer).not.toContain(".Replace('{{INSTALL_ROOT}}', $HermesHome)")
+describe('community installer single-home contract', () => {
+  it('renders the community skills against the ONE real HERMES_HOME (no second root)', () => {
+    // 2026-08-16 decision: community is a capability of the single Hermes.
+    expect(installer).not.toContain('TachlesCommunity')
+    expect(installer).toContain(".Replace('{{HOME_DIR}}', $HermesHome)")
+    expect(installer).toContain("$communityContract = Join-Path $HermesHome 'tachles\\community.yaml'")
+    expect(installer).toContain("$communityEngineDir = Join-Path $HermesHome 'hermes-agent'")
+    expect(installer).toContain(".Replace('{{INSTALL_ROOT}}', $communityEngineDir)")
   })
 
   it('imports ESM js-yaml and argparse from an electron-builder-shaped payload without manifest drift', async () => {

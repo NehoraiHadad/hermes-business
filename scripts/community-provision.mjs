@@ -1,9 +1,16 @@
-// Community-mode M1 provisioning CLI (docs/specs/community-mode.md §6, M1).
+// Community-capability provisioning CLI — SINGLE HOME (2026-08-16 decision:
+// one Hermes install, one gateway, one WhatsApp connection, one HERMES_HOME).
 //
-//   node scripts/community-provision.mjs plan   --root <installRoot> --contract <community.yaml> [--home <dir>]
-//   node scripts/community-provision.mjs apply  --root <installRoot> --contract <community.yaml> [--home <dir>]
-//   node scripts/community-provision.mjs verify --root <installRoot> --contract <community.yaml> [--home <dir>]
-//   optional: --engine-repo <url> --engine-ref <tag> --engine-sha <40-char-sha>
+//   node scripts/community-provision.mjs plan   --contract <community.yaml> [--home <HERMES_HOME>]
+//   node scripts/community-provision.mjs apply  --contract <community.yaml> [--home <HERMES_HOME>]
+//   node scripts/community-provision.mjs verify --contract <community.yaml> [--home <HERMES_HOME>]
+//   optional: --engine-dir <dir> --engine-repo <url> --engine-ref <tag> --engine-sha <40-char-sha>
+//
+// `--home` defaults to %HERMES_HOME% and then %LOCALAPPDATA%\hermes — the
+// official install this capability is added to. Nothing is cloned and no venv
+// is created: the plan gates on the official editable install, overlays the
+// reviewed engine SHA (temporary until upstream PR #85490 merges), creates the
+// space profiles via Hermes' own `profile create`, and applies the generator.
 //
 // plan:   print the step plan with each step's current check status. No effects.
 // apply:  execute unsatisfied steps in order (fail-closed on the first nonzero
@@ -14,19 +21,19 @@
 // This CLI is the REAL executor; the planning/verification core is pure
 // (scripts/lib/community/provision.mjs) and fully unit-tested with fakes.
 // Never starts a gateway. Auth (interactive OAuth device flow) and WhatsApp QR
-// pairing are wizard concerns (M2) — verified and reported here, never run.
+// pairing are companion-UI concerns — verified and reported here, never run.
 
 import { spawnSync } from 'node:child_process'
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
 import process from 'node:process'
+import { contractSpaces, parseContract, validateContract } from './lib/community/contract.mjs'
 import {
   ProvisionRefusedError,
   ProvisionStepError,
   applyPlan,
   assertSafeDeploymentPaths,
   buildPlan,
-  discoverPython,
   discoverTool,
   normalizeDeployment,
   verifyDeployment,
@@ -36,9 +43,16 @@ import {
 function usage(message) {
   if (message) console.error(`community-provision: ${message}`)
   console.error(
-    'usage: node scripts/community-provision.mjs <plan|apply|verify> --root <installRoot> --contract <community.yaml> [--home <dir>] [--engine-repo <url>] [--engine-ref <ref>] [--engine-sha <40-char-sha>]'
+    'usage: node scripts/community-provision.mjs <plan|apply|verify> --contract <community.yaml> [--home <HERMES_HOME>] [--engine-dir <dir>] [--engine-repo <url>] [--engine-ref <ref>] [--engine-sha <40-char-sha>]'
   )
   process.exit(2)
+}
+
+function defaultHome(env = process.env) {
+  const fromEnv = (env.HERMES_HOME ?? '').trim()
+  if (fromEnv) return fromEnv
+  const localAppData = (env.LOCALAPPDATA ?? '').trim()
+  return localAppData ? path.join(localAppData, 'hermes') : null
 }
 
 function parseArgs(argv) {
@@ -49,16 +63,19 @@ function parseArgs(argv) {
   const opts = { command }
   for (let i = 0; i < rest.length; i++) {
     const arg = rest[i]
-    if (arg === '--root') opts.root = rest[++i]
-    else if (arg === '--contract') opts.contract = rest[++i]
+    if (arg === '--contract') opts.contract = rest[++i]
     else if (arg === '--home') opts.home = rest[++i]
+    else if (arg === '--engine-dir') opts.engineDir = rest[++i]
     else if (arg === '--engine-repo') opts.engineRepo = rest[++i]
     else if (arg === '--engine-ref') opts.engineRef = rest[++i]
     else if (arg === '--engine-sha') opts.engineSha = rest[++i]
     else usage(`unknown argument ${JSON.stringify(arg)}`)
   }
-  if (!opts.root) usage('--root <installRoot> is required')
   if (!opts.contract) usage('--contract <community.yaml> is required')
+  if (!opts.home) {
+    opts.home = defaultHome()
+    if (!opts.home) usage('--home is required when neither HERMES_HOME nor LOCALAPPDATA is set')
+  }
   return opts
 }
 
@@ -126,20 +143,14 @@ const realIo = {
 function discoverTools() {
   const probe = spec => spawnSpec(spec, { capture: true })
   const missing = []
+  // git is the ONLY external tool this plan needs: python lives in the
+  // official install's venv, and the generator runs under this same node.
   const git = discoverTool(probe, 'git')
   if (!git) missing.push('git — install from https://git-scm.com/download/win, then re-run')
-  const python = discoverPython(probe)
-  if (!python) {
-    missing.push('Python 3.11–3.13 — install with `winget install Python.Python.3.13` (the engine refuses 3.14+), then re-run')
-  }
-  const npm = discoverTool(probe, 'npm')
-  if (!npm) missing.push('npm — install Node.js from https://nodejs.org (or `winget install OpenJS.NodeJS.LTS`), then re-run')
   return {
     missing,
     tools: {
       git: git?.argv ?? ['git'],
-      python: python?.argv ?? ['py', '-3.13'],
-      npm: npm?.argv ?? ['npm'],
       node: [process.execPath]
     }
   }
@@ -159,9 +170,9 @@ function main() {
   let deployment
   try {
     deployment = normalizeDeployment({
-      installRoot: opts.root,
       contractPath: opts.contract,
       homeDir: opts.home,
+      engineDir: opts.engineDir,
       engineRepoUrl: opts.engineRepo,
       engineRef: opts.engineRef,
       engineSha: opts.engineSha
@@ -180,6 +191,25 @@ function main() {
     process.exit(1)
   }
 
+  // Space profiles come from the validated contract — an invalid contract must
+  // fail here, before any step could act on a half-parsed group list.
+  let spaces
+  try {
+    const raw = parseContract(readFileSync(deployment.contractPath, 'utf8'))
+    const validated = validateContract(raw, {
+      fileExists: source => existsSync(path.resolve(path.dirname(deployment.contractPath), source))
+    })
+    if (!validated.ok) {
+      console.error('community-provision: community.yaml is invalid:')
+      for (const e of validated.errors) console.error(`  - ${e}`)
+      process.exit(1)
+    }
+    spaces = contractSpaces(validated.contract)
+  } catch (err) {
+    console.error(`community-provision: cannot read the community contract: ${err.message}`)
+    process.exit(1)
+  }
+
   const { missing, tools } = discoverTools()
   if (missing.length > 0) {
     for (const m of missing) console.error(`community-provision: missing prerequisite: ${m}`)
@@ -190,11 +220,11 @@ function main() {
     console.error('community-provision: continuing with nominal tool names — statuses below may be incomplete')
   }
 
-  const steps = buildPlan(deployment, tools)
+  const steps = buildPlan(deployment, tools, { spaces })
 
-  console.log(`deployment: root=${deployment.installRoot}`)
-  console.log(`            engine=${deployment.engineRepoUrl} @ ${deployment.engineRef} (${deployment.engineSha})`)
-  console.log(`            home=${deployment.homeDir}`)
+  console.log(`deployment: home=${deployment.homeDir} (the ONE HERMES_HOME)`)
+  console.log(`            engine=${deployment.engineDir}`)
+  console.log(`            overlay=${deployment.engineRepoUrl} @ ${deployment.engineRef} (${deployment.engineSha}) — temporary until PR #85490 merges`)
   console.log(`            contract=${deployment.contractPath}`)
   console.log('')
 

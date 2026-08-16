@@ -2,6 +2,15 @@
 
 Date: 2026-08-16 (Asia/Jerusalem)
 
+> **SUPERSEDED (2026-08-16, same day):** the user rejected the two-runtime
+> architecture described below. The authoritative continuation is
+> [community-single-home-2026-08-16.md](community-single-home-2026-08-16.md):
+> ONE Hermes installation, one gateway, one WhatsApp connection, one
+> HERMES_HOME. The two-runtime implementation is preserved on branch
+> `archive/two-runtime-506c378`. Sections below describing
+> `%LOCALAPPDATA%\TachlesCommunity`, the activation marker, and the community
+> provider bridge are historical.
+
 ## Objective and product contract
 
 Finish a pilot-downloadable Tachles community system while keeping Hermes as

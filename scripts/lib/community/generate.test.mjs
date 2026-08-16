@@ -3,12 +3,9 @@ import yaml from 'js-yaml'
 import {
   ADMIN_SKILLS,
   ADMIN_TOOLSET,
-  COMMUNITY_ACTIVATION,
-  COMMUNITY_ACTIVATION_FILE,
   COMMUNITY_ARCHIVE_PLUGIN,
   COMMUNITY_ARCHIVE_PLUGIN_FILES,
   COMMUNITY_ARCHIVE_TOOL,
-  DISABLED_COMMUNITY_TOOLSETS,
   GROUP_TOOLSET,
   HISTORY_BACKFILL_LIMIT,
   OWNED_ENV,
@@ -218,12 +215,27 @@ describe('gateway config generation', () => {
     expect(plugins.entries[COMMUNITY_ARCHIVE_PLUGIN].allow_tool_override).toBe(false)
   })
 
-  it('pins the ADMIN toolset on the ROOT config (default profile = admin DM channel, §6.1)', () => {
+  it('seeds the ADMIN toolset + approvals on a FRESH home and keeps session_search at root', () => {
     const c = cfg()
     expect(c.platform_toolsets.whatsapp).toEqual([...ADMIN_TOOLSET])
-    expect(c.agent.disabled_toolsets).toEqual(expect.arrayContaining([...DISABLED_COMMUNITY_TOOLSETS]))
     expect(c.memory.write_approval).toBe(true)
     expect(c.skills.write_approval).toBe(true)
+    // Single-home decision (2026-08-16): the ROOT is the owner's own
+    // assistant — session_search stays enabled there. The fence lives in the
+    // space profiles only.
+    expect(c.agent?.disabled_toolsets ?? []).not.toContain('session_search')
+  })
+
+  it('keeps an existing home’s explicit toolset and approvals (community is additive)', () => {
+    const existing = yaml.dump({
+      platform_toolsets: { whatsapp: ['web', 'terminal', 'code_execution'] },
+      memory: { write_approval: false },
+      skills: { write_approval: false }
+    })
+    const c = yaml.load(gen({ existingConfigText: existing })['config.yaml'])
+    expect(c.platform_toolsets.whatsapp).toEqual(['web', 'terminal', 'code_execution'])
+    expect(c.memory.write_approval).toBe(false)
+    expect(c.skills.write_approval).toBe(false)
   })
 
   it('the ADMIN toolset can run the CLIs (terminal+file) but never code_execution/delegation', () => {
@@ -245,7 +257,7 @@ describe('gateway config generation', () => {
     expect(merged.model).toEqual({ provider: 'anthropic', name: 'claude-x' })
     expect(merged.api_keys).toEqual({ anthropic: 'sk-test' })
     expect(merged.whatsapp.bridge_dir).toBe('/opt/bridge') // non-owned whatsapp key survives
-    expect(merged.whatsapp.dm_policy).toBe('allowlist') // owned key is REWRITTEN from the contract
+    expect(merged.whatsapp.dm_policy).toBe('open') // an EXPLICIT existing DM policy is the owner's (set-if-absent)
     expect(merged.memory.memory_enabled).toBe(false)
     expect(merged.memory.write_approval).toBe(true)
     expect(merged.gateway.port).toBe(18789)
@@ -256,6 +268,42 @@ describe('gateway config generation', () => {
 
   it('refuses a non-mapping existing config instead of clobbering it', () => {
     expect(() => buildGatewayConfig(contract(), '- a\n- list\n')).toThrow(/not a YAML mapping/)
+  })
+
+  it('UNIONS allow lists and mention patterns with an existing business home', () => {
+    const existing = yaml.dump({
+      whatsapp: {
+        allow_from: ['972999999999'],
+        group_allow_from: ['120363999999999999@g.us'],
+        allow_admin_from: ['972999999999'],
+        mention_patterns: ['^עסק']
+      }
+    })
+    const wa = yaml.load(gen({ existingConfigText: existing })['config.yaml']).whatsapp
+    const admins = contract().admins
+    const jids = contract().groups.map(g => g.jid)
+    expect(wa.allow_from).toEqual(expect.arrayContaining(['972999999999', ...admins]))
+    expect(wa.group_allow_from).toEqual(expect.arrayContaining(['120363999999999999@g.us', ...jids]))
+    expect(wa.allow_admin_from).toEqual(expect.arrayContaining(['972999999999', ...admins]))
+    expect(wa.mention_patterns).toEqual(expect.arrayContaining(['^עסק', wakeWordPattern(contract().wakeWord)]))
+    // The retention fence stays EXACT — never unioned with pre-existing groups.
+    expect(wa.observe_allowed_chats).toEqual(
+      contract().groups.filter(g => g.isolated !== true).map(g => g.jid)
+    )
+  })
+
+  it('preserves foreign profile_routes and regenerates only contract-claimed ones', () => {
+    const foreign = { name: 'biz-team', platform: 'discord', chat_id: '123', profile: 'work' }
+    const stale = { name: 'stale', platform: 'whatsapp', chat_id: contract().groups[0].jid, profile: 'old-space' }
+    const staleVillage = { name: 'old-village', platform: 'whatsapp', chat_id: 'x@g.us', profile: SHARED_SPACE }
+    const existing = yaml.dump({ profile_routes: [foreign, stale, staleVillage] })
+    const routes = yaml.load(gen({ existingConfigText: existing })['config.yaml']).profile_routes
+    expect(routes).toContainEqual(foreign)
+    expect(routes.filter(r => r.chat_id === contract().groups[0].jid)).toEqual(
+      buildRoutes(contract()).filter(r => r.chat_id === contract().groups[0].jid)
+    )
+    expect(routes.find(r => r.name === 'old-village')).toBeUndefined()
+    expect(routes.find(r => r.name === 'stale')).toBeUndefined()
   })
 
   it('dumps deterministically (stable key order, no folding)', () => {
@@ -298,7 +346,6 @@ describe('per-space artifacts (§2.1)', () => {
   it('produces exactly the expected artifact paths: profiles are per SPACE, not per group', () => {
     expect(Object.keys(gen()).sort()).toEqual([
       '.env',
-      COMMUNITY_ACTIVATION_FILE,
       'community/archive-policy.json',
       'config.yaml',
       'profiles/emergency/SOUL.md',
@@ -346,10 +393,6 @@ describe('per-space artifacts (§2.1)', () => {
         .toBe(artifacts[`plugins/${COMMUNITY_ARCHIVE_PLUGIN}/${name}`])
       expect(artifacts[`profiles/emergency/plugins/${COMMUNITY_ARCHIVE_PLUGIN}/${name}`]).toBeUndefined()
     }
-  })
-
-  it('writes the explicit activation marker consumed by desktop routing', () => {
-    expect(JSON.parse(gen()[COMMUNITY_ACTIVATION_FILE])).toEqual(COMMUNITY_ACTIVATION)
   })
 
   it('the fenced toolsets expose no config/file/terminal capability (hard audience boundary)', () => {

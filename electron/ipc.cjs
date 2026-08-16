@@ -40,12 +40,6 @@ const { guardStatusWithActivation, readGuardActivationJournal } = require('./wha
 const { openFullSurface } = require('./open-full.cjs')
 const { checkCompanionUpdate } = require('./companion-update.cjs')
 const {
-  getCommunityRuntime,
-  startCommunityRuntime,
-  communityApi
-} = require('./community-runtime.cjs')
-const { assertAllowedCommunityApiEndpoint } = require('./community-runtime-config.cjs')
-const {
   normalizeOpenFileFilters,
   createSerialGuard,
   assertAllowedApiEndpoint,
@@ -145,14 +139,6 @@ function registerIpc() {
   ipcMain.handle('hermes:google:finish', (_event, code) => finishGoogleSetup(code))
   ipcMain.handle('hermes:google:status', getGoogleStatus)
   ipcMain.handle('hermes:gateway:ensure', () => ensureGatewayBackground())
-  // The community engine is a separate pinned checkout and HERMES_HOME. Its
-  // renderer surface is intentionally only status/start + guided WhatsApp and
-  // provider onboarding; no generic filesystem/config API crosses this boundary.
-  ipcMain.handle('hermes:community:runtime', () => getCommunityRuntime())
-  ipcMain.handle('hermes:community:start', () => startCommunityRuntime())
-  ipcMain.handle('hermes:community:api', (_event, endpoint, init) =>
-    communityApi(assertAllowedCommunityApiEndpoint(endpoint), sanitizeApiInit(init))
-  )
   registerMessagingPolicyIpc(ipcMain)
   ipcMain.handle('hermes:open-external', (_event, url) => {
     if (!isAllowedExternalUrl(url)) throw new Error('External URL is not allowed')

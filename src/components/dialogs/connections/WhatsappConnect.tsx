@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react'
 import { ShieldCheck } from 'lucide-react'
 import type { Connection } from '../../../types'
 import { Modal } from '../../ui/Modal'
@@ -20,30 +19,6 @@ export function WhatsappConnect({
   onConnected: (id: string) => void
 }) {
   const official = Boolean(connection.official)
-  const [runtimeTarget, setRuntimeTarget] = useState<'resolving' | 'business' | 'community'>(
-    official ? 'business' : 'resolving'
-  )
-
-  useEffect(() => {
-    if (official) {
-      setRuntimeTarget('business')
-      return
-    }
-    let active = true
-    const getRuntime = window.hermesDesktop?.getCommunityRuntime
-    if (!getRuntime) {
-      setRuntimeTarget('business')
-      return
-    }
-    getRuntime()
-      .then(status => {
-        if (active) setRuntimeTarget(status.active === true && status.target === 'community' ? 'community' : 'business')
-      })
-      .catch(() => {
-        if (active) setRuntimeTarget('business')
-      })
-    return () => { active = false }
-  }, [official])
 
   return (
     <Modal title={`חיבור ${connection.name}`} subtitle={connection.description} onClose={onClose}>
@@ -60,15 +35,6 @@ export function WhatsappConnect({
           </div>
         </div>
 
-        <div className="info-inline" data-testid="whatsapp-runtime-target">
-          <ShieldCheck size={17} />
-          {runtimeTarget === 'resolving'
-            ? 'בודק לאיזה Hermes החיבור שייך…'
-            : runtimeTarget === 'community'
-              ? 'המספר יחובר ל־Hermes הקהילתי המבודד.'
-              : 'המספר יחובר ל־Hermes העסקי הראשי.'}
-        </div>
-
         {!official ? (
           <div className="warning-box">
             <ShieldCheck size={18} />
@@ -76,19 +42,12 @@ export function WhatsappConnect({
           </div>
         ) : null}
 
-        {/* A generated community contract already owns the server-side group
-            and admin fences. Reusing the business-policy form here would edit
-            the WRONG (official/main) Hermes home, so community pairing stays a
-            single QR action. */}
-        {runtimeTarget === 'business' || official ? (
-          <>
-            <WhatsappPolicyForm
-              groupsEnabled={!official}
-              platform={official ? 'whatsapp_cloud' : 'whatsapp'}
-            />
-            <hr className="whatsapp-connect__divider" />
-          </>
-        ) : null}
+        <WhatsappPolicyForm
+          groupsEnabled={!official}
+          platform={official ? 'whatsapp_cloud' : 'whatsapp'}
+        />
+
+        <hr className="whatsapp-connect__divider" />
 
         {official ? (
           <WhatsappCloudConnect onConnected={() => onConnected(connection.id)} />

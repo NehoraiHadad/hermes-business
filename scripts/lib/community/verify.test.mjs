@@ -130,12 +130,22 @@ describe('verifyArtifacts — the engine REWRITES config.yaml (values, not text)
     expect(entry.detail).toContain('whatsapp.require_mention')
   })
 
-  it('flags a widened DM allowlist (admin-only DM is an owned gate — §6.1)', () => {
+  it('accepts an owner-widened DM allowlist but flags a REMOVED community admin (fixpoint)', () => {
     const artifacts = gen()
-    const parsed = yaml.load(artifacts['config.yaml'])
-    parsed.whatsapp.allow_from = ['972501234567', '972000000000'] // stranger added
-    const home = { ...artifacts, 'config.yaml': yaml.dump(parsed) }
-    const entry = verifyArtifacts(contract(), artifacts, { readFile: homeReader(home) }).artifacts.find(
+    // Owner added their own DM contact — additive single-home semantics: not drift.
+    const widened = yaml.load(artifacts['config.yaml'])
+    widened.whatsapp.allow_from = [...widened.whatsapp.allow_from, '972000000000']
+    const widenedHome = { ...artifacts, 'config.yaml': yaml.dump(widened) }
+    expect(
+      verifyArtifacts(contract(), artifacts, { readFile: homeReader(widenedHome) }).artifacts.find(
+        a => a.path === 'config.yaml'
+      ).status
+    ).toBe('ok')
+    // A community admin dropped from the allowlist breaks the fixpoint: drift.
+    const dropped = yaml.load(artifacts['config.yaml'])
+    dropped.whatsapp.allow_from = dropped.whatsapp.allow_from.filter(v => v !== contract().admins[0])
+    const droppedHome = { ...artifacts, 'config.yaml': yaml.dump(dropped) }
+    const entry = verifyArtifacts(contract(), artifacts, { readFile: homeReader(droppedHome) }).artifacts.find(
       a => a.path === 'config.yaml'
     )
     expect(entry.status).toBe('drift')

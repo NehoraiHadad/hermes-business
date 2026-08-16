@@ -89,14 +89,15 @@ function main() {
   const readIfFile = p => (isFile(p) ? readFileSync(p, 'utf8') : undefined)
 
   // Deployment paths baked into the installed admin skills. generateCli is
-  // THIS script; provisionCli is its sibling; installRoot is the home's parent
-  // (the provisioning layout: <root>/engine + <root>/home — provision.mjs).
+  // THIS script; provisionCli is its sibling; INSTALL_ROOT is the official
+  // engine checkout inside the ONE home (single-home layout —
+  // <home>/hermes-agent, provision.mjs normalizeDeployment).
   const generateCli = fileURLToPath(import.meta.url)
   const homeDir = path.resolve(opts.home)
   const deployPaths = {
     HOME_DIR: homeDir,
     CONTRACT_PATH: path.resolve(opts.contract),
-    INSTALL_ROOT: path.dirname(homeDir),
+    INSTALL_ROOT: path.join(homeDir, 'hermes-agent'),
     GENERATE_CLI: generateCli,
     PROVISION_CLI: path.join(path.dirname(generateCli), 'community-provision.mjs')
   }

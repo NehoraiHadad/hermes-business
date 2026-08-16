@@ -1,7 +1,7 @@
 import { ExternalLink, LoaderCircle, ShieldCheck } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { hermesClient } from '../../../lib/hermes-client'
-import type { HermesProviderApi, OAuthStart } from '../../../lib/hermes/providers'
+import type { OAuthStart } from '../../../lib/hermes/providers'
 
 const sleep = (milliseconds: number) => new Promise(resolve => window.setTimeout(resolve, milliseconds))
 
@@ -20,16 +20,12 @@ export function DeviceFlowOAuth({
   connectLabel,
   description,
   note,
-  providerApi = hermesClient,
-  recordEvidence = true,
   onConnected
 }: {
   providerId: string
   connectLabel: string
   description: string
   note?: string
-  providerApi?: HermesProviderApi
-  recordEvidence?: boolean
   onConnected: () => void
 }) {
   const [session, setSession] = useState<OAuthStart | null>(null)
@@ -42,24 +38,22 @@ export function DeviceFlowOAuth({
     cancelled.current = false
     return () => {
       cancelled.current = true
-      if (sessionId.current) void providerApi.cancelOAuth(sessionId.current).catch(() => undefined)
+      if (sessionId.current) void hermesClient.cancelOAuth(sessionId.current).catch(() => undefined)
     }
-  }, [providerApi])
+  }, [])
 
   const finish = async () => {
-    const { model } = await providerApi.activateProvider(providerId)
-    if (recordEvidence) {
-      await hermesClient
-        .recordProviderEvidence({
-          provider: providerId,
-          model: model || null,
-          validatedAt: new Date().toISOString(),
-          ok: true,
-          reachable: true,
-          method: 'validate'
-        })
-        .catch(() => {})
-    }
+    const { model } = await hermesClient.activateProvider(providerId)
+    await hermesClient
+      .recordProviderEvidence({
+        provider: providerId,
+        model: model || null,
+        validatedAt: new Date().toISOString(),
+        ok: true,
+        reachable: true,
+        method: 'validate'
+      })
+      .catch(() => {})
     if (!cancelled.current) onConnected()
   }
 
@@ -68,7 +62,7 @@ export function DeviceFlowOAuth({
     setError('')
     cancelled.current = false
     try {
-      const next = await providerApi.startOAuth(providerId)
+      const next = await hermesClient.startOAuth(providerId)
       sessionId.current = next.session_id
       setSession(next)
       await hermesClient.openExternal(next.verification_url).catch(() => undefined)
@@ -79,7 +73,7 @@ export function DeviceFlowOAuth({
         await sleep(interval)
         let result
         try {
-          result = await providerApi.pollOAuth(providerId, next.session_id)
+          result = await hermesClient.pollOAuth(providerId, next.session_id)
           transientFailures = 0
         } catch (pollError) {
           transientFailures += 1

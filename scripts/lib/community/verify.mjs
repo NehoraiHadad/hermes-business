@@ -84,16 +84,26 @@ export function effectiveOwnedView(cfgData) {
     'plugins.community-archive.enabled': sortedSet(cfg.plugins?.enabled).includes('community-archive'),
     'plugins.community-archive.disabled': sortedSet(cfg.plugins?.disabled).includes('community-archive'),
     'plugins.community-archive.allow_tool_override': cfg.plugins?.entries?.['community-archive']?.allow_tool_override === false,
-    'agent.session_search.disabled': sortedSet(cfg.agent?.disabled_toolsets).includes('session_search'),
+    // Root deliberately does NOT assert session_search-disabled: the owner's
+    // own assistant keeps it (2026-08-16 single-home decision). The fence is
+    // asserted per space profile in effectiveProfileOwnedView.
     'memory.write_approval': cfg.memory?.write_approval === true,
     'skills.write_approval': cfg.skills?.write_approval === true
   }
 }
 
-/** The owned view the CONTRACT demands — derived without any existing config,
- * because every owned key is fully determined by the contract. */
-export function expectedOwnedView(contract) {
-  return effectiveOwnedView(buildGatewayConfig(contract, undefined))
+/** The owned view the CONTRACT demands of THIS home — a FIXPOINT check.
+ *
+ * The generator merges ADDITIVELY into the one real HERMES_HOME (unions for
+ * allow lists, set-only-if-absent for owner-owned keys), so the expected view
+ * is no longer derivable from the contract alone. Instead: re-running
+ * `buildGatewayConfig(contract, <config as it stands on disk>)` must be a
+ * no-op on every owned key. A removed admin, a dropped fence, or a missing
+ * plugin registration breaks the fixpoint and reports as drift; an owner's
+ * own additions (extra allow-list entries, their toolset) survive both sides
+ * and verify clean. */
+export function expectedOwnedView(contract, existingConfigText) {
+  return effectiveOwnedView(buildGatewayConfig(contract, existingConfigText))
 }
 
 /** The generator-owned EFFECTIVE view of a PROFILE config (fenced toolset +
@@ -213,7 +223,16 @@ export function verifyArtifacts(contract, artifacts, { readFile } = {}) {
       continue
     }
     if (relPath === 'config.yaml') {
-      report.push(verifyConfigEntry(relPath, actual, expectedOwnedView(contract), effectiveOwnedView))
+      // The fixpoint expectation re-parses the disk text; unparseable YAML is
+      // drift (verifyConfigEntry would classify it the same way), never a throw.
+      let rootExpected
+      try {
+        rootExpected = expectedOwnedView(contract, actual)
+      } catch (err) {
+        report.push({ path: relPath, status: 'drift', detail: `not parseable YAML: ${err.message}` })
+        continue
+      }
+      report.push(verifyConfigEntry(relPath, actual, rootExpected, effectiveOwnedView))
       continue
     }
     const profileConfig = PROFILE_CONFIG_RE.exec(relPath)
