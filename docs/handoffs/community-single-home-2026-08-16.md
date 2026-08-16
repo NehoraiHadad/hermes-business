@@ -150,6 +150,30 @@ gateway-service `is_installed` check was satisfied on the scratch home —
 likely the dev machine's Startup-fallback registration is not home-scoped;
 re-verify on a clean machine.
 
+## Live-machine findings (2026-08-16, evening)
+
+- WhatsApp pairing on the live home is ALIVE: number 972552610571 ("Test_1",
+  `me_id 972552610571:44@s.whatsapp.net`), QR-scanned before 2026-08-04,
+  survived 12 days offline — gateway started 2026-08-16 16:21 and the bridge
+  reports connected with `WHATSAPP_DM_POLICY=pairing` (strangers filtered).
+  No rescan needed for the pilot E2E. (Note: linked devices expire around ~14
+  offline days — keep the gateway's auto-start registered so it never idles
+  that long again.)
+- The live engine is an official SHALLOW clone at 0.19.1 (`main`, grafted)
+  with a 0.19.1-pinned venv. The overlay is based on 0.20.1 — and the
+  dependency pins MOVED between those versions (cryptography 48.0.1→50.0.0,
+  Pillow 12.2.0→12.3.0, nemo-relay 0.6→0.7.1). A checkout alone would run
+  0.20.1 code on 0.19.1 deps. FIXED in the provisioner: new `engine-deps`
+  step after `engine-overlay` — when the venv's install-time dist metadata
+  version != the checkout's pyproject version, it re-runs the OFFICIAL
+  installer command `uv pip install -e .` (uv preferred from `<home>\bin\
+  uv.exe` then PATH — it honors the pyproject's `[tool.uv]`
+  override-dependencies, which plain pip cannot; venv pip is the last-resort
+  fallback). Idempotent; on a fresh 0.20.1 install the step is skipped.
+- The live checkout has local modifications in `website/i18n/**` docs (likely
+  line-ending noise) — verify `git checkout --detach` is not blocked by them
+  before the live overlay; if it is, stash is acceptable (docs-only paths).
+
 ## Remaining work, in priority order
 
 1. Commit the single-home migration (exclude `.artifacts/`, `.claude/`,

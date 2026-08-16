@@ -21,6 +21,17 @@
 //                        'pinned' and refuses to auto-update over it. When
 //                        the PR lands in an official release, this step is
 //                        deleted and `git checkout main` restores stock.
+//   2b. engine-deps      the checkout can cross an engine version (a live
+//                        0.19.x install overlaid with the 0.20.1-based fork
+//                        REALLY happens — verified 2026-08-16 on the live
+//                        machine: cryptography 48→50, Pillow, nemo-relay pins
+//                        moved). Editable code takes effect instantly but the
+//                        venv's pinned deps do NOT — so when the installed
+//                        dist version != the checkout's pyproject version,
+//                        re-run the OFFICIAL installer command
+//                        (`uv pip install -e .`; uv honors the pyproject's
+//                        [tool.uv] override-dependencies, which plain pip
+//                        cannot). pip is only the fallback when uv is absent.
 //   3. profile-create    one `hermes profile create <slug> --no-alias
 //                        --no-skills` per contract space — Hermes' OWN profile
 //                        lifecycle, never a hand-rolled mkdir.
@@ -244,6 +255,19 @@ const PYTHON_ENV = Object.freeze({ PYTHONIOENCODING: 'utf-8' })
 const GATEWAY_INSTALLED_SNIPPET =
   'import sys; from hermes_cli import gateway_windows as g; sys.exit(0 if g.is_installed() else 1)'
 
+// Editable installs read hermes_cli SOURCE from the checkout, so importing
+// __version__ would always match the checkout and prove nothing. The dist-info
+// metadata in site-packages is written at INSTALL time — it is the honest
+// "which pyproject were the deps resolved against" signal.
+const DIST_VERSION_SNIPPET =
+  "from importlib.metadata import version; print(version('hermes-agent'))"
+
+/** Parse `[project] version = "…"` out of a pyproject.toml text. */
+export function pyprojectVersion(text) {
+  const m = /^version\s*=\s*["']([^"']+)["']/m.exec(text ?? '')
+  return m ? m[1] : null
+}
+
 function defaultGeneratorScript() {
   return fileURLToPath(new URL('../../community-generate.mjs', import.meta.url))
 }
@@ -312,6 +336,38 @@ export function buildPlan(deployment, tools, { generatorScript, spaces = [] } = 
       return headSha === d.engineSha
         ? { satisfied: true, detail: `HEAD is the pinned overlay ${d.engineRef} (${d.engineSha.slice(0, 12)})` }
         : { satisfied: false, detail: `HEAD ${headSha.slice(0, 12)} != pinned ${d.engineSha.slice(0, 12)}` }
+    }
+  })
+
+  // The overlay checkout may cross an engine version (live 0.19.x → fork's
+  // 0.20.1 base). Editable code switches instantly; the venv's dependency pins
+  // do NOT — resync them exactly the way the official installer does. uv is
+  // REQUIRED for a correct resolve (the 0.20.1 pyproject relies on [tool.uv]
+  // override-dependencies to reconcile cryptography==50 with capped
+  // transitive deps); venv pip is only a last-resort fallback.
+  const uv = tools?.uv ?? null
+  steps.push({
+    id: 'engine-deps',
+    kind: 'execute',
+    description: 'sync venv dependencies to the overlaid checkout (official `uv pip install -e .`)',
+    commands: [
+      uv
+        ? { argv: [...uv, 'pip', 'install', '-e', '.', '--python', d.venvPython], cwd: d.engineDir, env: PYTHON_ENV }
+        : { argv: [d.venvPython, '-m', 'pip', 'install', '-e', '.'], cwd: d.engineDir, env: PYTHON_ENV }
+    ],
+    check(io) {
+      const pyproject = io.readFile(path.join(d.engineDir, 'pyproject.toml'))
+      if (pyproject == null) return { satisfied: false, detail: `no pyproject.toml at ${d.engineDir} — official checkout incomplete` }
+      const want = pyprojectVersion(pyproject)
+      if (!want) return { satisfied: false, detail: 'cannot parse the project version from pyproject.toml' }
+      const r = io.probe({ argv: [d.venvPython, '-c', DIST_VERSION_SNIPPET], cwd: d.engineDir, env: PYTHON_ENV })
+      if (r.code !== 0) {
+        return { satisfied: false, detail: 'hermes-agent dist metadata unreadable in the venv — editable install incomplete' }
+      }
+      const have = (r.stdout ?? '').trim()
+      return have === want
+        ? { satisfied: true, detail: `venv deps installed against pyproject ${want}` }
+        : { satisfied: false, detail: `installed dist ${have} != checkout pyproject ${want} — dependency pins are stale, resync required` }
     }
   })
 

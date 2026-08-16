@@ -140,18 +140,29 @@ const realIo = {
 // Tool discovery with actionable failures
 // ---------------------------------------------------------------------------
 
-function discoverTools() {
+function discoverTools(deployment) {
   const probe = spec => spawnSpec(spec, { capture: true })
   const missing = []
-  // git is the ONLY external tool this plan needs: python lives in the
-  // official install's venv, and the generator runs under this same node.
+  // git is the only REQUIRED external tool: python lives in the official
+  // install's venv, and the generator runs under this same node.
   const git = discoverTool(probe, 'git')
   if (!git) missing.push('git — install from https://git-scm.com/download/win, then re-run')
+  // uv is PREFERRED for engine-deps (the official installer's own command; it
+  // honors [tool.uv] override-dependencies, plain pip cannot). The official
+  // install ships it in <home>\bin; fall back to PATH, then to venv pip.
+  let uv = null
+  const homeUv = path.join(deployment.homeDir, 'bin', process.platform === 'win32' ? 'uv.exe' : 'uv')
+  if (realIo.isFile(homeUv)) {
+    const r = probe({ argv: [homeUv, '--version'] })
+    if (r.code === 0) uv = { argv: [homeUv] }
+  }
+  if (!uv) uv = discoverTool(probe, 'uv')
   return {
     missing,
     tools: {
       git: git?.argv ?? ['git'],
-      node: [process.execPath]
+      node: [process.execPath],
+      uv: uv?.argv ?? null
     }
   }
 }
@@ -210,7 +221,7 @@ function main() {
     process.exit(1)
   }
 
-  const { missing, tools } = discoverTools()
+  const { missing, tools } = discoverTools(deployment)
   if (missing.length > 0) {
     for (const m of missing) console.error(`community-provision: missing prerequisite: ${m}`)
     if (opts.command === 'apply') {

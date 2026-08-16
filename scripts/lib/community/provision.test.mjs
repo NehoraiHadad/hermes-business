@@ -13,6 +13,7 @@ import {
   discoverTool,
   isInsideOrEqual,
   normalizeDeployment,
+  pyprojectVersion,
   venvPythonPath,
   verifyDeployment,
   windowsCommandLine
@@ -50,6 +51,9 @@ function fakeMachine(initial = {}) {
     officialCheckout: false, // <engine>/.git exists (official git install)
     venv: false, // official venv interpreter exists
     headSha: '', // current HEAD of the official checkout
+    pyprojectVersion: '0.20.1', // [project] version at the CURRENT checkout
+    overlayPyprojectVersion: '0.20.1', // version the overlay checkout lands on
+    distVersion: '0.20.1', // install-time dist-info metadata in the venv
     profiles: {}, // slug -> exists
     homeGenerated: false,
     gatewayInstalled: false,
@@ -70,6 +74,9 @@ function fakeMachine(initial = {}) {
       return Object.prototype.hasOwnProperty.call(state.files, p)
     },
     readFile(p) {
+      if (p === path.join(d.engineDir, 'pyproject.toml')) {
+        return state.officialCheckout ? `name = "hermes-agent"\nversion = "${state.pyprojectVersion}"\n` : null
+      }
       return Object.prototype.hasOwnProperty.call(state.files, p) ? state.files[p] : null
     },
     probe(spec) {
@@ -78,6 +85,11 @@ function fakeMachine(initial = {}) {
         return state.officialCheckout && state.headSha
           ? { code: 0, stdout: `${state.headSha}\n`, stderr: '' }
           : { code: 128, stdout: '', stderr: 'not a git repo' }
+      }
+      if (line.includes('importlib.metadata')) {
+        return state.venv && state.distVersion
+          ? { code: 0, stdout: `${state.distVersion}\n`, stderr: '' }
+          : { code: 1, stdout: '', stderr: 'PackageNotFoundError' }
       }
       if (line.includes('verify')) {
         return { code: state.homeGenerated ? 0 : 1, stdout: '', stderr: '' }
@@ -93,8 +105,13 @@ function fakeMachine(initial = {}) {
       if (state.failOn && line.includes(state.failOn)) return { code: 1 }
       if (line.includes('fetch')) {
         /* objects fetched */
-      } else if (line.includes('checkout --detach')) state.headSha = d.engineSha
-      else if (line.includes('profile create')) {
+      } else if (line.includes('checkout --detach')) {
+        state.headSha = d.engineSha
+        // the overlay checkout can move pyproject to the fork's base version
+        state.pyprojectVersion = state.overlayPyprojectVersion
+      } else if (line.includes('pip install')) {
+        state.distVersion = state.pyprojectVersion
+      } else if (line.includes('profile create')) {
         const slug = spec.argv[spec.argv.indexOf('create') + 1]
         state.profiles[slug] = true
       } else if (line.includes('generate')) state.homeGenerated = true
@@ -231,6 +248,7 @@ describe('plan construction (single-home overlay model)', () => {
     expect(plan().map(s => s.id)).toEqual([
       'official-install',
       'engine-overlay',
+      'engine-deps',
       'profile-create:village',
       'profile-create:private',
       'home-generate',
@@ -252,7 +270,7 @@ describe('plan construction (single-home overlay model)', () => {
     expect(gate.commands).toEqual([])
   })
 
-  it('overlays by fetching the tag BY URL and detaching onto the exact SHA — no clone, no venv, no pip', () => {
+  it('overlays by fetching the tag BY URL and detaching onto the exact SHA — no clone, no venv creation', () => {
     const d = descriptor()
     const steps = plan(d)
     const overlay = steps.find(s => s.id === 'engine-overlay')
@@ -264,8 +282,21 @@ describe('plan construction (single-home overlay model)', () => {
     const allArgv = steps.flatMap(s => s.commands.map(c => c.argv.join(' ')))
     expect(allArgv.some(l => l.includes('clone'))).toBe(false)
     expect(allArgv.some(l => l.includes('-m venv'))).toBe(false)
-    expect(allArgv.some(l => l.includes('pip install'))).toBe(false)
     expect(allArgv.some(l => l.includes('npm ci'))).toBe(false)
+    // dependency sync exists but ONLY as the dedicated engine-deps step
+    const pipLines = steps.filter(s => s.commands.some(c => c.argv.join(' ').includes('pip install')))
+    expect(pipLines.map(s => s.id)).toEqual(['engine-deps'])
+  })
+
+  it('engine-deps prefers the official uv command (honors [tool.uv] overrides), falls back to venv pip', () => {
+    const d = descriptor()
+    const withUv = buildPlan(d, { ...TOOLS, uv: ['C:\\home\\bin\\uv.exe'] }, { generatorScript: GEN, spaces: SPACES })
+      .find(s => s.id === 'engine-deps')
+    expect(withUv.commands[0].argv).toEqual(['C:\\home\\bin\\uv.exe', 'pip', 'install', '-e', '.', '--python', d.venvPython])
+    expect(withUv.commands[0].cwd).toBe(d.engineDir)
+    const noUv = plan(d).find(s => s.id === 'engine-deps')
+    expect(noUv.commands[0].argv).toEqual([d.venvPython, '-m', 'pip', 'install', '-e', '.'])
+    expect(noUv.commands[0].cwd).toBe(d.engineDir)
   })
 
   it('creates each space profile through Hermes\u2019 OWN profile lifecycle under the one HERMES_HOME', () => {
@@ -332,6 +363,28 @@ describe('per-step checks', () => {
     expect(off.detail).toMatch(/!=/)
     m.state.officialCheckout = false
     expect(step.check(m.io).satisfied).toBe(false)
+  })
+
+  it('engine-deps: satisfied only when the venv dist metadata matches the checkout pyproject', () => {
+    const m = fakeMachine({ ...officialState(), pyprojectVersion: '0.20.1', distVersion: '0.20.1' })
+    const step = plan(m.deployment).find(s => s.id === 'engine-deps')
+    expect(step.check(m.io).satisfied).toBe(true)
+    // the LIVE machine case: 0.19.1 venv under an overlaid 0.20.1 checkout
+    m.state.distVersion = '0.19.1'
+    const stale = step.check(m.io)
+    expect(stale.satisfied).toBe(false)
+    expect(stale.detail).toMatch(/0\.19\.1.*!=.*0\.20\.1/)
+    m.state.venv = false
+    expect(step.check(m.io).satisfied).toBe(false)
+    m.state.officialCheckout = false
+    expect(step.check(m.io)).toMatchObject({ satisfied: false, detail: expect.stringMatching(/pyproject/) })
+  })
+
+  it('pyprojectVersion parses the [project] version line only', () => {
+    expect(pyprojectVersion('name = "hermes-agent"\nversion = "0.20.1"\n')).toBe('0.20.1')
+    expect(pyprojectVersion("version = '1.2.3'")).toBe('1.2.3')
+    expect(pyprojectVersion('no version here')).toBeNull()
+    expect(pyprojectVersion(null)).toBeNull()
   })
 
   it('profile-create: satisfied when the profile directory exists', () => {
@@ -419,15 +472,33 @@ describe('applyPlan: sequencing, idempotency, failure propagation', () => {
       'home-generate',
       'gateway-service'
     ])
-    expect(outcome.skipped).toEqual(['official-install'])
+    expect(outcome.skipped).toEqual(['official-install', 'engine-deps'])
     expect(m.runs.map(r => r.argv.join(' ')).some(l => l.includes('gateway install'))).toBe(true)
+  })
+
+  it('LIVE-MACHINE case: an 0.19.x official install gets a dependency resync after the overlay', () => {
+    // Verified real scenario (2026-08-16): live venv pinned at 0.19.1, the
+    // overlay checkout moves pyproject to the fork's 0.20.1 base.
+    const m = fakeMachine({ ...officialState(), pyprojectVersion: '0.19.1', distVersion: '0.19.1' })
+    const outcome = applyPlan(plan(m.deployment), m.io)
+    expect(outcome.executed).toEqual([
+      'engine-overlay',
+      'engine-deps',
+      'profile-create:village',
+      'profile-create:private',
+      'home-generate',
+      'gateway-service'
+    ])
+    expect(m.state.distVersion).toBe('0.20.1')
+    const pip = m.runs.map(r => r.argv.join(' ')).filter(l => l.includes('pip install'))
+    expect(pip).toHaveLength(1)
   })
 
   it('is a no-op on a healthy deployment: nothing executed, all skipped', () => {
     const m = fakeMachine(provisionedState())
     const outcome = applyPlan(plan(m.deployment), m.io)
     expect(outcome.executed).toEqual([])
-    expect(outcome.skipped).toHaveLength(6)
+    expect(outcome.skipped).toHaveLength(7)
     expect(m.runs).toHaveLength(0)
   })
 
@@ -437,6 +508,7 @@ describe('applyPlan: sequencing, idempotency, failure propagation', () => {
     expect(outcome.skipped).toEqual([
       'official-install',
       'engine-overlay',
+      'engine-deps',
       'profile-create:village',
       'profile-create:private'
     ])
