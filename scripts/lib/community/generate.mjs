@@ -64,8 +64,8 @@
 //     description enforced fail-closed (fact 9).
 
 import yaml from 'js-yaml'
-import { renderSharedSoul, renderSoul } from './persona.mjs'
-import { SHARED_SPACE, SKILL_DESCRIPTION_ROUTING_MAX, contractSpaces } from './contract.mjs'
+import { renderAdminSoul, renderSharedSoul, renderSoul } from './persona.mjs'
+import { ADMIN_SPACE, SHARED_SPACE, SKILL_DESCRIPTION_ROUTING_MAX, contractSpaces } from './contract.mjs'
 
 // Fenced toolset for ISOLATED space profiles: public-group-safe, no
 // terminal/file/exec — and deliberately NO session_search: the engine tool's
@@ -146,12 +146,36 @@ export function wakeWordPattern(wakeWord) {
  * onto one profile is engine-supported (profile_routing.py:109-170; `name`
  * is log-only and stays unique per group anyway). */
 export function buildRoutes(contract) {
-  return contract.groups.map(g => ({
+  const groupRoutes = contract.groups.map(g => ({
     name: `${g.slug}-route`,
     platform: 'whatsapp',
     chat_id: g.jid,
     profile: g.isolated === true ? g.slug : SHARED_SPACE
   }))
+  // DM model (2026-08-16, user decision "מי אמר ש-DM == מנהל"):
+  //   * an ADMIN's DM routes to the management space — specificity 4 wins;
+  //   * EVERY OTHER DM falls back to the shared community persona via a
+  //     platform-only route (specificity 0, engine-sorted last) — a resident
+  //     can ask pool-hours/prayer-times privately with the SAME fenced
+  //     capability the groups get. Nothing ever falls through to the owner's
+  //     default profile.
+  // Classic DM JIDs are `<msisdn>@s.whatsapp.net`; LID-presenting senders are
+  // normalized by the pinned engine's identity work (upstream PR #87626).
+  const adminRoutes = contract.admins.map(admin => ({
+    name: `admin-dm-${admin}`,
+    platform: 'whatsapp',
+    chat_id: `${admin}@s.whatsapp.net`,
+    profile: ADMIN_SPACE
+  }))
+  // The resident fallback exists only when the operator explicitly opened
+  // DMs AND a shared space exists to serve them. Under dmMode 'admins' the
+  // native intake gate already filtered every non-admin, so no route is
+  // needed (and none is written — fail-safe over fail-open).
+  const hasShared = contract.groups.some(g => g.isolated !== true)
+  const dmFallback = contract.dmMode === 'open' && hasShared
+    ? [{ name: 'resident-dm', platform: 'whatsapp', profile: SHARED_SPACE }]
+    : []
+  return [...groupRoutes, ...adminRoutes, ...dmFallback]
 }
 
 /** Deep-clone plain YAML data (objects/arrays/scalars only). */
@@ -218,12 +242,16 @@ export function buildGatewayConfig(contract, existingConfigText) {
   cfg.profile_routes = [...foreignRoutes, ...buildRoutes(contract)]
 
   const whatsapp = asMapping(clone(cfg.whatsapp))
-  // Admin DMs (M2): gateway-level allowlist. The bridge stays open via
-  // OWNED_ENV's WHATSAPP_ALLOWED_USERS=* — config presence wins at the
-  // adapter, so this allowlist never leaks into the bridge sender gate.
-  // dm_policy is set only when absent: an existing home's explicit DM policy
-  // belongs to its owner.
-  if (whatsapp.dm_policy === undefined) whatsapp.dm_policy = 'allowlist'
+  // DM audience (2026-08-16 user decision): enforced by Hermes' NATIVE intake
+  // gate, never reinvented here. dm_policy is OWNED from the contract:
+  //   * dmMode 'admins' (default) → 'allowlist': an unknown DM sender is
+  //     dropped at intake (_is_dm_allowed) and NEVER reaches the model;
+  //   * dmMode 'open' (explicit opt-in) → residents may DM; buildRoutes sends
+  //     them to the fenced shared community persona, admins to the
+  //     management space — no DM ever lands in the owner's default profile.
+  // allow_from stays admin-unioned in BOTH modes: it is the allowlist under
+  // 'admins' and harmless defense in depth under 'open'.
+  whatsapp.dm_policy = contract.dmMode === 'open' ? 'open' : 'allowlist'
   whatsapp.allow_from = unionList(whatsapp.allow_from, contract.admins)
   whatsapp.group_policy = 'allowlist'
   whatsapp.group_allow_from = unionList(whatsapp.group_allow_from, contract.groups.map(g => g.jid))
@@ -246,13 +274,11 @@ export function buildGatewayConfig(contract, existingConfigText) {
   if (whatsapp.history_backfill_limit === undefined) whatsapp.history_backfill_limit = HISTORY_BACKFILL_LIMIT
   cfg.whatsapp = whatsapp
 
-  // Root toolset / approvals: seed the community defaults on a FRESH home,
-  // keep the owner's explicit configuration on an existing one. The group
-  // fences do not live here — they live in every space profile's config.
-  const toolsets = asMapping(clone(cfg.platform_toolsets))
-  if (toolsets.whatsapp === undefined) toolsets.whatsapp = [...ADMIN_TOOLSET]
-  cfg.platform_toolsets = toolsets
-
+  // The ROOT toolset is NOT touched at all: every WhatsApp audience is routed
+  // to a space profile (groups → spaces, admin DMs → admin space, any other
+  // DM → shared space), so the default profile serves only the owner's own
+  // surfaces and its toolset is the owner's business. ADMIN_TOOLSET lives in
+  // the admin space profile (buildProfileConfig), never at root.
   const memory = asMapping(clone(cfg.memory))
   if (memory.write_approval === undefined) memory.write_approval = true
   cfg.memory = memory
@@ -308,7 +334,12 @@ export function buildArchivePolicy(contract) {
  * we mirror the model block and never duplicate the OAuth store (a second
  * copy would race the refresh-token rotation).
  */
-export function buildProfileConfig(existingConfigText, toolset = GROUP_TOOLSET, rootModel, { archivePlugin = false } = {}) {
+export function buildProfileConfig(
+  existingConfigText,
+  toolset = GROUP_TOOLSET,
+  rootModel,
+  { archivePlugin = false, disableSessionSearch = true } = {}
+) {
   const cfg = clone(parseExistingConfig(existingConfigText, 'profile config.yaml')) ?? {}
 
   const model = asMapping(clone(rootModel))
@@ -328,13 +359,24 @@ export function buildProfileConfig(existingConfigText, toolset = GROUP_TOOLSET, 
   cfg.skills = skills
 
   const agent = asMapping(clone(cfg.agent))
-  agent.disabled_toolsets = [
-    ...new Set([
-      ...(Array.isArray(agent.disabled_toolsets) ? agent.disabled_toolsets : []),
-      ...DISABLED_COMMUNITY_TOOLSETS
-    ])
-  ]
+  if (disableSessionSearch) {
+    agent.disabled_toolsets = [
+      ...new Set([
+        ...(Array.isArray(agent.disabled_toolsets) ? agent.disabled_toolsets : []),
+        ...DISABLED_COMMUNITY_TOOLSETS
+      ])
+    ]
+  } else {
+    // The management space: admins search their OWN management history —
+    // session_search is scoped to this profile home, so it exposes no
+    // resident or business conversations.
+    agent.disabled_toolsets = (Array.isArray(agent.disabled_toolsets) ? agent.disabled_toolsets : []).filter(
+      name => !DISABLED_COMMUNITY_TOOLSETS.includes(name)
+    )
+    if (agent.disabled_toolsets.length === 0) delete agent.disabled_toolsets
+  }
   cfg.agent = agent
+  if (Object.keys(cfg.agent).length === 0) delete cfg.agent
 
   const plugins = asMapping(clone(cfg.plugins))
   if (archivePlugin) {
@@ -595,29 +637,41 @@ export function generateArtifacts(
     artifacts[`profiles/${space.slug}/config.yaml`] = dumpConfig(
       buildProfileConfig(
         readProfileConfig(space.slug),
-        space.shared ? SHARED_TOOLSET : GROUP_TOOLSET,
+        space.admin ? ADMIN_TOOLSET : space.shared ? SHARED_TOOLSET : GROUP_TOOLSET,
         rootConfig.model,
-        { archivePlugin: space.shared }
+        // The archive serves the shared community persona AND the management
+        // space; admins additionally keep session_search over their own
+        // management history (scoped to this profile home).
+        { archivePlugin: space.shared || space.admin, disableSessionSearch: !space.admin }
       )
     )
-    if (space.shared) {
+    if (space.shared || space.admin) {
       for (const name of COMMUNITY_ARCHIVE_PLUGIN_FILES) {
         artifacts[`profiles/${space.slug}/plugins/${COMMUNITY_ARCHIVE_PLUGIN}/${name}`] =
           artifacts[`plugins/${COMMUNITY_ARCHIVE_PLUGIN}/${name}`]
       }
     }
-    artifacts[`profiles/${space.slug}/SOUL.md`] = space.shared
-      ? renderSharedSoul({
-          communityName: contract.name,
-          wakeWord: contract.wakeWord,
-          groups: space.groups,
-          tone: space.tone
-        })
-      : renderSoul({
-          communityName: contract.name,
-          wakeWord: contract.wakeWord,
-          group: space.groups[0]
-        })
+    artifacts[`profiles/${space.slug}/SOUL.md`] = space.admin
+      ? renderAdminSoul({ communityName: contract.name, wakeWord: contract.wakeWord })
+      : space.shared
+        ? renderSharedSoul({
+            communityName: contract.name,
+            wakeWord: contract.wakeWord,
+            groups: space.groups,
+            tone: space.tone
+          })
+        : renderSoul({
+            communityName: contract.name,
+            wakeWord: contract.wakeWord,
+            group: space.groups[0]
+          })
+    if (space.admin) {
+      // The routed admin DM channel carries the management skills. The root
+      // copies installed by BusinessInstall stay owner-facing (companion).
+      for (const name of ADMIN_SKILLS) {
+        artifacts[`profiles/${space.slug}/skills/${name}/SKILL.md`] = artifacts[`skills/${name}/SKILL.md`]
+      }
+    }
     for (const pack of space.knowledge) {
       artifacts[`profiles/${space.slug}/skills/${pack}/SKILL.md`] = rendered[pack]
     }

@@ -54,6 +54,13 @@ export const TONES = ['default', 'strict']
 // this one profile, so their session memory is mutually searchable.
 export const SHARED_SPACE = 'village'
 
+// The management space (2026-08-16, "מי אמר ש-DM == מנהל"): contract admins'
+// DMs route HERE — never to the owner's default profile. DM != admin: any
+// other DM falls back to the shared space's community persona, so a resident
+// can ask community questions privately with the same fenced capability the
+// groups get. Admin capability is a ROUTE, not an assumption about DMs.
+export const ADMIN_SPACE = 'admin'
+
 // Reserved group slugs:
 //   * 'default' — the profile that OWNS the WhatsApp connection (spec §2
 //     fact 5); routing a group onto it would collide with the default-profile
@@ -61,7 +68,7 @@ export const SHARED_SPACE = 'village'
 //   * 'village' (SHARED_SPACE) — names the shared context-space profile; an
 //     isolated group with this slug would collide with it, and a non-isolated
 //     one would shadow the space/group distinction.
-export const RESERVED_SLUGS = new Set(['default', SHARED_SPACE])
+export const RESERVED_SLUGS = new Set(['default', SHARED_SPACE, ADMIN_SPACE])
 
 export class ContractError extends Error {
   constructor(errors) {
@@ -126,6 +133,20 @@ export function validateContract(raw, { fileExists } = {}) {
     errors.push('community.wake_word: required non-empty string')
   } else if (/[\r\n]/.test(wakeWord)) {
     errors.push('community.wake_word: must be a single line')
+  }
+
+  // ── DM audience (2026-08-16 user decision): DMs are gated by Hermes' OWN
+  // intake mechanism (dm_policy — strangers are filtered before any model
+  // dispatch). The contract only CHOOSES between two native postures:
+  //   * 'admins' (DEFAULT, fail-safe): dm_policy=allowlist, admins only —
+  //     an unknown sender is dropped at intake and never reaches the AI;
+  //   * 'open' (explicit operator opt-in): residents may DM and are routed
+  //     to the fenced shared community persona.
+  const rawDms = community?.dms
+  let dmMode = 'admins'
+  if (rawDms !== undefined) {
+    if (rawDms === 'open' || rawDms === 'admins') dmMode = rawDms
+    else errors.push('community.dms: must be "admins" (default — unknown DM senders are filtered at intake) or "open" (residents get the fenced community persona)')
   }
 
   // ── admins (MANDATORY ≥1 — engine fact 8: empty admins = open /sethome) ──
@@ -290,6 +311,7 @@ export function validateContract(raw, { fileExists } = {}) {
     contract: {
       name: name.trim(),
       wakeWord: wakeWord.trim(),
+      dmMode,
       admins,
       groups,
       knowledge: packs
@@ -315,6 +337,7 @@ export function contractSpaces(contract) {
     spaces.push({
       slug: SHARED_SPACE,
       shared: true,
+      admin: false,
       groups: shared,
       tone: shared[0].tone ?? 'default',
       knowledge: [...new Set(shared.flatMap(g => g.knowledge ?? []))]
@@ -325,12 +348,16 @@ export function contractSpaces(contract) {
       spaces.push({
         slug: g.slug,
         shared: false,
+        admin: false,
         groups: [g],
         tone: g.tone ?? 'default',
         knowledge: [...new Set(g.knowledge ?? [])]
       })
     }
   }
+  // The management space always exists: admins are mandatory, and their DMs
+  // must never land in the owner's default profile.
+  spaces.push({ slug: ADMIN_SPACE, shared: false, admin: true, groups: [], tone: 'default', knowledge: [] })
   return spaces
 }
 

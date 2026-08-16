@@ -52,8 +52,19 @@ Official install + pinned overlay. Facts verified:
   classifies detached/non-upstream as 'pinned' and REFUSES auto-update.
 - When upstream PR #85490 merges into an official release: delete the overlay
   step; `git checkout main` restores stock.
-- UNVERIFIED RISK: whether official installer re-runs (`-Ensure`, update
-  flows) reset the checkout off the pinned SHA. Check before shipping.
+- OVERLAY-RESET RISK — RESOLVED 2026-08-16 by source reading:
+  * Tachles bootstrap re-run: SAFE — `Install-LatestCompatibleHermes` runs
+    only when `Find-Hermes` finds nothing (bootstrap.ps1:100); an existing
+    install is used as-is.
+  * Desktop-UI update: SAFE — `isPinnedGitInstall` → 'pinned' → refusal.
+  * Manual/agent `hermes update` in a terminal: UNPINS (update_cmd.py:4096 —
+    detached HEAD → warns and switches to main). Mitigated in depth: the
+    community-admin skill now forbids engine-moving commands outright, and
+    provisioning verify detects HEAD≠SHA (engine-overlay check) with apply
+    re-pinning as the sanctioned recovery.
+  * Manual official `install.ps1 -Tag` on an existing checkout: would unpin
+    (fetch + `checkout --detach refs/tags/<tag>`); nothing in the product
+    invokes it when Hermes exists — documented residual.
 
 ## What was implemented in this migration
 
@@ -106,6 +117,38 @@ Official install + pinned overlay. Facts verified:
 
 Validation: tsc clean; full unit 206 files / 2,119 passed, 1 skipped;
 community lib 189 passed (fixpoint + additive semantics covered).
+
+## DM model (2026-08-16, later same day: "מי אמר ש-DM == מנהל")
+
+DM == admin was a two-home-era assumption and is DEAD. The model now:
+- A third routed space `profiles/admin/` (reserved slug): each contract
+  admin's DM (`<msisdn>@s.whatsapp.net`) routes there — ADMIN_TOOLSET,
+  management skills, archive, session_search kept (scoped to that home).
+  Routing on DMs is engine-native (`_profile_name_for_source`, run.py:26022 —
+  chat_id match with no group precondition).
+- `community.dms` contract field chooses between two NATIVE intake postures
+  (whatsapp_common.py: dm_policy gates at intake, strangers never reach the
+  model): 'admins' (DEFAULT — dm_policy=allowlist, unknown senders filtered
+  mechanically) or 'open' (explicit opt-in — residents' DMs route via a
+  platform-only fallback route to the fenced `village` persona: same scoped
+  tools and knowledge as the groups, in private).
+- The ROOT config no longer seeds any toolset and no DM ever lands in the
+  owner's default profile; root keeps session_search and its own toolset.
+- A business "public agent" DM model is explicitly deferred (user decision).
+
+## Fresh-home smoke — PASSED 2026-08-16 (scratch, no live account)
+
+Real official checkout (v2026.8.13) + venv + `pip install -e .` in a scratch
+HERMES_HOME; pre-existing owner config (model, toolset, DM contact) seeded
+first. Results: generator merged ADDITIVELY (owner keys survived, admins
+unioned); provision plan gated correctly; apply executed ONLY engine-overlay
+(fetch fork tag by URL + detach → HEAD == pinned SHA; observer code live in
+the editable checkout; idempotent re-run does nothing); per-scope engine-level
+proof: archive plugin files+registration+check_fn PASS for root/village/admin,
+all three absent/disabled for the isolated space. Minor finding: the
+gateway-service `is_installed` check was satisfied on the scratch home —
+likely the dev machine's Startup-fallback registration is not home-scoped;
+re-verify on a clean machine.
 
 ## Remaining work, in priority order
 

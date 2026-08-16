@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  ADMIN_SPACE,
   ContractError,
   contractSpaces,
   defaultPackDescription,
@@ -235,7 +236,7 @@ describe('validateContract — context spaces (§2.1)', () => {
     raw.groups[1].isolated = false
     const verdict = validate(raw)
     expect(verdict.ok, verdict.errors?.join('\n')).toBe(true)
-    expect(contractSpaces(verdict.contract)).toHaveLength(1)
+    expect(contractSpaces(verdict.contract)).toHaveLength(2) // shared + the always-present admin space
     expect(contractSpaces(verdict.contract)[0].tone).toBe('strict')
   })
 
@@ -252,7 +253,7 @@ describe('validateContract — context spaces (§2.1)', () => {
     const verdict = validate(validRaw())
     expect(verdict.ok).toBe(true)
     const spaces = contractSpaces(verdict.contract)
-    expect(spaces.map(s => s.slug)).toEqual([SHARED_SPACE, 'emergency'])
+    expect(spaces.map(s => s.slug)).toEqual([SHARED_SPACE, 'emergency', ADMIN_SPACE])
     expect(spaces[0].shared).toBe(true)
     expect(spaces[0].groups.map(g => g.slug)).toEqual(['main'])
     expect(spaces[1].shared).toBe(false)
@@ -270,7 +271,7 @@ describe('contractSpaces', () => {
       ]
     }
     const spaces = contractSpaces(contract)
-    expect(spaces.map(s => s.slug)).toEqual([SHARED_SPACE, 'c'])
+    expect(spaces.map(s => s.slug)).toEqual([SHARED_SPACE, 'c', ADMIN_SPACE])
     expect(spaces[0].knowledge).toEqual(['general', 'sports'])
     expect(spaces[0].groups.map(g => g.slug)).toEqual(['a', 'b'])
     expect(spaces[1].knowledge).toEqual(['secret', 'general'])
@@ -283,13 +284,14 @@ describe('contractSpaces', () => {
         { slug: 'b', tone: 'default', isolated: true, knowledge: [] }
       ]
     }
-    expect(contractSpaces(contract).map(s => s.slug)).toEqual(['a', 'b'])
+    expect(contractSpaces(contract).map(s => s.slug)).toEqual(['a', 'b', ADMIN_SPACE])
   })
 
   it('treats a hand-built group without an isolated field as shared (back-compat)', () => {
     const spaces = contractSpaces({ groups: [{ slug: 'a', tone: 'default', knowledge: [] }] })
-    expect(spaces).toHaveLength(1)
+    expect(spaces).toHaveLength(2)
     expect(spaces[0].slug).toBe(SHARED_SPACE)
+    expect(spaces[1]).toMatchObject({ slug: ADMIN_SPACE, admin: true, groups: [] })
   })
 })
 

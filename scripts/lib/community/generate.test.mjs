@@ -21,7 +21,7 @@ import {
   renderKnowledgeSkill,
   wakeWordPattern
 } from './generate.mjs'
-import { SHARED_SPACE } from './contract.mjs'
+import { ADMIN_SPACE, SHARED_SPACE } from './contract.mjs'
 import { renderSharedSoul, renderSoul } from './persona.mjs'
 
 function contract() {
@@ -117,7 +117,12 @@ describe('gateway config generation', () => {
   it('emits one route per group onto its SPACE profile (§2.1): shared → village, isolated → own slug', () => {
     expect(cfg().profile_routes).toEqual([
       { name: 'main-route', platform: 'whatsapp', chat_id: '120363000000000001@g.us', profile: SHARED_SPACE },
-      { name: 'emergency-route', platform: 'whatsapp', chat_id: '120363000000000002@g.us', profile: 'emergency' }
+      { name: 'emergency-route', platform: 'whatsapp', chat_id: '120363000000000002@g.us', profile: 'emergency' },
+      // DM model: each admin's DM routes to the management space...
+      { name: 'admin-dm-972501234567', platform: 'whatsapp', chat_id: '972501234567@s.whatsapp.net', profile: ADMIN_SPACE },
+      { name: 'admin-dm-972529876543', platform: 'whatsapp', chat_id: '972529876543@s.whatsapp.net', profile: ADMIN_SPACE }
+      // ...and under the DEFAULT dms:'admins' there is NO resident fallback —
+      // strangers are filtered by the native intake gate, not routed.
     ])
   })
 
@@ -133,7 +138,7 @@ describe('gateway config generation', () => {
       knowledge: []
     })
     const routes = buildRoutes(c)
-    expect(routes.map(r => r.profile)).toEqual([SHARED_SPACE, 'emergency', SHARED_SPACE])
+    expect(routes.filter(r => r.chat_id?.endsWith('@g.us')).map(r => r.profile)).toEqual([SHARED_SPACE, 'emergency', SHARED_SPACE])
     // Route names stay unique per group (engine treats name as log-only, but
     // uniqueness keeps the logs unambiguous).
     expect(new Set(routes.map(r => r.name)).size).toBe(routes.length)
@@ -215,9 +220,11 @@ describe('gateway config generation', () => {
     expect(plugins.entries[COMMUNITY_ARCHIVE_PLUGIN].allow_tool_override).toBe(false)
   })
 
-  it('seeds the ADMIN toolset + approvals on a FRESH home and keeps session_search at root', () => {
+  it('leaves the ROOT toolset to the owner entirely and keeps session_search at root', () => {
     const c = cfg()
-    expect(c.platform_toolsets.whatsapp).toEqual([...ADMIN_TOOLSET])
+    // Every WhatsApp audience is routed to a space profile; ADMIN_TOOLSET
+    // lives in profiles/admin, so the root toolset is not even seeded.
+    expect(c.platform_toolsets?.whatsapp).toBeUndefined()
     expect(c.memory.write_approval).toBe(true)
     expect(c.skills.write_approval).toBe(true)
     // Single-home decision (2026-08-16): the ROOT is the owner's own
@@ -257,7 +264,7 @@ describe('gateway config generation', () => {
     expect(merged.model).toEqual({ provider: 'anthropic', name: 'claude-x' })
     expect(merged.api_keys).toEqual({ anthropic: 'sk-test' })
     expect(merged.whatsapp.bridge_dir).toBe('/opt/bridge') // non-owned whatsapp key survives
-    expect(merged.whatsapp.dm_policy).toBe('open') // an EXPLICIT existing DM policy is the owner's (set-if-absent)
+    expect(merged.whatsapp.dm_policy).toBe('allowlist') // dm_policy is contract-OWNED: default dms:'admins' filters strangers at intake
     expect(merged.memory.memory_enabled).toBe(false)
     expect(merged.memory.write_approval).toBe(true)
     expect(merged.gateway.port).toBe(18789)
@@ -357,6 +364,12 @@ describe('per-space artifacts (§2.1)', () => {
       `profiles/${SHARED_SPACE}/SOUL.md`,
       `profiles/${SHARED_SPACE}/config.yaml`,
       `profiles/${SHARED_SPACE}/skills/general/SKILL.md`,
+      // The management space: admins' routed DM channel — admin skills,
+      // archive plugin, and its own SOUL.
+      ...COMMUNITY_ARCHIVE_PLUGIN_FILES.map(name => `profiles/${ADMIN_SPACE}/plugins/${COMMUNITY_ARCHIVE_PLUGIN}/${name}`),
+      `profiles/${ADMIN_SPACE}/SOUL.md`,
+      `profiles/${ADMIN_SPACE}/config.yaml`,
+      ...ADMIN_SKILLS.map(name => `profiles/${ADMIN_SPACE}/skills/${name}/SKILL.md`),
       'skills/community-admin/SKILL.md',
       'skills/community-bootstrap/SKILL.md'
     ].sort())

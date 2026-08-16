@@ -25,7 +25,7 @@
 
 import { createHash } from 'node:crypto'
 import yaml from 'js-yaml'
-import { SHARED_SPACE } from './contract.mjs'
+import { ADMIN_SPACE, SHARED_SPACE } from './contract.mjs'
 import {
   ADMIN_TOOLSET,
   GROUP_TOOLSET,
@@ -129,9 +129,13 @@ export function effectiveProfileOwnedView(cfgData) {
  * fenced set (§2.1), and every space mirrors `rootModel` — the ROOT config's
  * model block as it actually stands on disk. */
 export function expectedProfileOwnedView(spaceSlug, rootModel) {
-  const toolset = spaceSlug === SHARED_SPACE ? SHARED_TOOLSET : GROUP_TOOLSET
+  const toolset =
+    spaceSlug === ADMIN_SPACE ? ADMIN_TOOLSET : spaceSlug === SHARED_SPACE ? SHARED_TOOLSET : GROUP_TOOLSET
   return effectiveProfileOwnedView(
-    buildProfileConfig(undefined, toolset, rootModel, { archivePlugin: spaceSlug === SHARED_SPACE })
+    buildProfileConfig(undefined, toolset, rootModel, {
+      archivePlugin: spaceSlug === SHARED_SPACE || spaceSlug === ADMIN_SPACE,
+      disableSessionSearch: spaceSlug !== ADMIN_SPACE
+    })
   )
 }
 

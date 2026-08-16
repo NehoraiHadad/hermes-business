@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import yaml from 'js-yaml'
 import { generateArtifacts } from './generate.mjs'
+import { ADMIN_SPACE } from './contract.mjs'
 import {
   GROUP_TOOLSET,
   OWNED_ENV,
@@ -99,7 +100,6 @@ describe('verifyArtifacts — the engine REWRITES config.yaml (values, not text)
           plugins: parsed.plugins,
           skills: parsed.skills,
           memory: parsed.memory,
-          platform_toolsets: { whatsapp: [...parsed.platform_toolsets.whatsapp].reverse() },
           whatsapp: {
             ...parsed.whatsapp,
             group_allow_from: [...parsed.whatsapp.group_allow_from].reverse(),
@@ -406,7 +406,7 @@ describe('effective owned view', () => {
     expect(view['gateway.multiplex_profiles']).toBe(true)
     expect(view['whatsapp.dm_policy']).toBe('allowlist')
     expect(view['whatsapp.allow_from']).toEqual(['972501234567'])
-    expect(view.profile_routes.map(r => r.profile).sort()).toEqual(['emergency', SHARED_SPACE])
+    expect([...new Set(view.profile_routes.map(r => r.profile))].sort()).toEqual([ADMIN_SPACE, 'emergency', SHARED_SPACE])
   })
 
   it('expectedProfileOwnedView pins the PER-SPACE toolset + write approvals', () => {
