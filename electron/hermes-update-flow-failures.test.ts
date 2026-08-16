@@ -68,7 +68,7 @@ describe('runOfficialUpdate — post-mutation failure & rollback', () => {
   })
 
   it('fails closed and rolls back when the update lands an UNSUPPORTED version', async () => {
-    const { deps, calls } = makeDeps({ postVersion: '0.20.0' })
+    const { deps, calls } = makeDeps({ postVersion: '0.21.0' })
     await expect(runOfficialUpdate(deps)).rejects.toThrow('שוחזרה לגרסה הקודמת')
     expect(calls).toContain('run:update --yes')
     expect(calls).toContain('regate')

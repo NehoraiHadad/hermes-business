@@ -52,7 +52,8 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 export const DEFAULT_ENGINE_REPO_URL = 'https://github.com/NehoraiHadad/hermes-agent.git'
-export const DEFAULT_ENGINE_REF = 'community-engine-v0.1.0'
+export const DEFAULT_ENGINE_REF = 'community-engine-v0.2.2'
+export const DEFAULT_ENGINE_SHA = 'af04eb8bb85e0a5b6333cd0104921b7e49bcf1f9'
 
 // Python range the engine accepts (pyproject.toml: requires-python >=3.11,<3.14),
 // newest-first so the venv gets the best interpreter available.
@@ -159,10 +160,15 @@ export function normalizeDeployment(descriptor, { platform = process.platform } 
   const root = path.resolve(installRoot)
   const engineDir = path.join(root, 'engine')
   const venvDir = path.join(engineDir, '.venv')
+  const engineSha = descriptor.engineSha || DEFAULT_ENGINE_SHA
+  if (!/^[0-9a-f]{40}$/i.test(engineSha)) {
+    throw new ProvisionRefusedError('descriptor.engineSha must be a full 40-character commit SHA')
+  }
   return {
     installRoot: root,
     engineRepoUrl: descriptor.engineRepoUrl || DEFAULT_ENGINE_REPO_URL,
     engineRef: descriptor.engineRef || DEFAULT_ENGINE_REF,
+    engineSha: engineSha.toLowerCase(),
     homeDir: path.resolve(descriptor.homeDir || path.join(root, 'home')),
     contractPath: path.resolve(contractPath),
     engineDir,
@@ -282,10 +288,10 @@ export function buildPlan(deployment, tools, { generatorScript } = {}) {
   steps.push({
     id: 'engine-checkout',
     kind: 'execute',
-    description: `pin engine to ${d.engineRef} (fetch tags + detached checkout)`,
+    description: `pin engine to ${d.engineRef} at ${d.engineSha.slice(0, 12)} (fetch tags + detached checkout)`,
     commands: [
       { argv: [...git, 'fetch', '--tags', 'origin'], cwd: d.engineDir },
-      { argv: [...git, 'checkout', '--detach', d.engineRef], cwd: d.engineDir }
+      { argv: [...git, 'checkout', '--detach', d.engineSha], cwd: d.engineDir }
     ],
     check(io) {
       if (!io.isDir(gitDir)) return { satisfied: false, detail: 'engine is not cloned yet' }
@@ -296,9 +302,13 @@ export function buildPlan(deployment, tools, { generatorScript } = {}) {
       }
       const headSha = head.stdout.trim()
       const wantSha = want.stdout.trim()
-      return headSha === wantSha && headSha !== ''
-        ? { satisfied: true, detail: `HEAD is ${d.engineRef} (${headSha.slice(0, 12)})` }
-        : { satisfied: false, detail: `HEAD ${headSha.slice(0, 12)} != ${d.engineRef} (${wantSha.slice(0, 12)})` }
+      const expectedSha = d.engineSha.toLowerCase()
+      return headSha.toLowerCase() === expectedSha && wantSha.toLowerCase() === expectedSha
+        ? { satisfied: true, detail: `HEAD is ${d.engineRef} (${expectedSha.slice(0, 12)})` }
+        : {
+            satisfied: false,
+            detail: `HEAD ${headSha.slice(0, 12)} / ${d.engineRef} ${wantSha.slice(0, 12)} != pinned ${expectedSha.slice(0, 12)}`
+          }
     }
   })
 

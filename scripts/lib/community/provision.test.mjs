@@ -3,6 +3,7 @@ import path from 'node:path'
 import {
   DEFAULT_ENGINE_REF,
   DEFAULT_ENGINE_REPO_URL,
+  DEFAULT_ENGINE_SHA,
   ProvisionRefusedError,
   ProvisionStepError,
   applyPlan,
@@ -53,7 +54,7 @@ function fakeMachine(initial = {}) {
   const state = {
     cloned: false,
     headSha: '',
-    refSha: 'abc123abc123abc123',
+    refSha: d.engineSha,
     venv: false,
     engineInstalled: false,
     bridgeDeps: false,
@@ -122,7 +123,7 @@ function fakeMachine(initial = {}) {
 
 const provisionedState = () => ({
   cloned: true,
-  headSha: 'abc123abc123abc123',
+  headSha: DEFAULT_ENGINE_SHA,
   venv: true,
   engineInstalled: true,
   bridgeDeps: true,
@@ -143,18 +144,25 @@ describe('normalizeDeployment', () => {
     expect(d.homeDir).toBe(path.join(ROOT, 'home'))
     expect(d.engineRepoUrl).toBe(DEFAULT_ENGINE_REPO_URL)
     expect(d.engineRef).toBe(DEFAULT_ENGINE_REF)
+    expect(d.engineSha).toBe(DEFAULT_ENGINE_SHA)
   })
 
   it('honors explicit home/repo/ref overrides', () => {
-    const d = descriptor({ homeDir: 'D:\\data\\community-home', engineRef: 'v9.9.9', engineRepoUrl: 'https://example.com/x.git' })
+    const customSha = 'a'.repeat(40)
+    const d = descriptor({ homeDir: 'D:\\data\\community-home', engineRef: 'v9.9.9', engineRepoUrl: 'https://example.com/x.git', engineSha: customSha })
     expect(d.homeDir).toBe('D:\\data\\community-home')
     expect(d.engineRef).toBe('v9.9.9')
     expect(d.engineRepoUrl).toBe('https://example.com/x.git')
+    expect(d.engineSha).toBe(customSha)
   })
 
   it('requires installRoot and contractPath', () => {
     expect(() => normalizeDeployment({ contractPath: 'x' })).toThrow(ProvisionRefusedError)
     expect(() => normalizeDeployment({ installRoot: ROOT })).toThrow(/contractPath/)
+  })
+
+  it('requires a full immutable engine SHA', () => {
+    expect(() => descriptor({ engineSha: '2c9b24e' })).toThrow(/40-character commit SHA/)
   })
 
   it('venvPythonPath is platform-aware', () => {
@@ -234,13 +242,13 @@ describe('plan construction', () => {
     for (const s of reportSteps) expect(s.commands).toEqual([])
   })
 
-  it('pins the engine via clone + fetch --tags + detached checkout of the ref', () => {
+  it('pins the engine via clone + fetch --tags + detached checkout of the exact SHA', () => {
     const d = descriptor()
     const steps = plan(d)
     expect(steps[0].commands[0].argv).toEqual(['git', 'clone', DEFAULT_ENGINE_REPO_URL, d.engineDir])
     expect(steps[1].commands.map(c => c.argv)).toEqual([
       ['git', 'fetch', '--tags', 'origin'],
-      ['git', 'checkout', '--detach', DEFAULT_ENGINE_REF]
+      ['git', 'checkout', '--detach', DEFAULT_ENGINE_SHA]
     ])
     for (const c of steps[1].commands) expect(c.cwd).toBe(d.engineDir)
   })
@@ -286,7 +294,7 @@ describe('plan construction', () => {
 
 describe('per-step checks', () => {
   it('engine-checkout: satisfied only when HEAD equals the pinned ref', () => {
-    const m = fakeMachine({ cloned: true, headSha: 'abc123abc123abc123' })
+    const m = fakeMachine({ cloned: true, headSha: DEFAULT_ENGINE_SHA })
     const step = plan(m.deployment).find(s => s.id === 'engine-checkout')
     expect(step.check(m.io).satisfied).toBe(true)
     m.state.headSha = 'ffff00ffff00ffff00'
@@ -295,6 +303,16 @@ describe('per-step checks', () => {
     expect(off.detail).toMatch(/!=/)
     m.state.cloned = false
     expect(step.check(m.io).satisfied).toBe(false)
+  })
+
+  it('engine-checkout rejects a remote tag moved away from the immutable SHA', () => {
+    const movedSha = 'b'.repeat(40)
+    const m = fakeMachine({ cloned: true, headSha: DEFAULT_ENGINE_SHA, refSha: movedSha })
+    const step = plan(m.deployment).find(s => s.id === 'engine-checkout')
+    const result = step.check(m.io)
+    expect(result.satisfied).toBe(false)
+    expect(result.detail).toContain(movedSha.slice(0, 12))
+    expect(result.detail).toContain(DEFAULT_ENGINE_SHA.slice(0, 12))
   })
 
   it('engine-install: unsatisfied without a venv, satisfied when hermes_cli imports', () => {
@@ -387,7 +405,7 @@ describe('applyPlan: sequencing, idempotency, failure propagation', () => {
   })
 
   it('executes only the unsatisfied tail after partial provisioning', () => {
-    const m = fakeMachine({ cloned: true, headSha: 'abc123abc123abc123', venv: true, engineInstalled: true })
+    const m = fakeMachine({ cloned: true, headSha: DEFAULT_ENGINE_SHA, venv: true, engineInstalled: true })
     const outcome = applyPlan(plan(m.deployment), m.io)
     expect(outcome.skipped).toEqual(['engine-clone', 'engine-checkout', 'venv-create', 'engine-install'])
     expect(outcome.executed).toEqual(['bridge-deps', 'home-generate', 'gateway-service'])

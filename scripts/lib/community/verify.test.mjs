@@ -47,6 +47,7 @@ function contract() {
 }
 
 const sources = { 'knowledge/general.md': '# ידע\nתוכן\n' }
+const readCommunityPluginFile = name => `# runtime fixture: ${name}\n`
 const adminTemplates = {
   'community-bootstrap': '---\nname: community-bootstrap\ndescription: "הקמה"\n---\n\nבית: {{HOME_DIR}} חוזה: {{CONTRACT_PATH}} כלי: {{GENERATE_CLI}} {{PROVISION_CLI}} שורש: {{INSTALL_ROOT}}\n',
   'community-admin': '---\nname: community-admin\ndescription: "ניהול"\n---\n\nnode "{{GENERATE_CLI}}" verify --contract "{{CONTRACT_PATH}}" --home "{{HOME_DIR}}" ({{PROVISION_CLI}} {{INSTALL_ROOT}})\n'
@@ -62,6 +63,7 @@ const gen = () =>
   generateArtifacts(contract(), {
     readKnowledgeSource: p => sources[p],
     readAdminSkillTemplate: name => adminTemplates[name],
+    readCommunityPluginFile,
     deployPaths
   })
 
@@ -93,6 +95,8 @@ describe('verifyArtifacts — the engine REWRITES config.yaml (values, not text)
       '# rewritten by the engine',
       yaml.dump(
         {
+          agent: parsed.agent,
+          plugins: parsed.plugins,
           skills: parsed.skills,
           memory: parsed.memory,
           platform_toolsets: { whatsapp: [...parsed.platform_toolsets.whatsapp].reverse() },
@@ -184,7 +188,8 @@ describe('verifyArtifacts — space profile configs (per-space fence is an owned
         skills: parsed.skills,
         platform_toolsets: { whatsapp: [...parsed.platform_toolsets.whatsapp].reverse() },
         memory: parsed.memory,
-        agent: { max_turns: 42 } // non-owned engine/operator addition is not drift
+        agent: { ...parsed.agent, max_turns: 42 }, // non-owned engine/operator addition is not drift
+        plugins: parsed.plugins
       },
       { sortKeys: false }
     )
@@ -211,6 +216,7 @@ describe('verifyArtifacts — space profile configs (per-space fence is an owned
     const artifacts = generateArtifacts(contract(), {
       readKnowledgeSource: p => sources[p],
       readAdminSkillTemplate: name => adminTemplates[name],
+      readCommunityPluginFile,
       deployPaths,
       existingConfigText: yaml.dump({ model })
     })
@@ -231,7 +237,7 @@ describe('verifyArtifacts — space profile configs (per-space fence is an owned
     expect(entry.detail).toContain('platform_toolsets.whatsapp')
   })
 
-  it('flags session_search ADDED to an isolated space as drift (isolation is the point)', () => {
+  it('flags any raw session_search added to an isolated space as drift', () => {
     const artifacts = gen()
     const parsed = yaml.load(artifacts['profiles/emergency/config.yaml'])
     parsed.platform_toolsets.whatsapp = [...GROUP_TOOLSET, 'session_search']
@@ -243,7 +249,7 @@ describe('verifyArtifacts — space profile configs (per-space fence is an owned
     expect(entry.detail).toContain('platform_toolsets.whatsapp')
   })
 
-  it('flags session_search REMOVED from the shared space as drift (cross-group recall is the design)', () => {
+  it('flags the scoped archive removed from the shared space as drift', () => {
     const artifacts = gen()
     const parsed = yaml.load(artifacts[`profiles/${SHARED_SPACE}/config.yaml`])
     parsed.platform_toolsets.whatsapp = [...GROUP_TOOLSET]
@@ -253,6 +259,30 @@ describe('verifyArtifacts — space profile configs (per-space fence is an owned
     )
     expect(entry.status).toBe('drift')
     expect(entry.detail).toContain('platform_toolsets.whatsapp')
+  })
+
+  it('flags any resident slash command added to the public-group allowlist', () => {
+    const artifacts = gen()
+    const parsed = yaml.load(artifacts['config.yaml'])
+    parsed.whatsapp.group_user_allowed_commands = ['help']
+    const home = { ...artifacts, 'config.yaml': yaml.dump(parsed) }
+    const entry = verifyArtifacts(contract(), artifacts, { readFile: homeReader(home) }).artifacts.find(
+      a => a.path === 'config.yaml'
+    )
+    expect(entry.status).toBe('drift')
+    expect(entry.detail).toContain('whatsapp.group_user_allowed_commands')
+  })
+
+  it('flags a shared profile whose local archive plugin registration is removed', () => {
+    const artifacts = gen()
+    const parsed = yaml.load(artifacts[`profiles/${SHARED_SPACE}/config.yaml`])
+    parsed.plugins.enabled = []
+    const home = { ...artifacts, [`profiles/${SHARED_SPACE}/config.yaml`]: yaml.dump(parsed) }
+    const entry = verifyArtifacts(contract(), artifacts, { readFile: homeReader(home) }).artifacts.find(
+      a => a.path === `profiles/${SHARED_SPACE}/config.yaml`
+    )
+    expect(entry.status).toBe('drift')
+    expect(entry.detail).toContain('plugins.community-archive.enabled')
   })
 
   it('reports a deleted profile config as missing (the fence would silently open)', () => {
@@ -376,7 +406,8 @@ describe('effective owned view', () => {
     expect(isolated['skills.write_approval']).toBe(true)
     const shared = expectedProfileOwnedView(SHARED_SPACE)
     expect(shared['platform_toolsets.whatsapp']).toEqual([...SHARED_TOOLSET].sort())
-    expect(shared['platform_toolsets.whatsapp']).toContain('session_search')
+    expect(shared['platform_toolsets.whatsapp']).toContain('community_archive')
+    expect(shared['platform_toolsets.whatsapp']).not.toContain('session_search')
     expect(effectiveProfileOwnedView(undefined)['memory.write_approval']).toBe(false)
   })
 

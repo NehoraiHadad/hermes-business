@@ -58,7 +58,7 @@ function poisonedInputs() {
       mode: 'business',
       version: '0.19.1',
       compatible: true,
-      compatRange: '>=0.19.0 <0.20.0',
+      compatRange: '>=0.19.0 <0.21.0',
       error: PERSONAL_PATHS.windows
     },
     createdAt: '2026-08-01T00:00:00.000Z',
@@ -133,7 +133,7 @@ describe('diagnostics allow-list + redaction (end-to-end payload)', () => {
     expect(parsed.runtime.error).toContain('<redacted>')
     expect(parsed.runtime.error).not.toContain(PERSONAL_USERNAME)
     expect(parsed.runtime.version).toBe('0.19.1')
-    expect(parsed.runtime.compat_range).toBe('>=0.19.0 <0.20.0')
+    expect(parsed.runtime.compat_range).toBe('>=0.19.0 <0.21.0')
     expect(parsed.uptime_seconds).toBe(1235)
   })
 

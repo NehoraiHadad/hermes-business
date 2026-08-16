@@ -5,12 +5,12 @@ const path = require('node:path')
 const SHA_PATTERN = /^[0-9a-f]{7,40}$/i
 
 // Main-process mirror of src/lib/hermes/compat.ts. The companion supports only
-// Hermes v0.19.x, so both the startup surfacing and the self-update preflight
-// refuse anything outside [0.19.0, 0.20.0). Keep in lockstep with
+// Hermes v0.19.x and v0.20.x, so startup and self-update accept only the
+// verified compatibility window [0.19.0, 0.21.0). Keep in lockstep with
 // scripts/plugin-sdk-contract.mjs (HERMES_COMPAT_RANGE).
 
 const HERMES_MIN_VERSION = '0.19.0'
-const HERMES_MAX_VERSION_EXCLUSIVE = '0.20.0'
+const HERMES_MAX_VERSION_EXCLUSIVE = '0.21.0'
 const HERMES_COMPAT_RANGE = `>=${HERMES_MIN_VERSION} <${HERMES_MAX_VERSION_EXCLUSIVE}`
 
 function parseVersion(text) {
@@ -48,6 +48,25 @@ function isGitInstall(command) {
   return probe.status === 0 && String(probe.stdout).trim() === 'true'
 }
 
+function gitProbe(root, args) {
+  return spawnSync('git', ['-C', root, ...args], { encoding: 'utf8', windowsHide: true })
+}
+
+// A community engine is a deliberately pinned fork/tag until its small patch
+// queue lands upstream. Detached HEADs, missing origins and non-upstream
+// origins are never eligible for `hermes update`, which would silently pull
+// them away from the reviewed engine SHA.
+function isPinnedGitInstall(command) {
+  if (!isGitInstall(command)) return false
+  const root = installRepoRoot(command)
+  const branch = gitProbe(root, ['symbolic-ref', '--quiet', '--short', 'HEAD'])
+  if (branch.status !== 0 || !String(branch.stdout).trim()) return true
+  const origin = gitProbe(root, ['remote', 'get-url', 'origin'])
+  if (origin.status !== 0) return true
+  const normalized = String(origin.stdout).trim().replace(/\\/g, '/').replace(/\.git$/i, '').toLowerCase()
+  return !/(?:github\.com[/:])nousresearch\/hermes-agent$/.test(normalized)
+}
+
 // Fetch origin/<branch> and report whether the release source was actually
 // reachable. Split out from gitTargetVersion so a fetch (network) failure is
 // SURFACED to the preflight instead of being swallowed into a mutation attempt.
@@ -66,7 +85,7 @@ function gitFetchOrigin(command, branch = 'main', { run = spawnSync } = {}) {
 }
 
 // Read the __version__ that origin/<branch> WOULD install, so a git self-update
-// cannot silently cross the tested 0.20 boundary. Reads the ALREADY-fetched
+// cannot silently cross the tested 0.21 boundary. Reads the ALREADY-fetched
 // origin ref (the preflight runs gitFetchOrigin first and aborts if it failed —
 // we never silently re-fetch here). Returns a version string or null (unknown →
 // the forward guard is skipped and assertRunningVersionSupported re-gates the
@@ -117,14 +136,15 @@ function resetInstallCheckout(command, commit) {
 }
 
 // Which official install layout backs this executable:
-//   'git'     — a git checkout: compat preflight + git-reset rollback available.
+//   'git'     — an upstream branch checkout: update + rollback are available.
+//   'pinned'  — a detached/non-upstream community engine; manual tag upgrade.
 //   'managed' — the official native/ZIP layout (<...>/hermes-agent with a
 //               pyproject.toml). Classified for status/UI, but NOT eligible for
 //               unattended auto-update (see assertUpdateMethodSupported).
 //   'unknown' — anything else (a global pip/system install, an unexpected path).
 function classifyInstallMethod(command) {
   if (!command) return 'unknown'
-  if (isGitInstall(command)) return 'git'
+  if (isGitInstall(command)) return isPinnedGitInstall(command) ? 'pinned' : 'git'
   const root = installRepoRoot(command)
   if (path.basename(root) === 'hermes-agent' && fs.existsSync(path.join(root, 'pyproject.toml'))) {
     return 'managed'
@@ -146,6 +166,12 @@ function classifyInstallMethod(command) {
 function assertUpdateMethodSupported(command) {
   const method = classifyInstallMethod(command)
   if (method === 'git') return method
+  if (method === 'pinned') {
+    throw new Error(
+      'עדכון Hermes האוטומטי בוטל: מנוע הקהילה נעוץ בגרסה מאומתת עם תיקונים זמניים. ' +
+        'לא בוצע שינוי. השדרוג יתבצע רק באמצעות גרסת קהילה מאומתת חדשה.'
+    )
+  }
   if (method === 'managed') {
     throw new Error(
       'עדכון אוטומטי של Hermes אינו נתמך עבור התקנה מנוהלת (native/ZIP) מכיוון שאין לה מנגנון שחזור אוטומטי מוכח. ' +
@@ -204,6 +230,7 @@ module.exports = {
   assertRunningVersionSupported,
   installRepoRoot,
   isGitInstall,
+  isPinnedGitInstall,
   gitFetchOrigin,
   gitTargetVersion,
   assertUpdateTargetSupported,

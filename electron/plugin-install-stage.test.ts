@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { stageBusinessBootstrap } from './plugin-install.cjs'
+import { COMMUNITY_REQUIRED_FILES, stageBusinessBootstrap } from './plugin-install.cjs'
 import { DESKTOP_BACKEND_FILES, WHATSAPP_POLICY_PLUGIN_FILES } from './paths.cjs'
 
 const roots: string[] = []
@@ -40,6 +40,7 @@ describe('stageBusinessBootstrap', () => {
     }
     for (const name of DESKTOP_BACKEND_FILES) write(payload, path.join('dashboard', name))
     for (const name of WHATSAPP_POLICY_PLUGIN_FILES) write(payload, path.join('whatsapp-policy', name))
+    for (const name of COMMUNITY_REQUIRED_FILES) write(payload, path.join('community', name))
 
     const staged = stageBusinessBootstrap({ isPackaged: true, resourcesPath, tempPath })
 
@@ -58,6 +59,9 @@ describe('stageBusinessBootstrap', () => {
     }
     for (const name of WHATSAPP_POLICY_PLUGIN_FILES) {
       expect(fs.existsSync(path.join(staged, 'whatsapp-policy', name)), name).toBe(true)
+    }
+    for (const name of COMMUNITY_REQUIRED_FILES) {
+      expect(fs.existsSync(path.join(staged, 'community', name)), name).toBe(true)
     }
   })
 })

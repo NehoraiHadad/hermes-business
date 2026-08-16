@@ -44,7 +44,7 @@ async function runOfficialUpdate(deps) {
     //    origin fetch must actually reach the source — failures abort here and are
     //    NEVER swallowed into a mutation attempt.
     await assertReleaseReachable(command)
-    // 3. A git install must not silently cross the tested 0.20 boundary.
+    // 3. A git install must not silently cross the tested 0.21 boundary.
     const { target } = assertUpdateTargetSupported(command)
     // 4. Capture the exact commit to roll back to — still before any mutation.
     anchor = captureRollbackAnchor(command).anchor

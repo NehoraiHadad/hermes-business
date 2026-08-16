@@ -8,7 +8,7 @@
 //     acceptance gates, admin DM allowlist, admin toolset, write approvals);
 //   * each profiles/<space>/config.yaml compares the PROFILE owned view for
 //     THAT space (§2.1: the shared `village` space's toolset includes
-//     session_search, isolated spaces stay on the fenced set without it) —
+//     community_archive, isolated spaces stay on the fenced set without it) —
 //     spec §6.1: an absent/drifted profile config silently reopens the FULL
 //     default whatsapp toolset for that space;
 //   * `.env` compares the owned KEYS only (the engine appends its own entries,
@@ -73,11 +73,18 @@ export function effectiveOwnedView(cfgData) {
     'whatsapp.group_allow_from': sortedSet(whatsapp.group_allow_from),
     'whatsapp.allow_admin_from': sortedSet(whatsapp.allow_admin_from),
     'whatsapp.group_allow_admin_from': sortedSet(whatsapp.group_allow_admin_from),
+    'whatsapp.group_user_allowed_commands': sortedSet(whatsapp.group_user_allowed_commands),
     'whatsapp.require_mention': whatsapp.require_mention === true,
     'whatsapp.mention_patterns': sortedSet(whatsapp.mention_patterns),
+    'whatsapp.observe_unmentioned_group_messages': whatsapp.observe_unmentioned_group_messages === true,
+    'whatsapp.observe_allowed_chats': sortedSet(whatsapp.observe_allowed_chats),
     'whatsapp.history_backfill': whatsapp.history_backfill === true,
     'whatsapp.history_backfill_limit': whatsapp.history_backfill_limit,
     'platform_toolsets.whatsapp': sortedSet(cfg.platform_toolsets?.whatsapp),
+    'plugins.community-archive.enabled': sortedSet(cfg.plugins?.enabled).includes('community-archive'),
+    'plugins.community-archive.disabled': sortedSet(cfg.plugins?.disabled).includes('community-archive'),
+    'plugins.community-archive.allow_tool_override': cfg.plugins?.entries?.['community-archive']?.allow_tool_override === false,
+    'agent.session_search.disabled': sortedSet(cfg.agent?.disabled_toolsets).includes('session_search'),
     'memory.write_approval': cfg.memory?.write_approval === true,
     'skills.write_approval': cfg.skills?.write_approval === true
   }
@@ -99,17 +106,23 @@ export function effectiveProfileOwnedView(cfgData) {
     model: Object.fromEntries(Object.entries(model).map(([k, v]) => [k, v]).sort(([a], [b]) => (a < b ? -1 : 1))),
     'platform_toolsets.whatsapp': sortedSet(cfg.platform_toolsets?.whatsapp),
     'memory.write_approval': cfg.memory?.write_approval === true,
-    'skills.write_approval': cfg.skills?.write_approval === true
+    'skills.write_approval': cfg.skills?.write_approval === true,
+    'agent.session_search.disabled': sortedSet(cfg.agent?.disabled_toolsets).includes('session_search'),
+    'plugins.community-archive.enabled': sortedSet(cfg.plugins?.enabled).includes('community-archive'),
+    'plugins.community-archive.disabled': sortedSet(cfg.plugins?.disabled).includes('community-archive'),
+    'plugins.community-archive.allow_tool_override': cfg.plugins?.entries?.['community-archive']?.allow_tool_override === false
   }
 }
 
 /** The owned view a SPACE profile must carry: the shared space's fence
- * includes session_search, every other (isolated) space keeps the plain
+ * includes community_archive, every other (isolated) space keeps the plain
  * fenced set (§2.1), and every space mirrors `rootModel` — the ROOT config's
  * model block as it actually stands on disk. */
 export function expectedProfileOwnedView(spaceSlug, rootModel) {
   const toolset = spaceSlug === SHARED_SPACE ? SHARED_TOOLSET : GROUP_TOOLSET
-  return effectiveProfileOwnedView(buildProfileConfig(undefined, toolset, rootModel))
+  return effectiveProfileOwnedView(
+    buildProfileConfig(undefined, toolset, rootModel, { archivePlugin: spaceSlug === SHARED_SPACE })
+  )
 }
 
 const ENV_LINE_RE = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)$/

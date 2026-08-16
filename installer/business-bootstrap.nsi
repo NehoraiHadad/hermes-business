@@ -93,6 +93,33 @@ Section "Install"
   File "..\hermes-plugin\business-whatsapp-policy\plugin.yaml"
   SetOutPath "$INSTDIR"
 
+  ; Self-contained community management/runtime payload. It is copied into
+  ; HERMES_HOME\tachles\community by BusinessInstall.ps1 and includes its own
+  ; YAML parser dependencies, so an installed product never depends on this
+  ; repository's node_modules or source checkout.
+  SetOutPath "$INSTDIR\community\scripts"
+  File "..\scripts\community-generate.mjs"
+  File "..\scripts\community-provision.mjs"
+  SetOutPath "$INSTDIR\community\scripts\lib\community"
+  File /x "*.test.mjs" "..\scripts\lib\community\*.mjs"
+  SetOutPath "$INSTDIR\community\assets\community-skills\community-bootstrap"
+  File "..\assets\community-skills\community-bootstrap\SKILL.md"
+  SetOutPath "$INSTDIR\community\assets\community-skills\community-admin"
+  File "..\assets\community-skills\community-admin\SKILL.md"
+  SetOutPath "$INSTDIR\community\hermes-plugin\community-archive"
+  File "..\hermes-plugin\community-archive\__init__.py"
+  File "..\hermes-plugin\community-archive\filters.py"
+  File "..\hermes-plugin\community-archive\policy.py"
+  File "..\hermes-plugin\community-archive\query.py"
+  File "..\hermes-plugin\community-archive\storage.py"
+  File "..\hermes-plugin\community-archive\tool.py"
+  File "..\hermes-plugin\community-archive\plugin.yaml"
+  SetOutPath "$INSTDIR\community\node_modules\js-yaml"
+  File /r "..\node_modules\js-yaml\*"
+  SetOutPath "$INSTDIR\community\node_modules\argparse"
+  File /r "..\node_modules\argparse\*"
+  SetOutPath "$INSTDIR"
+
   DetailPrint "Detecting or installing Hermes Agent..."
   nsExec::ExecToLog '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File "$INSTDIR\bootstrap.ps1" -PayloadRoot "$INSTDIR" -BootstrapVersion "${PRODUCT_VERSION}"'
   Pop $0

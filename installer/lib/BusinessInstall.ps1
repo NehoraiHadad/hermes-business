@@ -27,6 +27,54 @@ function Install-BusinessPayload {
     @{ Source = $partnerSkillSource;  Target = (Join-Path $HermesHome 'skills\business\business-partner\SKILL.md') }
   )
 
+  # Community tooling is callable by the official admin Hermes, but it always
+  # provisions a SEPARATE pinned engine + HERMES_HOME. The patched observer is
+  # therefore never mixed into, or selected as an update for, the official
+  # business runtime.
+  $communitySource = Join-Path $PayloadRoot 'community'
+  if (-not (Test-Path -LiteralPath $communitySource -PathType Container)) {
+    throw "The community runtime payload is missing at $communitySource. No changes were made."
+  }
+  $communityTarget = Join-Path $HermesHome 'tachles\community'
+  $communityPayloadFiles = @(Get-ChildItem -LiteralPath $communitySource -File -Recurse)
+  if ($communityPayloadFiles.Count -eq 0) {
+    throw "The community runtime payload is empty at $communitySource. No changes were made."
+  }
+  foreach ($sourceFile in $communityPayloadFiles) {
+    $relative = $sourceFile.FullName.Substring($communitySource.Length).TrimStart('\', '/')
+    $files += @{ Source = $sourceFile.FullName; Target = (Join-Path $communityTarget $relative) }
+  }
+
+  if ([string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) {
+    throw 'LOCALAPPDATA is unavailable; cannot choose an isolated community runtime root. No changes were made.'
+  }
+  $communityInstallRoot = Join-Path $env:LOCALAPPDATA 'TachlesCommunity'
+  $communityHome = Join-Path $communityInstallRoot 'home'
+  $communityContract = Join-Path $communityInstallRoot 'community.yaml'
+  $communityGenerator = Join-Path $communityTarget 'scripts\community-generate.mjs'
+  $communityProvisioner = Join-Path $communityTarget 'scripts\community-provision.mjs'
+  foreach ($skillName in @('community-bootstrap', 'community-admin')) {
+    $template = Join-Path $communitySource "assets\community-skills\$skillName\SKILL.md"
+    if (-not (Test-Path -LiteralPath $template -PathType Leaf)) {
+      throw "The community Skill template is missing: $template. No changes were made."
+    }
+    $rendered = Get-Content -Raw -LiteralPath $template
+    $rendered = $rendered.Replace('{{HOME_DIR}}', $communityHome)
+    $rendered = $rendered.Replace('{{CONTRACT_PATH}}', $communityContract)
+    $rendered = $rendered.Replace('{{INSTALL_ROOT}}', $communityInstallRoot)
+    $rendered = $rendered.Replace('{{GENERATE_CLI}}', $communityGenerator)
+    $rendered = $rendered.Replace('{{PROVISION_CLI}}', $communityProvisioner)
+    if ($rendered -match '\{\{[A-Z_]+\}\}') {
+      throw "The rendered $skillName Skill still contains an unresolved placeholder. No changes were made."
+    }
+    $renderedSource = Join-Path $PayloadRoot ".$skillName.rendered.SKILL.md"
+    [IO.File]::WriteAllText($renderedSource, $rendered, (New-Object Text.UTF8Encoding($false)))
+    $files += @{
+      Source = $renderedSource
+      Target = (Join-Path $HermesHome "skills\community\$skillName\SKILL.md")
+    }
+  }
+
   # The WhatsApp reply-policy plugin ships as part of the same transactional unit
   # so that a failure to *enable* it rolls back the plugin + skill too.
   $policySource = Join-Path $PayloadRoot 'whatsapp-policy'
@@ -90,6 +138,8 @@ function Install-BusinessPayload {
     whatsAppPolicyFailClosed  = 'read_only'
     companionBackendIncluded  = $backendPresent
     companionBackendEnabled   = $backendPresent
+    communityRuntimeIncluded  = $true
+    communityRuntimeFileCount = $communityPayloadFiles.Count
     dashboardManifestSha256   = if ($backendPresent) { Get-Sha256Hash -Path (Join-Path $PayloadRoot 'dashboard\manifest.json') } else { $null }
     dashboardApiSha256        = if ($backendPresent) { Get-Sha256Hash -Path (Join-Path $PayloadRoot 'dashboard\plugin_api.py') } else { $null }
   }

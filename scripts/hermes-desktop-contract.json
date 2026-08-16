@@ -1,10 +1,10 @@
 {
   "schemeVersion": 1,
-  "compatRange": ">=0.19.0 <0.20.0",
+  "compatRange": ">=0.19.0 <0.21.0",
   "generatedFrom": {
     "mechanism": "installed-hermes-desktop-source",
     "repository": "NousResearch/hermes-agent",
-    "hermesVersion": "0.19.1"
+    "hermesVersion": "0.20.1"
   },
   "discovery": {
     "diskDoorSegment": "desktop-plugins",
@@ -55,19 +55,19 @@
   "sourceFiles": {
     "apps/desktop/src/sdk/index.ts": {
       "key": "sdkIndex",
-      "sha256": "4b2d29fd8fd209262f8da8fb63f57079b9577098022ce929cbbc5337c5e0b8e2"
+      "sha256": "38d2816a9d0a178e3833aab0f47d0462a0d38d0b9a9d1019b6ea57ed8ca976c2"
     },
     "apps/desktop/src/sdk/runtime.ts": {
       "key": "sdkRuntime",
-      "sha256": "6d38dfb12d567cf3f10474afdc9cd6798b2b05b4b23e7f2f4a383f8a265b0c07"
+      "sha256": "f7d5e8c63f05de4884329b17e185da93f9f55837058fdca582d7b93ddd2ce1dc"
     },
     "apps/desktop/src/contrib/runtime-loader.ts": {
       "key": "runtimeLoader",
-      "sha256": "3fd1024fc11883f10bada0dc5f55806f7b8a8233d91f68e45edfb893435651c4"
+      "sha256": "1369dc27582b4ad69decdecb5ae4426ad1dd659823299169ec0db0a939bae949"
     },
     "apps/desktop/src/contrib/plugin.ts": {
       "key": "pluginContract",
-      "sha256": "34c2713ab2bf0d5e77826a42cdd22da80fc5ff051d2d143c2a8ba22c1e26c2db"
+      "sha256": "8b24365397d7e0ad4a9ca163f40c3cdbe53f39f3c583d39095eb56d36e6e2c18"
     }
   }
 }

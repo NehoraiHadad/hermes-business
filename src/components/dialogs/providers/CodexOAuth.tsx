@@ -2,6 +2,7 @@ import { CheckCircle2, LoaderCircle } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { gateExistingCodexGrant } from '../../../lib/codex-existing-grant'
 import { hermesClient } from '../../../lib/hermes-client'
+import type { HermesProviderApi } from '../../../lib/hermes/providers'
 import { DeviceFlowOAuth } from './DeviceFlowOAuth'
 
 // Codex-specific wrapper over the generic device-flow: what Codex adds is the
@@ -16,9 +17,15 @@ import { DeviceFlowOAuth } from './DeviceFlowOAuth'
 //     unreachable grant records NO evidence and the failure is surfaced.
 export function CodexOAuth({
   connected,
+  providerApi = hermesClient,
+  probeExisting = true,
+  recordEvidence = true,
   onConnected
 }: {
   connected: boolean
+  providerApi?: HermesProviderApi
+  probeExisting?: boolean
+  recordEvidence?: boolean
   onConnected: () => void
 }) {
   const [working, setWorking] = useState(false)
@@ -32,17 +39,19 @@ export function CodexOAuth({
   }, [])
 
   const finish = async () => {
-    const { model } = await hermesClient.activateProvider('openai-codex')
-    await hermesClient
-      .recordProviderEvidence({
-        provider: 'openai-codex',
-        model: model || null,
-        validatedAt: new Date().toISOString(),
-        ok: true,
-        reachable: true,
-        method: 'validate'
-      })
-      .catch(() => {})
+    const { model } = await providerApi.activateProvider('openai-codex')
+    if (recordEvidence) {
+      await hermesClient
+        .recordProviderEvidence({
+          provider: 'openai-codex',
+          model: model || null,
+          validatedAt: new Date().toISOString(),
+          ok: true,
+          reachable: true,
+          method: 'validate'
+        })
+        .catch(() => {})
+    }
     if (!cancelled.current) onConnected()
   }
 
@@ -53,12 +62,14 @@ export function CodexOAuth({
       // A stored grant is NOT proof it still works — probe it live before minting evidence.
       // The facade returns null when the probe capability is unavailable, and the gate
       // fails closed on null (never a blind pass).
-      const gate = gateExistingCodexGrant(await hermesClient.probeCodexGrant())
-      if (!gate.allow) {
-        // Revoked / expired / unreachable grant → NO evidence, onboarding stays incomplete.
-        setError(gate.error)
-        setWorking(false)
-        return
+      if (probeExisting) {
+        const gate = gateExistingCodexGrant(await hermesClient.probeCodexGrant())
+        if (!gate.allow) {
+          // Revoked / expired / unreachable grant → NO evidence, onboarding stays incomplete.
+          setError(gate.error)
+          setWorking(false)
+          return
+        }
       }
       await finish()
     } catch (caught) {
@@ -86,6 +97,8 @@ export function CodexOAuth({
   return (
     <DeviceFlowOAuth
       providerId="openai-codex"
+      providerApi={providerApi}
+      recordEvidence={recordEvidence}
       connectLabel="חבר באמצעות ChatGPT"
       description="Hermes יבקש אישור בדפדפן באמצעות Device Code. הסיסמה והאסימון אינם עוברים דרך המעטפת."
       onConnected={onConnected}

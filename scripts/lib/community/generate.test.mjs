@@ -3,11 +3,18 @@ import yaml from 'js-yaml'
 import {
   ADMIN_SKILLS,
   ADMIN_TOOLSET,
+  COMMUNITY_ACTIVATION,
+  COMMUNITY_ACTIVATION_FILE,
+  COMMUNITY_ARCHIVE_PLUGIN,
+  COMMUNITY_ARCHIVE_PLUGIN_FILES,
+  COMMUNITY_ARCHIVE_TOOL,
+  DISABLED_COMMUNITY_TOOLSETS,
   GROUP_TOOLSET,
   HISTORY_BACKFILL_LIMIT,
   OWNED_ENV,
   SHARED_TOOLSET,
   buildEnvFile,
+  buildArchivePolicy,
   buildGatewayConfig,
   buildProfileConfig,
   buildRoutes,
@@ -57,6 +64,7 @@ const sources = {
   'knowledge/emergency.md': '# חירום\nרכז צח"י: דוגמה\n'
 }
 const readSource = p => sources[p]
+const readCommunityPluginFile = name => `# runtime fixture: ${name}\n`
 
 // Hermetic admin-skill template fakes (the SHIPPED assets are validated by
 // admin-skills.test.mjs against the real files).
@@ -97,6 +105,7 @@ const gen = (overrides = {}) =>
   generateArtifacts(contract(), {
     readKnowledgeSource: readSource,
     readAdminSkillTemplate: name => adminTemplates[name],
+    readCommunityPluginFile,
     deployPaths,
     ...overrides
   })
@@ -149,6 +158,7 @@ describe('gateway config generation', () => {
       generateArtifacts(c, {
         readKnowledgeSource: readSource,
         readAdminSkillTemplate: name => adminTemplates[name],
+        readCommunityPluginFile,
         deployPaths
       })['config.yaml']
     ).whatsapp
@@ -191,9 +201,27 @@ describe('gateway config generation', () => {
     expect(wa.history_backfill_limit).toBe(HISTORY_BACKFILL_LIMIT)
   })
 
+  it('keeps resident slash commands closed in groups while admin DMs retain the Hermes floor', () => {
+    expect(cfg().whatsapp.group_user_allowed_commands).toEqual([])
+  })
+
+  it('enables durable observation alongside the immediate 50-message context', () => {
+    const whatsapp = cfg().whatsapp
+    expect(whatsapp.observe_unmentioned_group_messages).toBe(true)
+    expect(whatsapp.observe_allowed_chats).toEqual([contract().groups[0].jid])
+  })
+
+  it('enables the archive plugin without privileged tool override', () => {
+    const plugins = cfg().plugins
+    expect(plugins.enabled).toContain(COMMUNITY_ARCHIVE_PLUGIN)
+    expect(plugins.disabled).not.toContain(COMMUNITY_ARCHIVE_PLUGIN)
+    expect(plugins.entries[COMMUNITY_ARCHIVE_PLUGIN].allow_tool_override).toBe(false)
+  })
+
   it('pins the ADMIN toolset on the ROOT config (default profile = admin DM channel, §6.1)', () => {
     const c = cfg()
     expect(c.platform_toolsets.whatsapp).toEqual([...ADMIN_TOOLSET])
+    expect(c.agent.disabled_toolsets).toEqual(expect.arrayContaining([...DISABLED_COMMUNITY_TOOLSETS]))
     expect(c.memory.write_approval).toBe(true)
     expect(c.skills.write_approval).toBe(true)
   })
@@ -270,31 +298,58 @@ describe('per-space artifacts (§2.1)', () => {
   it('produces exactly the expected artifact paths: profiles are per SPACE, not per group', () => {
     expect(Object.keys(gen()).sort()).toEqual([
       '.env',
+      COMMUNITY_ACTIVATION_FILE,
+      'community/archive-policy.json',
       'config.yaml',
       'profiles/emergency/SOUL.md',
       'profiles/emergency/config.yaml',
       'profiles/emergency/skills/emergency/SKILL.md',
       'profiles/emergency/skills/general/SKILL.md',
+      ...COMMUNITY_ARCHIVE_PLUGIN_FILES.map(name => `plugins/${COMMUNITY_ARCHIVE_PLUGIN}/${name}`),
+      ...COMMUNITY_ARCHIVE_PLUGIN_FILES.map(name => `profiles/${SHARED_SPACE}/plugins/${COMMUNITY_ARCHIVE_PLUGIN}/${name}`),
       `profiles/${SHARED_SPACE}/SOUL.md`,
       `profiles/${SHARED_SPACE}/config.yaml`,
       `profiles/${SHARED_SPACE}/skills/general/SKILL.md`,
       'skills/community-admin/SKILL.md',
       'skills/community-bootstrap/SKILL.md'
-    ])
+    ].sort())
   })
 
-  it('the SHARED space pins the fence PLUS session_search; an ISOLATED space stays without it (§6.1.1 verification 4)', () => {
+  it('the SHARED space gets only the scoped archive facade; an ISOLATED space stays without archive access', () => {
     const shared = yaml.load(gen()[`profiles/${SHARED_SPACE}/config.yaml`])
     expect(shared.platform_toolsets.whatsapp).toEqual([...SHARED_TOOLSET])
-    expect(shared.platform_toolsets.whatsapp).toContain('session_search')
+    expect(shared.platform_toolsets.whatsapp).toContain(COMMUNITY_ARCHIVE_TOOL)
+    expect(shared.platform_toolsets.whatsapp).not.toContain('session_search')
+    expect(shared.agent.disabled_toolsets).toContain('session_search')
     expect(shared.memory.write_approval).toBe(true)
     expect(shared.skills.write_approval).toBe(true)
+    expect(shared.plugins.enabled).toContain(COMMUNITY_ARCHIVE_PLUGIN)
+    expect(shared.plugins.disabled).not.toContain(COMMUNITY_ARCHIVE_PLUGIN)
+    expect(shared.plugins.entries[COMMUNITY_ARCHIVE_PLUGIN].allow_tool_override).toBe(false)
 
     const isolated = yaml.load(gen()['profiles/emergency/config.yaml'])
     expect(isolated.platform_toolsets.whatsapp).toEqual([...GROUP_TOOLSET])
+    expect(isolated.platform_toolsets.whatsapp).not.toContain(COMMUNITY_ARCHIVE_TOOL)
     expect(isolated.platform_toolsets.whatsapp).not.toContain('session_search')
+    expect(isolated.agent.disabled_toolsets).toContain('session_search')
     expect(isolated.memory.write_approval).toBe(true)
     expect(isolated.skills.write_approval).toBe(true)
+    expect(isolated.plugins.enabled).not.toContain(COMMUNITY_ARCHIVE_PLUGIN)
+    expect(isolated.plugins.disabled).toContain(COMMUNITY_ARCHIVE_PLUGIN)
+    expect(isolated.plugins.entries[COMMUNITY_ARCHIVE_PLUGIN]).toBeUndefined()
+  })
+
+  it('registers the archive plugin inside a fresh shared profile on first boot, never inside an isolated profile', () => {
+    const artifacts = gen()
+    for (const name of COMMUNITY_ARCHIVE_PLUGIN_FILES) {
+      expect(artifacts[`profiles/${SHARED_SPACE}/plugins/${COMMUNITY_ARCHIVE_PLUGIN}/${name}`])
+        .toBe(artifacts[`plugins/${COMMUNITY_ARCHIVE_PLUGIN}/${name}`])
+      expect(artifacts[`profiles/emergency/plugins/${COMMUNITY_ARCHIVE_PLUGIN}/${name}`]).toBeUndefined()
+    }
+  })
+
+  it('writes the explicit activation marker consumed by desktop routing', () => {
+    expect(JSON.parse(gen()[COMMUNITY_ACTIVATION_FILE])).toEqual(COMMUNITY_ACTIVATION)
   })
 
   it('the fenced toolsets expose no config/file/terminal capability (hard audience boundary)', () => {
@@ -302,8 +357,16 @@ describe('per-space artifacts (§2.1)', () => {
       expect(GROUP_TOOLSET).not.toContain(banned)
       expect(SHARED_TOOLSET).not.toContain(banned)
     }
-    // The shared toolset is exactly the fence + history search, nothing more.
-    expect(SHARED_TOOLSET).toEqual([...GROUP_TOOLSET, 'session_search'])
+    // The shared toolset is exactly the fence + scoped archive, nothing more.
+    expect(SHARED_TOOLSET).toEqual([...GROUP_TOOLSET, COMMUNITY_ARCHIVE_TOOL])
+  })
+
+  it('writes a server-owned archive policy with shared public groups only', () => {
+    expect(buildArchivePolicy(contract())).toEqual({
+      version: 1,
+      groups: [{ id: '120363000000000001@g.us', name: 'קבוצת היישוב הראשית' }]
+    })
+    expect(JSON.parse(gen()['community/archive-policy.json'])).toEqual(buildArchivePolicy(contract()))
   })
 
   // Pilot group, 2026-08-14: a clarify call parked the turn for 21+ minutes at
@@ -329,6 +392,7 @@ describe('per-space artifacts (§2.1)', () => {
     const artifacts = generateArtifacts(c, {
       readKnowledgeSource: readSource,
       readAdminSkillTemplate: name => adminTemplates[name],
+      readCommunityPluginFile,
       deployPaths
     })
     expect(artifacts[`profiles/${SHARED_SPACE}/skills/general/SKILL.md`]).toBeDefined()
@@ -346,7 +410,8 @@ describe('per-space artifacts (§2.1)', () => {
             : undefined
       })[`profiles/${SHARED_SPACE}/config.yaml`]
     )
-    expect(merged.agent).toEqual({ max_turns: 42 }) // non-owned: preserved
+    expect(merged.agent.max_turns).toBe(42) // non-owned: preserved
+    expect(merged.agent.disabled_toolsets).toContain('session_search')
     expect(merged.platform_toolsets.whatsapp).toEqual([...SHARED_TOOLSET]) // owned: rewritten
   })
 
@@ -390,7 +455,8 @@ describe('per-space artifacts (§2.1)', () => {
     expect(soul).not.toContain('צח"י')
     // Shared-memory model + the no-invention anchor.
     expect(soul).toContain('זיכרון קהילתי משותף')
-    expect(soul).toContain('חיפוש ההיסטוריה')
+    expect(soul).toContain('community_archive')
+    expect(soul).toContain('ראיות לא מאומתות')
     expect(soul).toContain('אל תמציא')
   })
 

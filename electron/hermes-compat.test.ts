@@ -11,6 +11,7 @@ import {
   installRepoRoot,
   resetInstallCheckout
 } from './hermes-compat.cjs'
+import { execFileSync } from 'node:child_process'
 
 // A path that is provably NOT a git work tree and not the managed layout, so
 // every classification below is deterministic regardless of whether git is
@@ -57,6 +58,33 @@ describe('assertUpdateMethodSupported', () => {
   })
 })
 
+describe('pinned community git installs', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'hermes-pinned-'))
+  const repo = path.join(root, 'hermes-agent')
+  const command = path.join(repo, 'venv', 'bin', 'hermes')
+
+  try {
+    fs.mkdirSync(path.dirname(command), { recursive: true })
+    execFileSync('git', ['init', repo], { stdio: 'ignore' })
+    execFileSync('git', ['-C', repo, 'config', 'user.email', 'test@example.invalid'])
+    execFileSync('git', ['-C', repo, 'config', 'user.name', 'Test'])
+    fs.writeFileSync(path.join(repo, 'pyproject.toml'), '[project]\nname="hermes"\n')
+    execFileSync('git', ['-C', repo, 'add', 'pyproject.toml'])
+    execFileSync('git', ['-C', repo, 'commit', '-m', 'fixture'], { stdio: 'ignore' })
+    execFileSync('git', ['-C', repo, 'remote', 'add', 'origin', 'https://github.com/NehoraiHadad/hermes-agent.git'])
+  } catch {
+    // Assertions below expose a missing git fixture as unknown instead of
+    // hiding a production classification failure.
+  }
+
+  afterAll(() => fs.rmSync(root, { recursive: true, force: true }))
+
+  it('classifies a fork checkout as pinned and refuses auto-update', () => {
+    expect(classifyInstallMethod(command)).toBe('pinned')
+    expect(() => assertUpdateMethodSupported(command)).toThrow(/נעוץ|קהילה מאומתת/)
+  })
+})
+
 describe('gitFetchOrigin', () => {
   it('reports not-git for a non-git install without shelling out', () => {
     expect(gitFetchOrigin(BOGUS)).toEqual({ ok: false, reason: 'not-git' })
@@ -70,7 +98,8 @@ describe('assertRunningVersionSupported (post-update re-gate)', () => {
   })
 
   it('throws (out of range) for a version at or above the exclusive max', () => {
-    expect(() => assertRunningVersionSupported('0.20.0')).toThrow(/חורגת מהטווח הנתמך/)
+    expect(assertRunningVersionSupported('0.20.1')).toBe('0.20.1')
+    expect(() => assertRunningVersionSupported('0.21.0')).toThrow(/חורגת מהטווח הנתמך/)
     expect(() => assertRunningVersionSupported('0.18.9')).toThrow(/חורגת מהטווח הנתמך/)
   })
 

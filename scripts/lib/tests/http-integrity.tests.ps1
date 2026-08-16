@@ -54,7 +54,7 @@ function Invoke-HttpIntegrityTests {
     $stop = Join-Path $WorkRoot "stop-ok-$port"
     $bodyPath = Join-Path $WorkRoot 'served-ok.bin'
     [System.IO.File]::WriteAllBytes($bodyPath, ([byte[]](1..4096 | ForEach-Object { ($_ * 7) % 256 })))
-    $expected = (Get-FileHash -Algorithm SHA256 -LiteralPath $bodyPath).Hash
+    $expected = Get-Sha256Hash -Path $bodyPath
     $server = Start-MockServer -Port $port -StopFile $stop -Mode 'ok' -BodyPath $bodyPath
     try {
       $dest = Join-Path $WorkRoot 'download-ok.bin'

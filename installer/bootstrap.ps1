@@ -37,7 +37,7 @@ Set-StrictMode -Version Latest
 $ProgressPreference = 'SilentlyContinue'
 
 $MinimumHermesVersion = [version]'0.19.0'
-$MaximumHermesVersion = [version]'0.20.0'
+$MaximumHermesVersion = [version]'0.21.0'
 $Repository = 'NousResearch/hermes-agent'
 if ([string]::IsNullOrWhiteSpace($BootstrapVersion)) {
   $packagePath = Join-Path (Split-Path -Parent $PSScriptRoot) 'package.json'

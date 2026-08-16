@@ -52,10 +52,54 @@ function stageBusinessBootstrap(options = {}) {
   fs.copyFileSync(sources.partnerSkill, path.join(stagingRoot, 'business-partner.SKILL.md'))
   stageBootstrapLibrary(sourceRoot, stagingRoot, isPackaged)
   stageWhatsappPolicyPayload(sourceRoot, stagingRoot, isPackaged)
+  stageCommunityPayload(sourceRoot, stagingRoot, isPackaged)
   // The companion backend ships in the SAME staged payload so the bootstrap can
   // install desktop plugin + backend as one transaction (see BusinessInstall.ps1).
   stageBackendPayload(sourceRoot, stagingRoot, isPackaged)
   return stagingRoot
+}
+
+const COMMUNITY_REQUIRED_FILES = Object.freeze([
+  'scripts/community-generate.mjs',
+  'scripts/community-provision.mjs',
+  'assets/community-skills/community-bootstrap/SKILL.md',
+  'assets/community-skills/community-admin/SKILL.md',
+  'hermes-plugin/community-archive/plugin.yaml',
+  'hermes-plugin/community-archive/__init__.py',
+  'node_modules/js-yaml/package.json',
+  'node_modules/argparse/package.json'
+])
+
+function stageCommunityPayload(sourceRoot, stagingRoot, isPackaged) {
+  const target = path.join(stagingRoot, 'community')
+  if (isPackaged) {
+    const source = path.join(sourceRoot, 'community')
+    for (const relative of COMMUNITY_REQUIRED_FILES) {
+      if (!fs.existsSync(path.join(source, relative))) {
+        throw new Error(`The packaged community payload is missing: ${relative}`)
+      }
+    }
+    fs.cpSync(source, target, { recursive: true })
+    return
+  }
+
+  const include = [
+    ['scripts/community-generate.mjs', 'scripts/community-generate.mjs'],
+    ['scripts/community-provision.mjs', 'scripts/community-provision.mjs'],
+    ['scripts/lib/community', 'scripts/lib/community'],
+    ['assets/community-skills', 'assets/community-skills'],
+    ['hermes-plugin/community-archive', 'hermes-plugin/community-archive'],
+    ['node_modules/js-yaml', 'node_modules/js-yaml'],
+    ['node_modules/argparse', 'node_modules/argparse']
+  ]
+  for (const [from, to] of include) {
+    const source = path.join(sourceRoot, from)
+    if (!fs.existsSync(source)) throw new Error(`The community payload is missing: ${from}`)
+    fs.cpSync(source, path.join(target, to), {
+      recursive: true,
+      filter: candidate => !/[\\/](?:tests?|__pycache__)(?:[\\/]|$)/.test(candidate) && !/\.test\.mjs$/.test(candidate)
+    })
+  }
 }
 
 // The bootstrap installer reads the WhatsApp policy plugin payload from
@@ -110,4 +154,4 @@ function installDesktopPlugin() {
   return { ok: true, target, integrity, bootstrapSkill: skillTarget, bootstrapSkillIntegrity: skillIntegrity, backend }
 }
 
-module.exports = { installDesktopPlugin, stageBusinessBootstrap }
+module.exports = { COMMUNITY_REQUIRED_FILES, installDesktopPlugin, stageBusinessBootstrap }

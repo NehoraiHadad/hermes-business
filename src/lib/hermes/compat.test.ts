@@ -10,7 +10,7 @@ import {
 describe('hermes compat contract', () => {
   it('stays in lockstep with the build-time SDK range', () => {
     expect(HERMES_COMPAT_RANGE).toBe(SDK_RANGE)
-    expect(HERMES_COMPAT_RANGE).toBe('>=0.19.0 <0.20.0')
+    expect(HERMES_COMPAT_RANGE).toBe('>=0.19.0 <0.21.0')
   })
 
   it('parses a real --version banner', () => {
@@ -23,7 +23,8 @@ describe('hermes compat contract', () => {
     expect(isVersionSupported('v0.19.0')).toBe(true)
     expect(isVersionSupported('v0.19.7')).toBe(true)
     expect(isVersionSupported('v0.18.9')).toBe(false)
-    expect(isVersionSupported('v0.20.0')).toBe(false)
+    expect(isVersionSupported('v0.20.1')).toBe(true)
+    expect(isVersionSupported('v0.21.0')).toBe(false)
     expect(isVersionSupported('v0.21.3')).toBe(false)
     expect(isVersionSupported(null)).toBe(false)
   })
@@ -31,7 +32,7 @@ describe('hermes compat contract', () => {
   it('describes an unsupported runtime truthfully without promising an update', () => {
     const message = describeUnsupported('v0.20.0')
     expect(message).toContain('0.20.0')
-    expect(message).toContain('>=0.19.0 <0.20.0')
+    expect(message).toContain('>=0.19.0 <0.21.0')
     expect(message).toContain('לא בוצע עדכון אוטומטי')
   })
 })

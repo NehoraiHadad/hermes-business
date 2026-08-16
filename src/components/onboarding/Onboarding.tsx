@@ -85,15 +85,15 @@ export function Onboarding({
           <span className="eyebrow">פשוט מתחילים לדבר</span>
           <h1>נכיר תוך כדי עבודה</h1>
           <p>
-            בלי שאלון ובלי טפסים. בשיחה הראשונה העוזר ילמד מה העסק עושה,
-            יכין סיכום לאישור ויעזור כבר במשימה הראשונה.
+            בלי שאלון ובלי טפסים. פשוט מתחילים במה שתרצה לעשות,
+            והעוזר ילמד רק את מה שנחוץ תוך כדי העבודה.
           </p>
 
           <div className="setup-readiness" aria-label="מצב ההכנה">
             <div className={runtimeReady ? 'setup-readiness__item setup-readiness__item--ready' : 'setup-readiness__item'}>
               {runtimeReady ? <CheckCircle2 size={19} /> : <Download size={19} />}
               <span>
-                <strong>המנוע העסקי</strong>
+                <strong>העוזר</strong>
                 <small>{runtimeReady ? 'מוכן לעבודה' : runtime === null ? 'נבדק כעת' : 'יוגדר אוטומטית'}</small>
               </span>
             </div>

@@ -63,22 +63,24 @@ describe('shipped admin skill assets', () => {
         expect(rendered).not.toContain('\r')
       })
 
-      it('carries the fail-closed operator instructions in Hebrew', () => {
+      it('carries the fail-closed internal instructions in Hebrew', () => {
         const text = template()
         expect(text).toContain('אל תמציא') // never invent JIDs/numbers
-        expect(text).toContain('verify') // always verify and show the output
+        expect(text).toContain('verify') // always verify internally
         expect(text).toContain('אישור') // confirm before writing
       })
     })
   }
 
-  it('bootstrap documents the bridge-log JID discovery trick honestly (incl. the running-deployment gap)', () => {
+  it('keeps the bridge-log JID fallback internally but never asks the user for an id', () => {
     const text = readTemplate('community-bootstrap')
     expect(text).toContain('bridge.log')
     expect(text).toContain('@g\\.us')
     // The honest limitation: on a running deployment (bridge opened with *),
     // unknown-group messages leave no log trace — discovery needs the window.
-    expect(text).toContain('נבלעות בשקט')
+    expect(text).toContain('להיבלע בשקט')
+    expect(text).toContain('לעולם אל תבקש ממנו JID')
+    expect(text).toContain('אל תחשוף למשתמש')
   })
 
   it('admin skill frames the CLI as the RECOMMENDED path, not a prohibition (hard boundary is the toolset)', () => {
@@ -87,14 +89,26 @@ describe('shipped admin skill assets', () => {
     expect(text).toContain('סוכן מלא')
   })
 
-  it('both skills teach the context-space model (§2.1): shared village default, isolated: true opt-in', () => {
+  it('both skills expose a conversation, not the deployment machinery', () => {
+    for (const name of ADMIN_SKILLS) {
+      const text = readTemplate(name)
+      expect(text).toMatch(/שאלה (?:קצרה )?אחת|שאלה אחת קצרה/)
+      expect(text).toContain('לא להציג למשתמש')
+      expect(text).toMatch(/פלט (?:`verify` גולמי|גולמי של[\s\S]{0,40}`verify`)/)
+      expect(text).not.toMatch(/^## שלב \d/m)
+    }
+    expect(readTemplate('community-bootstrap')).toContain('אל תתחיל בשאלה "מה שם הקהילה?"')
+    expect(readTemplate('community-bootstrap')).toContain('מסלול Hermes הרשמי')
+  })
+
+  it('both skills keep shared village as the MVP and refuse prompt-only isolation', () => {
     for (const name of ADMIN_SKILLS) {
       const text = readTemplate(name)
       expect(text, `${name} must name the shared space`).toContain('village')
-      expect(text, `${name} must teach the isolation opt-in`).toContain('isolated: true')
+      expect(text, `${name} must warn against profile-only isolation`).toContain('isolated: true')
+      expect(text, `${name} must require a separate deployment`).toContain('פריסה נפרדת')
     }
-    // The privacy consequence is spelled out for the operator interview.
-    expect(readTemplate('community-bootstrap')).toContain('מרחבי הקשר')
-    expect(readTemplate('community-admin')).toContain('מרחבי הקשר')
+    expect(readTemplate('community-bootstrap')).toContain('אל תחבר את הקבוצה')
+    expect(readTemplate('community-admin')).toContain('אינה מצטרפת')
   })
 })

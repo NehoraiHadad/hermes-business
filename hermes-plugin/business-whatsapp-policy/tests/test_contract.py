@@ -50,7 +50,9 @@ class ContractTripwire(unittest.TestCase):
         self.assertIsNone(platform_family("telegram"))
         self.assertTrue(is_supported_version("0.19.1"))
         self.assertTrue(is_supported_version("0.19.4"))
-        self.assertFalse(is_supported_version("0.20.0"))
+        self.assertTrue(is_supported_version("0.20.0"))
+        self.assertTrue(is_supported_version("0.20.9"))
+        self.assertFalse(is_supported_version("0.21.0"))
 
     def test_conforming_surface_passes(self):
         verify_adapter_surface(Conforming(), "baileys")  # must not raise

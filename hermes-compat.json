@@ -1,10 +1,18 @@
 {
   "$comment": "CANONICAL, single source of truth for Hermes compatibility policy. Every layer (renderer src/lib/hermes/compat.ts, electron/hermes-compat.cjs, scripts/plugin-sdk-contract.mjs, the Python plugin contract, and installer/bootstrap/Release) is asserted against this file by src/lib/hermes-compat-policy.test.ts. Edit HERE first, then update the mirrors the test names.",
-  "range": ">=0.19.0 <0.20.0",
+  "range": ">=0.19.0 <0.21.0",
   "minVersion": "0.19.0",
-  "maxVersionExclusive": "0.20.0",
-  "verifiedInstalledVersion": "0.19.1",
+  "maxVersionExclusive": "0.21.0",
+  "verifiedInstalledVersion": "0.20.1",
   "versionSource": "hermes_cli/__init__.py:__version__",
+  "communityEngine": {
+    "repository": "NehoraiHadad/hermes-agent",
+    "tag": "community-engine-v0.2.2",
+    "sha": "af04eb8bb85e0a5b6333cd0104921b7e49bcf1f9",
+    "officialBaseTag": "v2026.8.13",
+    "officialBaseVersion": "0.20.1",
+    "note": "Temporary immutable community runtime while the WhatsApp observer and related fixes are reviewed upstream. The installer verifies the exact SHA and the desktop updater refuses to mutate pinned/fork installs."
+  },
   "releaseChannel": {
     "repository": "NousResearch/hermes-agent",
     "tagScheme": "calver",
@@ -13,6 +21,7 @@
     "installerContract": "The official scripts/install.ps1 accepts -Tag (precedence Commit > Tag > Branch); the bootstrap pins by CalVer tag and verifies the installer blob before running it."
   },
   "pinnedReleases": [
+    { "tag": "v2026.8.13", "version": "0.20.1" },
     { "tag": "v2026.7.30", "version": "0.19.1" },
     { "tag": "v2026.7.20", "version": "0.19.0" },
     { "tag": "v2026.6.19", "version": "0.17.0" }

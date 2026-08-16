@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { HERMES_COMPAT_RANGE, HERMES_MAX_VERSION_EXCLUSIVE, HERMES_MIN_VERSION } from './hermes/compat'
+import { HERMES_COMPAT_RANGE, HERMES_MAX_VERSION_EXCLUSIVE, HERMES_MIN_VERSION, isVersionSupported } from './hermes/compat'
 
 // hermes-compat.json is the CANONICAL single source of truth. Each layer (TS bundle,
 // Electron main, build script, Python plugin, PowerShell) runs in its own runtime and
@@ -16,8 +16,12 @@ type Canonical = {
   pinnedReleases: Array<{ tag: string; version: string }>
 }
 const canonical = JSON.parse(read('hermes-compat.json')) as Canonical
-const [maj, min] = canonical.minVersion.split('.')
-const minorFloor = (v: string) => `${v.split('.').slice(0, 2).join('.')}.`
+const supportedMinorPrefixes = (c: Canonical) => {
+  const [minMajor, minMinor] = c.minVersion.split('.').map(Number)
+  const [maxMajor, maxMinor] = c.maxVersionExclusive.split('.').map(Number)
+  if (minMajor !== maxMajor) throw new Error('compatibility policy must not cross a major boundary')
+  return Array.from({ length: maxMinor - minMinor }, (_, offset) => `${minMajor}.${minMinor + offset}.`)
+}
 
 // The canonical policy has five orthogonal dimensions. Every literal mirror embeds only a
 // subset, declared explicitly in `dimensions` (replacing the old coarse `bound` flag that
@@ -46,13 +50,13 @@ const LITERAL_MIRRORS: Mirror[] = [
     required: c => [`[version]'${c.minVersion}'`, `[version]'${c.maxVersionExclusive}'`]
   },
   {
-    // Minor-prefix floor (tracks minVersion at minor granularity, so lower drift must
-    // cross a minor) + verified pin only; no upper bound, so 'max'/'range' are absent.
+    // The runtime guard carries every supported minor prefix plus the exact version
+    // whose adapter surface was inspected. Both bounds therefore shape this mirror.
     path: 'hermes-plugin/business-whatsapp-policy/contract.py',
-    dimensions: ['min', 'verified'],
+    dimensions: ['min', 'max', 'verified'],
     required: c => [
       `SUPPORTED_HERMES_VERSIONS = frozenset({"${c.verifiedInstalledVersion}"})`,
-      `SUPPORTED_VERSION_PREFIXES = ("${minorFloor(c.minVersion)}",)`
+      `SUPPORTED_VERSION_PREFIXES = (${supportedMinorPrefixes(c).map(prefix => `"${prefix}"`).join(', ')})`
     ]
   },
   {
@@ -87,8 +91,8 @@ describe('canonical Hermes compatibility policy is single-sourced', () => {
     expect(canonical.range).toBe(`>=${canonical.minVersion} <${canonical.maxVersionExclusive}`)
   })
 
-  it('the Python contract pins a verified version inside the canonical floor', () => {
-    expect(canonical.verifiedInstalledVersion.startsWith(`${maj}.${min}.`)).toBe(true)
+  it('the Python contract pins a verified version inside the canonical range', () => {
+    expect(isVersionSupported(canonical.verifiedInstalledVersion)).toBe(true)
   })
 
   it.each(LITERAL_MIRRORS)('embedded mirror $path matches the canonical manifest', mirror => {
@@ -127,9 +131,9 @@ describe('drift is caught fail-closed and isolated per dimension', () => {
     }
   }
 
-  it('a widened upper bound fails only max/range mirrors, never the Python floor', () =>
+  it('a widened upper bound fails every mirror that derives its supported minors', () =>
     expectIsolatedDrift(
-      { ...canonical, maxVersionExclusive: '0.21.0', range: `>=${canonical.minVersion} <0.21.0` },
+      { ...canonical, maxVersionExclusive: '0.22.0', range: `>=${canonical.minVersion} <0.22.0` },
       ['max', 'range']
     ))
 

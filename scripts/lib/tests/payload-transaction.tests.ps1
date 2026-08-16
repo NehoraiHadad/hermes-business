@@ -38,8 +38,8 @@ function Invoke-PayloadTransactionTests {
     Assert-True (Test-Path -LiteralPath $receiptTarget -PathType Leaf) 'completion receipt missing'
     $receipt = Get-Content -Raw -LiteralPath $receiptTarget | ConvertFrom-Json
     Assert-True ($receipt.status -eq 'installed') 'receipt status not installed'
-    $installedHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $pluginTarget).Hash.ToLowerInvariant()
-    $sourceHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $payload.Plugin).Hash.ToLowerInvariant()
+    $installedHash = Get-Sha256Hash -Path $pluginTarget
+    $sourceHash = Get-Sha256Hash -Path $payload.Plugin
     Assert-True ($installedHash -eq $sourceHash) 'installed plugin hash differs from source'
   }
 

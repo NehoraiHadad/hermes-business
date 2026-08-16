@@ -115,7 +115,7 @@ describe('E2E temp-path sentinel regex accepts/rejects the same path set in both
 })
 
 // ---------------------------------------------------------------------------
-// 4) Hermes compat range >=0.19.0 <0.20.0
+// 4) Hermes compat range >=0.19.0 <0.21.0
 //    electron/hermes-compat.cjs, src/lib/hermes/compat.ts, hermes-compat.json,
 //    scripts/plugin-sdk-contract.mjs.
 //    src/lib/hermes-compat-policy.test.ts already asserts every mirror (incl.
@@ -139,6 +139,11 @@ import {
   isVersionSupported as tsIsVersionSupported
 } from '../src/lib/hermes/compat'
 import { HERMES_COMPAT_RANGE as MJS_RANGE } from '../scripts/plugin-sdk-contract.mjs'
+import {
+  DEFAULT_ENGINE_REF,
+  DEFAULT_ENGINE_REPO_URL,
+  DEFAULT_ENGINE_SHA
+} from '../scripts/lib/community/provision.mjs'
 
 describe('Hermes compat range stays in lockstep across all four copies', () => {
   const canonical = JSON.parse(read('hermes-compat.json')) as {
@@ -157,7 +162,7 @@ describe('Hermes compat range stays in lockstep across all four copies', () => {
     expect(TS_MAX).toBe(canonical.maxVersionExclusive)
   })
 
-  it.each(['0.18.9', '0.19.0', '0.19.99', '0.20.0'])(
+  it.each(['0.18.9', '0.19.0', '0.19.99', '0.20.1', '0.21.0'])(
     'isVersionSupported(%s) agrees between electron/hermes-compat.cjs and src/lib/hermes/compat.ts',
     version => {
       expect(cjsIsVersionSupported(version)).toBe(tsIsVersionSupported(version))
@@ -168,10 +173,27 @@ describe('Hermes compat range stays in lockstep across all four copies', () => {
     expect(tsIsVersionSupported('0.18.9')).toBe(false)
     expect(tsIsVersionSupported('0.19.0')).toBe(true)
     expect(tsIsVersionSupported('0.19.99')).toBe(true)
-    expect(tsIsVersionSupported('0.20.0')).toBe(false)
+    expect(tsIsVersionSupported('0.20.1')).toBe(true)
+    expect(tsIsVersionSupported('0.21.0')).toBe(false)
     expect(cjsIsVersionSupported('0.18.9')).toBe(false)
     expect(cjsIsVersionSupported('0.19.0')).toBe(true)
     expect(cjsIsVersionSupported('0.19.99')).toBe(true)
-    expect(cjsIsVersionSupported('0.20.0')).toBe(false)
+    expect(cjsIsVersionSupported('0.20.1')).toBe(true)
+    expect(cjsIsVersionSupported('0.21.0')).toBe(false)
+  })
+})
+
+describe('community engine immutable pin stays in canonical lockstep', () => {
+  const canonical = JSON.parse(read('hermes-compat.json')).communityEngine as {
+    repository: string
+    tag: string
+    sha: string
+  }
+
+  it('provision defaults equal the canonical repository, tag and full SHA', () => {
+    expect(DEFAULT_ENGINE_REPO_URL).toBe(`https://github.com/${canonical.repository}.git`)
+    expect(DEFAULT_ENGINE_REF).toBe(canonical.tag)
+    expect(DEFAULT_ENGINE_SHA).toBe(canonical.sha)
+    expect(DEFAULT_ENGINE_SHA).toMatch(/^[0-9a-f]{40}$/)
   })
 })

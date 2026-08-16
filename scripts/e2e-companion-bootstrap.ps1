@@ -65,6 +65,15 @@ try {
     Copy-Item -LiteralPath (Join-Path $root "hermes-plugin\business-whatsapp-policy\$name") `
       -Destination (Join-Path $policyPayload $name)
   }
+  $communityPayload = Join-Path $payloadRoot 'community'
+  New-Item -ItemType Directory -Force -Path (Join-Path $communityPayload 'scripts\lib'), (Join-Path $communityPayload 'assets'), (Join-Path $communityPayload 'hermes-plugin'), (Join-Path $communityPayload 'node_modules') | Out-Null
+  Copy-Item -LiteralPath (Join-Path $root 'scripts\community-generate.mjs') -Destination (Join-Path $communityPayload 'scripts\community-generate.mjs')
+  Copy-Item -LiteralPath (Join-Path $root 'scripts\community-provision.mjs') -Destination (Join-Path $communityPayload 'scripts\community-provision.mjs')
+  Copy-Item -LiteralPath (Join-Path $root 'scripts\lib\community') -Destination (Join-Path $communityPayload 'scripts\lib\community') -Recurse
+  Copy-Item -LiteralPath (Join-Path $root 'assets\community-skills') -Destination (Join-Path $communityPayload 'assets\community-skills') -Recurse
+  Copy-Item -LiteralPath (Join-Path $root 'hermes-plugin\community-archive') -Destination (Join-Path $communityPayload 'hermes-plugin\community-archive') -Recurse
+  Copy-Item -LiteralPath (Join-Path $root 'node_modules\js-yaml') -Destination (Join-Path $communityPayload 'node_modules\js-yaml') -Recurse
+  Copy-Item -LiteralPath (Join-Path $root 'node_modules\argparse') -Destination (Join-Path $communityPayload 'node_modules\argparse') -Recurse
 
   $manifestUrl = "http://127.0.0.1:$port/manifest.json"
   for ($attempt = 0; $attempt -lt 30; $attempt += 1) {

@@ -10,12 +10,12 @@ import { resolveProviderStatus, resolveModelReadiness } from './provider-readine
 export const BOOTSTRAP_COMMAND = 'business-bootstrap'
 
 const LINES = [
-  "המשך את הקמת תכל'ס. This is guided first-run setup for a non-technical business owner.",
+  "פתח את השיחה הראשונה בתכל'ס. The user should start working, not complete a setup interview.",
   'המעטפת ביצעה בדיקה תחומה דרך ה־APIs הרשמיים של Hermes. Use this verified snapshot and do not repeat its checks before asking the first missing question.',
   'Never run hermes doctor, broad scans, connectivity suites, update checks, or CLI --help discovery during onboarding.',
-  'שאל שאלה אחת קצרה בכל פעם (לכל היותר שתי שאלות קרובות) והסבר בקצרה למה — אל תציג את כל השאלון בבת אחת.',
+  'שאל שאלה אחת קצרה בכל פעם (לכל היותר שתי שאלות קרובות), ורק אם היא נחוצה כדי לקדם את הבקשה — אין שאלון התקנה.',
   'אל תבקש שוב מידע שכבר נמסר. שמור עובדות יציבות דרך Hermes Memory/Profile ותחזק Skill בשם business-context; אל תיצור System Prompt גדול.',
-  'המלץ בכל פעם על אינטגרציה/חיבור רשמי אחד בעל הערך המיידי הגבוה ביותר, הסבר את הערך, ואשר עם המשתמש לפני כל פעולה רגישה.',
+  'הצע אינטגרציה או חיבור רשמי אחד רק כאשר הבקשה הנוכחית זקוקה לו; הסבר את הערך ואשר עם המשתמש לפני פעולה רגישה.',
   'אין לבצע פעולה חיצונית ואין לבקש secret בצ׳אט.',
   'אל תסמן סיום אם אין ספק/מודל זמין או שחיבור שהוצהר לא עבר בדיקת קריאה בטוחה; אפשר להשהות ולחזור להשלים.',
   // provider_state glossary — short sentences on purpose: this is prompt text

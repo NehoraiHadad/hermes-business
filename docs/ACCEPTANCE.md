@@ -62,7 +62,7 @@ Run these from a clean checkout; they are the authoritative, non-volatile gates.
 | Secret scan (tracked + untracked source) | see §6 | Clean (only redaction-test fixtures) |
 
 **Compatibility policy is single-sourced.** `hermes-compat.json` is the canonical
-source of truth for the supported range (`>=0.19.0 <0.20.0`); every mirror
+source of truth for the supported range (`>=0.19.0 <0.21.0`); every mirror
 (renderer `src/lib/hermes/compat.ts`, `electron/hermes-compat.cjs`, the plugin
 SDK contract, installer/Release) is asserted against it by
 `src/lib/hermes-compat-policy.test.ts`, which fails on any drift.
@@ -154,7 +154,7 @@ Two independent update surfaces exist; only one is wired:
   (`src/lib/hermes/rest.ts`) → `window.hermesDesktop.applyUpdate` →
   `electron/hermes-update-flow.cjs` (backup → `hermes update --yes` → compat
   re-gate via `assertRunningVersionSupported` → rollback on failure). Bounded by
-  `hermes-compat.json` `[0.19.0, 0.20.0)`.
+  `hermes-compat.json` `[0.19.0, 0.21.0)`.
 - **Companion (desktop shell) self-update — NOT wired.** There is **no**
   `electron-updater` dependency and **no** `autoUpdater` consumer, so nothing
   reads an update feed for the companion itself. A new companion version is
@@ -435,7 +435,7 @@ satisfied by the operator with real credentials/infrastructure:
 4. **Dedicated-number WhatsApp outbound** — only the fail-closed read-only /
    selected-chat policy is validated (no messages sent).
 5. **Upgrade matrix** — clean-install validated; version-to-version upgrade paths
-   across the `>=0.19.0 <0.20.0` range remain to be matrixed (the post-update
+   across the `>=0.19.0 <0.21.0` range remain to be matrixed (the post-update
    re-gate in §2 is the runtime backstop for this).
 
 External read-only live checks (Google `--check`/`--check-live`, the Hermes

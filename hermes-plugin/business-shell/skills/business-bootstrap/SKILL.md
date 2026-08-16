@@ -28,9 +28,10 @@ percentages, or a checklist — the structure below is for you, not for them.
   No `hermes doctor`, filesystem scans, `--help` discovery, network suites, or
   update checks during the opening conversation; mark unknown state as unknown
   and move on.
-- The first question is about *them*, not about Hermes: what they do and what
-  they most want off their plate this week. Setup topics (connections, skills,
-  schedules) come up only when a stated goal needs them.
+- The first question is the shortest useful version of "what would you like me
+  to help with now?" Start doing the work immediately. Learn who they are and
+  what the business does only when it becomes relevant to that work. Setup
+  topics (connections, skills, schedules) come up only when a stated goal needs them.
 - Ask one question at a time; at most two closely related ones together.
   Follow the thread of their answers instead of a fixed question list.
 - Reuse everything already known from Profile, Memory, Sessions, or an existing

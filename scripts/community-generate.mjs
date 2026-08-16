@@ -12,7 +12,7 @@
 //           are installed into the DEFAULT profile's skills dir with the real
 //           deployment paths substituted. Profiles are per context SPACE
 //           (spec §2.1): non-isolated groups share profiles/village/ (shared
-//           session memory + session_search), isolated groups get their own
+//           session context + the scoped community_archive tool), isolated groups get their own
 //           slug-profile; each space profile gets its own config.yaml pinning
 //           its toolset fence (spec §6.1 — without it a routed turn falls
 //           back to the engine's FULL default toolset).
@@ -101,10 +101,12 @@ function main() {
     PROVISION_CLI: path.join(path.dirname(generateCli), 'community-provision.mjs')
   }
   const assetsDir = path.join(path.dirname(generateCli), '..', 'assets', 'community-skills')
+  const communityPluginDir = path.join(path.dirname(generateCli), '..', 'hermes-plugin', 'community-archive')
 
   const artifacts = generateArtifacts(contract, {
     readKnowledgeSource: source => readFileSync(resolveSource(source), 'utf8'),
     readAdminSkillTemplate: name => readIfFile(path.join(assetsDir, name, 'SKILL.md')),
+    readCommunityPluginFile: name => readIfFile(path.join(communityPluginDir, name)),
     deployPaths,
     existingConfigText: readIfFile(path.join(opts.home, 'config.yaml')),
     existingEnvText: readIfFile(path.join(opts.home, '.env')),

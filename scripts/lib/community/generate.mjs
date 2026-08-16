@@ -88,23 +88,45 @@ import { SHARED_SPACE, SKILL_DESCRIPTION_ROUTING_MAX, contractSpaces } from './c
 // instead (persona.mjs). The admin DM keeps the tool (ADMIN_TOOLSET): it is a
 // 1:1 channel with the operator, where blocking is the intended behaviour.
 export const GROUP_TOOLSET = Object.freeze(['web', 'skills', 'vision'])
-// The SHARED space additionally gets the engine's session-history search
-// toolset (`session_search`, tools/session_search_tool.py:1143-1146; a
-// configurable key valid for whatsapp, hermes_cli/tools_config.py:114). Its
-// DEFAULT scope is the CURRENT profile's state.db (SessionDB() →
-// _default_db_path() → get_hermes_home()/state.db, hermes_state.py:366-383,
-// which honors the _profile_runtime_scope override, gateway/run.py:2065-2098)
-// — that is exactly the shared space, so an answer given in group A is
-// findable from group B. The cross-profile `profile=` parameter remains an
-// engine-level residual risk documented in the spec (§6.1.1 verification 4).
-export const SHARED_TOOLSET = Object.freeze([...GROUP_TOOLSET, 'session_search'])
+// The shared public space gets the Tachles read-only archive facade. Unlike
+// Hermes' raw session_search, this tool cannot choose a profile/database and
+// can only read group ids written into the server-owned archive policy.
+// Isolated spaces intentionally do not receive it: a single process-level
+// policy must never become a cross-space read door.
+export const COMMUNITY_ARCHIVE_TOOL = 'community_archive'
+export const SHARED_TOOLSET = Object.freeze([...GROUP_TOOLSET, COMMUNITY_ARCHIVE_TOOL])
 // Management toolset for the DEFAULT profile (admin DMs + host chat): terminal
 // + file are required to run the community CLIs; still no code_execution or
 // delegation. All names are engine "configurable keys" valid for whatsapp
 // (tools_config.py:96-124; only discord toolsets are platform-restricted,
 // tools_config.py:216-228).
-export const ADMIN_TOOLSET = Object.freeze(['terminal', 'file', 'skills', 'web', 'clarify', 'todo'])
+export const ADMIN_TOOLSET = Object.freeze([
+  'terminal',
+  'file',
+  'skills',
+  'web',
+  'clarify',
+  'todo',
+  COMMUNITY_ARCHIVE_TOOL
+])
 export const HISTORY_BACKFILL_LIMIT = 50
+export const COMMUNITY_ARCHIVE_PLUGIN = 'community-archive'
+export const COMMUNITY_ACTIVATION_FILE = '.tachles-community.json'
+export const COMMUNITY_ACTIVATION = Object.freeze({
+  schema: 1,
+  mode: 'community',
+  active: true
+})
+export const COMMUNITY_ARCHIVE_PLUGIN_FILES = Object.freeze([
+  '__init__.py',
+  'filters.py',
+  'policy.py',
+  'query.py',
+  'storage.py',
+  'tool.py',
+  'plugin.yaml'
+])
+export const DISABLED_COMMUNITY_TOOLSETS = Object.freeze(['session_search'])
 
 // The admin skills shipped in assets/community-skills/, installed into the
 // default profile's skills dir (skills/<name>/SKILL.md under HERMES_HOME).
@@ -184,8 +206,16 @@ export function buildGatewayConfig(contract, existingConfigText) {
   whatsapp.group_allow_from = [...new Set(contract.groups.map(g => g.jid))]
   whatsapp.allow_admin_from = [...contract.admins]
   whatsapp.group_allow_admin_from = [...contract.admins]
+  // Residents get no slash-command surface in public groups. Allowlisted
+  // admin DMs still retain Hermes' built-in /help and /whoami floor, which is
+  // enough to discover/administer the agent without exposing group controls.
+  whatsapp.group_user_allowed_commands = []
   whatsapp.require_mention = true
   whatsapp.mention_patterns = [wakeWordPattern(contract.wakeWord)]
+  whatsapp.observe_unmentioned_group_messages = true
+  whatsapp.observe_allowed_chats = contract.groups
+    .filter(group => group.isolated !== true)
+    .map(group => group.jid)
   whatsapp.history_backfill = true
   whatsapp.history_backfill_limit = HISTORY_BACKFILL_LIMIT
   cfg.whatsapp = whatsapp
@@ -202,7 +232,40 @@ export function buildGatewayConfig(contract, existingConfigText) {
   skills.write_approval = true
   cfg.skills = skills
 
+  const agent = asMapping(clone(cfg.agent))
+  agent.disabled_toolsets = [
+    ...new Set([
+      ...(Array.isArray(agent.disabled_toolsets) ? agent.disabled_toolsets : []),
+      ...DISABLED_COMMUNITY_TOOLSETS
+    ])
+  ]
+  cfg.agent = agent
+
+  const plugins = asMapping(clone(cfg.plugins))
+  plugins.enabled = [...new Set([...(Array.isArray(plugins.enabled) ? plugins.enabled : []), COMMUNITY_ARCHIVE_PLUGIN])]
+  plugins.disabled = (Array.isArray(plugins.disabled) ? plugins.disabled : []).filter(
+    name => name !== COMMUNITY_ARCHIVE_PLUGIN
+  )
+  const entries = asMapping(clone(plugins.entries))
+  entries[COMMUNITY_ARCHIVE_PLUGIN] = {
+    ...asMapping(entries[COMMUNITY_ARCHIVE_PLUGIN]),
+    allow_tool_override: false
+  }
+  plugins.entries = entries
+  cfg.plugins = plugins
+
   return cfg
+}
+
+/** Server-owned allowlist for the read-only archive facade. Sensitive/isolated
+ * groups are deliberately absent, so shared resident turns cannot query them. */
+export function buildArchivePolicy(contract) {
+  return {
+    version: 1,
+    groups: contract.groups
+      .filter(group => group.isolated !== true)
+      .map(group => ({ id: group.jid, name: group.name }))
+  }
 }
 
 /**
@@ -210,7 +273,7 @@ export function buildGatewayConfig(contract, existingConfigText) {
  * config. Every space profile pins its toolset — an absent profile config
  * would fall back to the engine's FULL default whatsapp toolset, not to the
  * root config (M2 verification, §6.1). `toolset` selects the fence: the
- * shared space passes SHARED_TOOLSET (adds session_search), isolated spaces
+ * shared space passes SHARED_TOOLSET (adds community_archive), isolated spaces
  * keep the default GROUP_TOOLSET.
  *
  * `rootModel` is the ROOT config's `model` block, MIRRORED here. Under the
@@ -225,7 +288,7 @@ export function buildGatewayConfig(contract, existingConfigText) {
  * we mirror the model block and never duplicate the OAuth store (a second
  * copy would race the refresh-token rotation).
  */
-export function buildProfileConfig(existingConfigText, toolset = GROUP_TOOLSET, rootModel) {
+export function buildProfileConfig(existingConfigText, toolset = GROUP_TOOLSET, rootModel, { archivePlugin = false } = {}) {
   const cfg = clone(parseExistingConfig(existingConfigText, 'profile config.yaml')) ?? {}
 
   const model = asMapping(clone(rootModel))
@@ -243,6 +306,41 @@ export function buildProfileConfig(existingConfigText, toolset = GROUP_TOOLSET, 
   const skills = asMapping(clone(cfg.skills))
   skills.write_approval = true
   cfg.skills = skills
+
+  const agent = asMapping(clone(cfg.agent))
+  agent.disabled_toolsets = [
+    ...new Set([
+      ...(Array.isArray(agent.disabled_toolsets) ? agent.disabled_toolsets : []),
+      ...DISABLED_COMMUNITY_TOOLSETS
+    ])
+  ]
+  cfg.agent = agent
+
+  const plugins = asMapping(clone(cfg.plugins))
+  if (archivePlugin) {
+    plugins.enabled = [...new Set([...(Array.isArray(plugins.enabled) ? plugins.enabled : []), COMMUNITY_ARCHIVE_PLUGIN])]
+    plugins.disabled = (Array.isArray(plugins.disabled) ? plugins.disabled : []).filter(
+      name => name !== COMMUNITY_ARCHIVE_PLUGIN
+    )
+    const entries = asMapping(clone(plugins.entries))
+    entries[COMMUNITY_ARCHIVE_PLUGIN] = {
+      ...asMapping(entries[COMMUNITY_ARCHIVE_PLUGIN]),
+      allow_tool_override: false
+    }
+    plugins.entries = entries
+    cfg.plugins = plugins
+  } else {
+    // An isolated profile must never inherit a stale registration of the
+    // cross-group archive facade from an earlier shared-space deployment.
+    plugins.enabled = (Array.isArray(plugins.enabled) ? plugins.enabled : []).filter(
+      name => name !== COMMUNITY_ARCHIVE_PLUGIN
+    )
+    plugins.disabled = [...new Set([...(Array.isArray(plugins.disabled) ? plugins.disabled : []), COMMUNITY_ARCHIVE_PLUGIN])]
+    const entries = asMapping(clone(plugins.entries))
+    delete entries[COMMUNITY_ARCHIVE_PLUGIN]
+    plugins.entries = entries
+    cfg.plugins = plugins
+  }
 
   return cfg
 }
@@ -395,9 +493,9 @@ export function renderAdminSkill({ name, template, deployPaths }) {
  *
  * Profiles are per context SPACE (§2.1), not per group: all non-isolated
  * groups share `profiles/village/` (union of their knowledge packs, one
- * shared-community SOUL, toolset with session_search); each `isolated: true`
+ * shared-community SOUL, toolset with community_archive); each `isolated: true`
  * group gets `profiles/<slug>/` with the per-group SOUL and the fenced
- * toolset WITHOUT session_search.
+ * toolset without archive/search access.
  *
  * Returns `{ 'config.yaml': text, '.env': text,
  *            'skills/<admin skill>/SKILL.md': text,
@@ -407,7 +505,15 @@ export function renderAdminSkill({ name, template, deployPaths }) {
  */
 export function generateArtifacts(
   contract,
-  { readKnowledgeSource, readAdminSkillTemplate, deployPaths, existingConfigText, existingEnvText, readProfileConfigText } = {}
+  {
+    readKnowledgeSource,
+    readAdminSkillTemplate,
+    readCommunityPluginFile,
+    deployPaths,
+    existingConfigText,
+    existingEnvText,
+    readProfileConfigText
+  } = {}
 ) {
   if (typeof readKnowledgeSource !== 'function') {
     throw new TypeError('generateArtifacts requires a readKnowledgeSource(sourcePath) callback')
@@ -415,12 +521,27 @@ export function generateArtifacts(
   if (typeof readAdminSkillTemplate !== 'function') {
     throw new TypeError('generateArtifacts requires a readAdminSkillTemplate(name) callback (the shipped admin skills are part of the artifact set)')
   }
+  if (typeof readCommunityPluginFile !== 'function') {
+    throw new TypeError(
+      'generateArtifacts requires a readCommunityPluginFile(name) callback (the scoped archive plugin is part of the safety boundary)'
+    )
+  }
   const readProfileConfig = typeof readProfileConfigText === 'function' ? readProfileConfigText : () => undefined
 
   const artifacts = {}
   const rootConfig = buildGatewayConfig(contract, existingConfigText)
   artifacts['config.yaml'] = dumpConfig(rootConfig)
   artifacts['.env'] = buildEnvFile(existingEnvText)
+  artifacts[COMMUNITY_ACTIVATION_FILE] = `${JSON.stringify(COMMUNITY_ACTIVATION, null, 2)}\n`
+  artifacts['community/archive-policy.json'] = `${JSON.stringify(buildArchivePolicy(contract), null, 2)}\n`
+
+  for (const name of COMMUNITY_ARCHIVE_PLUGIN_FILES) {
+    const source = readCommunityPluginFile(name)
+    if (typeof source !== 'string' || source.length === 0) {
+      throw new Error(`community archive plugin file is missing or empty: ${name}`)
+    }
+    artifacts[`plugins/${COMMUNITY_ARCHIVE_PLUGIN}/${name}`] = source.replace(/\r\n/g, '\n').replace(/\n?$/, '\n')
+  }
 
   // Admin skills → DEFAULT profile only (skills/ at the HOME root). Group
   // profiles must never see management skills.
@@ -453,9 +574,16 @@ export function generateArtifacts(
       buildProfileConfig(
         readProfileConfig(space.slug),
         space.shared ? SHARED_TOOLSET : GROUP_TOOLSET,
-        rootConfig.model
+        rootConfig.model,
+        { archivePlugin: space.shared }
       )
     )
+    if (space.shared) {
+      for (const name of COMMUNITY_ARCHIVE_PLUGIN_FILES) {
+        artifacts[`profiles/${space.slug}/plugins/${COMMUNITY_ARCHIVE_PLUGIN}/${name}`] =
+          artifacts[`plugins/${COMMUNITY_ARCHIVE_PLUGIN}/${name}`]
+      }
+    }
     artifacts[`profiles/${space.slug}/SOUL.md`] = space.shared
       ? renderSharedSoul({
           communityName: contract.name,

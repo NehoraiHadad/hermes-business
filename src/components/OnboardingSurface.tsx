@@ -56,7 +56,7 @@ export function OnboardingSurface({
     let introStarted = true
     try {
       await beginConversation({
-        userMessage: 'סיימתי את ההיכרות הראשונית. שמור אותה ב־Hermes והמשך איתי לשאלה הבאה.',
+        userMessage: 'פתחתי את תכל׳ס. עזור לי להתחיל במה שאני צריך עכשיו, בלי שאלון התקנה.',
         skillName: BOOTSTRAP_COMMAND,
         instruction: buildOnboardingPrompt(data, snapshot)
       })

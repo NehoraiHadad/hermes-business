@@ -12,14 +12,14 @@ function New-PriorCompanion {
   $sentinel = Join-Path $Root 'prior-marker.txt'
   Set-Content -LiteralPath $sentinel -Value "PRIOR-$([guid]::NewGuid())" -Encoding ascii
   [System.IO.File]::WriteAllBytes((Join-Path $Root 'hermes-business.exe'), ([byte[]](1..50)))
-  return (Get-FileHash -Algorithm SHA256 -LiteralPath $sentinel).Hash
+  return Get-Sha256Hash -Path $sentinel
 }
 
 function Assert-PriorIntact {
   param([string]$Root, [string]$Hash)
   $sentinel = Join-Path $Root 'prior-marker.txt'
   Assert-True (Test-Path -LiteralPath $sentinel -PathType Leaf) 'the prior companion was destroyed by a failed install'
-  Assert-True (((Get-FileHash -Algorithm SHA256 -LiteralPath $sentinel).Hash) -eq $Hash) 'the prior companion sentinel was mutated'
+  Assert-True ((Get-Sha256Hash -Path $sentinel) -eq $Hash.ToLowerInvariant()) 'the prior companion sentinel was mutated'
 }
 
 function Invoke-CompanionInstallTests {

@@ -29,8 +29,9 @@
     "test:unit": "vitest run --exclude scripts/lib/evidence.test.mjs --exclude scripts/lib/evidence-subject.test.mjs",
     "test:components": "vitest run src/components src/hooks src/test src/App.test.tsx",
     "test:evidence": "vitest run scripts/lib/evidence.test.mjs scripts/lib/evidence-subject.test.mjs",
-    "test:contract": "npm run test:plugin:policy && npm run verify:plugin && npm run verify:bootstrap",
+    "test:contract": "npm run test:plugin:policy && npm run test:plugin:community && npm run verify:plugin && npm run verify:bootstrap",
     "test:plugin:policy": "python -m unittest discover -s hermes-plugin/business-whatsapp-policy/tests -p test_*.py -v && python -m unittest discover -s hermes-plugin/business-shell/dashboard -p test_*.py -v",
+    "test:plugin:community": "python -B -m unittest discover -s hermes-plugin/community-archive/tests -p test_*.py -v",
     "test:e2e:hermes": "node scripts/e2e-hermes.mjs",
     "test:e2e:hermes-shared-state": "node scripts/e2e-hermes-shared-state.mjs",
     "test:e2e:whatsapp": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/e2e-whatsapp-onboarding.ps1",
@@ -49,7 +50,7 @@
     "package:thin-installer:qa": "npm run build:plugin && powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/e2e-thin-network-installer.ps1 -EmitQaArtifact",
     "test:e2e:missing-hermes-ui": "node scripts/e2e-missing-hermes-ui.mjs",
     "preview": "vite preview --host 127.0.0.1",
-    "verify:release": "npm test && npm run test:evidence && npm run test:plugin:policy && npm run verify:plugin:release && npm run verify:bootstrap",
+    "verify:release": "npm test && npm run test:evidence && npm run test:plugin:policy && npm run test:plugin:community && npm run verify:plugin:release && npm run verify:bootstrap",
     "verify:release-contract": "node scripts/verify-release-contract.mjs",
     "verify:release-contract:qa": "node scripts/verify-release-contract.mjs --channel qa",
     "verify:release-contract:pilot": "node scripts/verify-release-contract.mjs --channel pilot",
@@ -178,6 +179,39 @@
           "guard_status.py",
           "plugin.yaml"
         ]
+      },
+      {
+        "from": "scripts/community-generate.mjs",
+        "to": "business-bootstrap/community/scripts/community-generate.mjs"
+      },
+      {
+        "from": "scripts/community-provision.mjs",
+        "to": "business-bootstrap/community/scripts/community-provision.mjs"
+      },
+      {
+        "from": "scripts/lib/community",
+        "to": "business-bootstrap/community/scripts/lib/community",
+        "filter": ["*.mjs", "!*.test.mjs"]
+      },
+      {
+        "from": "assets/community-skills",
+        "to": "business-bootstrap/community/assets/community-skills",
+        "filter": ["**/SKILL.md"]
+      },
+      {
+        "from": "hermes-plugin/community-archive",
+        "to": "business-bootstrap/community/hermes-plugin/community-archive",
+        "filter": ["*.py", "plugin.yaml"]
+      },
+      {
+        "from": "node_modules/js-yaml",
+        "to": "business-bootstrap/community/node_modules/js-yaml",
+        "filter": ["index.js", "package.json", "lib/**/*", "dist/**/*"]
+      },
+      {
+        "from": "node_modules/argparse",
+        "to": "business-bootstrap/community/node_modules/argparse",
+        "filter": ["argparse.js", "package.json", "lib/**/*"]
       }
     ],
     "directories": {

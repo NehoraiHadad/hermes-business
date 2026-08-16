@@ -1,7 +1,7 @@
 """The verified WhatsApp adapter *contract*: what surface this plugin guards,
 and the fail-closed checks that refuse to run when the live surface drifts.
 
-Verified against the installed source at Hermes 0.19.1:
+Verified against the official source at Hermes 0.19.1 and 0.20.1:
 
   * Native / Baileys ("whatsapp"): bundled platform plugin
     ``plugins/platforms/whatsapp/adapter.py`` -> ``WhatsAppAdapter``. Every
@@ -26,8 +26,8 @@ from typing import Any
 # Hermes releases whose adapter surface this contract was verified against.
 # Single-sourced with the canonical compat manifest (hermes-compat.json); the
 # JS drift test asserts these stay in lockstep with the renderer/electron range.
-SUPPORTED_HERMES_VERSIONS = frozenset({"0.19.1"})
-SUPPORTED_VERSION_PREFIXES = ("0.19.",)
+SUPPORTED_HERMES_VERSIONS = frozenset({"0.20.1"})
+SUPPORTED_VERSION_PREFIXES = ("0.19.", "0.20.")
 
 # Each WhatsApp platform name maps to exactly one adapter "family". An
 # unrecognized name is treated as unknown -> fail closed.

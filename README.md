@@ -37,8 +37,8 @@ MVP/Alpha מקומי ל־Windows (מוכן לפיילוט, אך עדיין לא 
   המתאמים.
 - בורר WhatsApp ידידותי קורא את `channel_directory.json` הרשמי של Hermes ומציג
   שמות וסוגי שיחה בלי לחשוף מזהים טכניים. הרשימה מבוססת Sessions שנצפו ואינה ספר
-  כתובות מלא: QR/Baileys מאפשר שיחות וקבוצות, ואילו Meta Cloud ב־Hermes `0.19.x`
-  מאפשר DMs בלבד. הבחירה נשמרת ב־`allow_from`/`group_allow_from` ובמידת הצורך
+  כתובות מלא: QR/Baileys מאפשר שיחות וקבוצות, ואילו Meta Cloud מאפשר DMs בלבד.
+  הבחירה נשמרת ב־`allow_from`/`group_allow_from` ובמידת הצורך
   ב־`channel_overrides`, ואז ה־Gateway מופעל מחדש ועובר Health Check. קריאה בלבד
   אינה יכולת native של ה־allowlist ונשארת באכיפת ה־plugin.
 - במקורות נבחרים אפשר לבחור “מעקב והצעות” (Hermes מנתח ומפעיל משימות פנימיות אך
@@ -74,7 +74,8 @@ release/Hermes-Business-Web-Setup-<גרסה>.exe
 ```
 
 - אינו אורז Hermes או Chromium.
-- בוחר את ה־release הרשמי החדש ביותר בטווח התאימות `>=0.19.0 <0.20.0`.
+- בוחר בזמן ההתקנה את ה־release הרשמי החדש ביותר בטווח התאימות
+  `>=0.19.0 <0.21.0`; נכון ל־16 באוגוסט 2026 זהו Hermes `0.20.1`.
 - מתקין Hermes Desktop, את ה־Plugin ואת ה־Skill, מוריד Companion לפי manifest
   עם checksum מסוג SHA-256, ומבצע Gateway health check.
 
@@ -99,7 +100,7 @@ artifact הפצה סופי, משום שעדיין אין `COMPANION_MANIFEST_URL
   ומבודד. כיום שליחת Cloud מתבצעת רק בתוך ה־Gateway הפעיל (in-process); ראו
   [docs/hermes-integration.md](docs/hermes-integration.md).
 - **מטריצת שדרוג מלאה** — כיסוי שדרוג מלא בכל שיטות ההתקנה (git/pip/pipx) וגרסאות
-  לרוחב טווח התאימות `>=0.19.0 <0.20.0`.
+  לרוחב טווח התאימות `>=0.19.0 <0.21.0`.
 
 ## סרטון תדמית
 
@@ -170,11 +171,12 @@ electron/          runtime, IPC, חלונות, אבחון, Google ו־plugin ins
 
 ## תוצאות קבלה מקומיות
 
-נבדקו מול Hermes Agent `0.19.0`; resolver המתקין מצא גם release רשמי תואם
-`0.19.1` (`v2026.7.30`).
+הבדיקות החיות ההיסטוריות בוצעו מול Hermes Agent `0.19.0`–`0.19.1`. חוזי
+ה־Desktop Plugin ומשטחי WhatsApp אומתו גם מול מקור ה־release הרשמי `0.20.1`,
+וה־resolver החי בוחר בו כעת (`v2026.8.13`).
 
-- בדיקות Vitest (‏144 קבצים, ‏1,150 עברו, ‏1 דילוג) ובדיקות מדיניות ההודעות
-  ב־Python (‏128) עברו.
+- בדיקות Vitest (‏211 קבצים, ‏2,124 עברו, ‏1 דילוג) ובדיקות מדיניות/ארכיון
+  ב־Python (‏96) עברו.
 - TypeScript/Vite build, Plugin contract, bootstrap resolver ואימות Git blob של
   המתקין הרשמי עברו.
 - המתקין המלא והמתקין הזעיר הותקנו בשקט עם exit code `0`.

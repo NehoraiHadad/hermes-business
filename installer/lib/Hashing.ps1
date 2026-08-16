@@ -17,7 +17,19 @@ function Get-Sha256Hash {
   if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
     throw "Cannot hash a file that does not exist: $Path"
   }
-  return (Get-FileHash -Algorithm SHA256 -LiteralPath $Path).Hash.ToLowerInvariant()
+  # Use the framework directly instead of depending on the optional
+  # Microsoft.PowerShell.Utility Get-FileHash command. Minimal/embedded Windows
+  # PowerShell hosts can omit that command even though the same machine exposes
+  # it in an interactive shell; the installer must hash identically in both.
+  $stream = [System.IO.File]::OpenRead([System.IO.Path]::GetFullPath($Path))
+  $sha256 = [System.Security.Cryptography.SHA256]::Create()
+  try {
+    return ([System.BitConverter]::ToString($sha256.ComputeHash($stream))).Replace('-', '').ToLowerInvariant()
+  }
+  finally {
+    $sha256.Dispose()
+    $stream.Dispose()
+  }
 }
 
 function Get-GitBlobSha1 {

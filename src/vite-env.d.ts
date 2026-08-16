@@ -47,6 +47,9 @@ declare global {
     finishGoogleSetup: (code: string) => Promise<{ ok: boolean }>
     getGoogleStatus: () => Promise<{ available: boolean; authenticated: boolean }>
     ensureGateway: () => Promise<{ ok: boolean; installed: boolean; running?: boolean }>
+    getCommunityRuntime: () => Promise<CommunityRuntimeState>
+    startCommunityRuntime: () => Promise<CommunityRuntimeState>
+    communityApi: <T = unknown>(path: string, init?: { method?: string; body?: unknown }) => Promise<T>
     getWhatsappPolicy: () => Promise<WhatsappPolicy>
     getWhatsappDirectory: () => Promise<WhatsappSource[]>
     setWhatsappPolicy: (policy: WhatsappPolicy) => Promise<WhatsappPolicy>
@@ -132,6 +135,16 @@ declare global {
     supersedeNonce?: string
     expectedVersion?: string | null
     reason?: string
+  }
+
+  type CommunityRuntimeState = {
+    provisioned: boolean
+    active: boolean
+    target: 'business' | 'community'
+    running: boolean
+    starting: boolean
+    gatewayStarted: boolean
+    error: string | null
   }
 
   type AssistantWindowState = {

@@ -15,6 +15,7 @@
 # transient), so selection never silently degrades to parsing a CalVer tag.
 function Get-DefaultPinnedReleases {
   return @(
+    [pscustomobject]@{ tag = 'v2026.8.13'; version = '0.20.1' },
     [pscustomobject]@{ tag = 'v2026.7.30'; version = '0.19.1' },
     [pscustomobject]@{ tag = 'v2026.7.20'; version = '0.19.0' },
     [pscustomobject]@{ tag = 'v2026.6.19'; version = '0.17.0' }

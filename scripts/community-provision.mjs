@@ -3,7 +3,7 @@
 //   node scripts/community-provision.mjs plan   --root <installRoot> --contract <community.yaml> [--home <dir>]
 //   node scripts/community-provision.mjs apply  --root <installRoot> --contract <community.yaml> [--home <dir>]
 //   node scripts/community-provision.mjs verify --root <installRoot> --contract <community.yaml> [--home <dir>]
-//   optional: --engine-repo <url> --engine-ref <tag>
+//   optional: --engine-repo <url> --engine-ref <tag> --engine-sha <40-char-sha>
 //
 // plan:   print the step plan with each step's current check status. No effects.
 // apply:  execute unsatisfied steps in order (fail-closed on the first nonzero
@@ -36,7 +36,7 @@ import {
 function usage(message) {
   if (message) console.error(`community-provision: ${message}`)
   console.error(
-    'usage: node scripts/community-provision.mjs <plan|apply|verify> --root <installRoot> --contract <community.yaml> [--home <dir>] [--engine-repo <url>] [--engine-ref <ref>]'
+    'usage: node scripts/community-provision.mjs <plan|apply|verify> --root <installRoot> --contract <community.yaml> [--home <dir>] [--engine-repo <url>] [--engine-ref <ref>] [--engine-sha <40-char-sha>]'
   )
   process.exit(2)
 }
@@ -54,6 +54,7 @@ function parseArgs(argv) {
     else if (arg === '--home') opts.home = rest[++i]
     else if (arg === '--engine-repo') opts.engineRepo = rest[++i]
     else if (arg === '--engine-ref') opts.engineRef = rest[++i]
+    else if (arg === '--engine-sha') opts.engineSha = rest[++i]
     else usage(`unknown argument ${JSON.stringify(arg)}`)
   }
   if (!opts.root) usage('--root <installRoot> is required')
@@ -162,7 +163,8 @@ function main() {
       contractPath: opts.contract,
       homeDir: opts.home,
       engineRepoUrl: opts.engineRepo,
-      engineRef: opts.engineRef
+      engineRef: opts.engineRef,
+      engineSha: opts.engineSha
     })
     assertSafeDeploymentPaths(deployment)
   } catch (err) {
@@ -191,7 +193,7 @@ function main() {
   const steps = buildPlan(deployment, tools)
 
   console.log(`deployment: root=${deployment.installRoot}`)
-  console.log(`            engine=${deployment.engineRepoUrl} @ ${deployment.engineRef}`)
+  console.log(`            engine=${deployment.engineRepoUrl} @ ${deployment.engineRef} (${deployment.engineSha})`)
   console.log(`            home=${deployment.homeDir}`)
   console.log(`            contract=${deployment.contractPath}`)
   console.log('')
