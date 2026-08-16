@@ -102,8 +102,8 @@ export function effectiveOwnedView(cfgData) {
  * plugin registration breaks the fixpoint and reports as drift; an owner's
  * own additions (extra allow-list entries, their toolset) survive both sides
  * and verify clean. */
-export function expectedOwnedView(contract, existingConfigText) {
-  return effectiveOwnedView(buildGatewayConfig(contract, existingConfigText))
+export function expectedOwnedView(contract, existingConfigText, adminLids = {}) {
+  return effectiveOwnedView(buildGatewayConfig(contract, existingConfigText, adminLids))
 }
 
 /** The generator-owned EFFECTIVE view of a PROFILE config (fenced toolset +
@@ -207,7 +207,7 @@ function verifyConfigEntry(relPath, actualText, expectedView, effectiveView) {
  *
  * Returns `{ ok, artifacts: [{ path, status: 'ok'|'drift'|'missing', detail? }] }`.
  */
-export function verifyArtifacts(contract, artifacts, { readFile } = {}) {
+export function verifyArtifacts(contract, artifacts, { readFile, adminLids = {} } = {}) {
   if (typeof readFile !== 'function') {
     throw new TypeError('verifyArtifacts requires a readFile(relPath) callback')
   }
@@ -238,7 +238,7 @@ export function verifyArtifacts(contract, artifacts, { readFile } = {}) {
       // drift (verifyConfigEntry would classify it the same way), never a throw.
       let rootExpected
       try {
-        rootExpected = expectedOwnedView(contract, actual)
+        rootExpected = expectedOwnedView(contract, actual, adminLids)
       } catch (err) {
         report.push({ path: relPath, status: 'drift', detail: `not parseable YAML: ${err.message}` })
         continue

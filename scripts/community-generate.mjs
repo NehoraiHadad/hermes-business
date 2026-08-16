@@ -104,6 +104,22 @@ function main() {
   const assetsDir = path.join(path.dirname(generateCli), '..', 'assets', 'community-skills')
   const communityPluginDir = path.join(path.dirname(generateCli), '..', 'hermes-plugin', 'community-archive')
 
+  // Admin LID identities from the engine's OWN session mapping files
+  // (`lid-mapping-<msisdn>.json` holds the LID digits as a JSON string).
+  // Best-effort by design: before first contact no mapping exists yet — a
+  // re-run of generate after the number is seen picks it up.
+  const sessionDir = path.join(opts.home, 'platforms', 'whatsapp', 'session')
+  const adminLids = {}
+  for (const admin of contract.admins) {
+    try {
+      const mapped = JSON.parse(readFileSync(path.join(sessionDir, `lid-mapping-${admin}.json`), 'utf8'))
+      const lid = String(mapped ?? '').replace(/\D/g, '')
+      if (lid) adminLids[admin] = lid
+    } catch {
+      /* no mapping yet — msisdn-only routes are still written */
+    }
+  }
+
   const artifacts = generateArtifacts(contract, {
     readKnowledgeSource: source => readFileSync(resolveSource(source), 'utf8'),
     readAdminSkillTemplate: name => readIfFile(path.join(assetsDir, name, 'SKILL.md')),
@@ -113,7 +129,8 @@ function main() {
     existingEnvText: readIfFile(path.join(opts.home, '.env')),
     existingEgressPolicyText: readIfFile(path.join(opts.home, 'business', 'whatsapp-policy.json')),
     readProfileConfigText: space => readIfFile(path.join(opts.home, 'profiles', space, 'config.yaml')),
-    readProfileEnvText: space => readIfFile(path.join(opts.home, 'profiles', space, '.env'))
+    readProfileEnvText: space => readIfFile(path.join(opts.home, 'profiles', space, '.env')),
+    adminLids
   })
 
   if (opts.command === 'generate') {
@@ -140,7 +157,8 @@ function main() {
     readFile: relPath => {
       const abs = path.join(opts.home, relPath)
       return isFile(abs) ? readFileSync(abs, 'utf8') : null
-    }
+    },
+    adminLids
   })
   for (const entry of report.artifacts) {
     console.log(`${entry.status.padEnd(8)} ${entry.path}${entry.detail ? ` — ${entry.detail}` : ''}`)

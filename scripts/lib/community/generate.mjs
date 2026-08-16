@@ -145,7 +145,7 @@ export function wakeWordPattern(wakeWord) {
  * group's JID routes to its context SPACE's profile (§2.1) — several routes
  * onto one profile is engine-supported (profile_routing.py:109-170; `name`
  * is log-only and stays unique per group anyway). */
-export function buildRoutes(contract) {
+export function buildRoutes(contract, adminLids = {}) {
   const groupRoutes = contract.groups.map(g => ({
     name: `${g.slug}-route`,
     platform: 'whatsapp',
@@ -159,14 +159,24 @@ export function buildRoutes(contract) {
   //     can ask pool-hours/prayer-times privately with the SAME fenced
   //     capability the groups get. Nothing ever falls through to the owner's
   //     default profile.
-  // Classic DM JIDs are `<msisdn>@s.whatsapp.net`; LID-presenting senders are
-  // normalized by the pinned engine's identity work (upstream PR #87626).
-  const adminRoutes = contract.admins.map(admin => ({
-    name: `admin-dm-${admin}`,
-    platform: 'whatsapp',
-    chat_id: `${admin}@s.whatsapp.net`,
-    profile: ADMIN_SPACE
-  }))
+  // Classic DM JIDs are `<msisdn>@s.whatsapp.net` — but a modern WhatsApp DM
+  // presents its chat_id as `<lid>@lid`, and route matching is an EXACT
+  // string compare (gateway/profile_routing.py:102 — no LID resolution;
+  // verified live 2026-08-16: the admin's DM fell through to the default
+  // profile). The native fix stays declarative: when the engine's own
+  // lid-mapping session file already knows the admin's LID, emit a SECOND
+  // route in LID form. `adminLids` maps msisdn → lid digits and is read from
+  // `platforms/whatsapp/session/lid-mapping-<msisdn>.json` by the CLI.
+  const adminRoutes = contract.admins.flatMap(admin => {
+    const routes = [
+      { name: `admin-dm-${admin}`, platform: 'whatsapp', chat_id: `${admin}@s.whatsapp.net`, profile: ADMIN_SPACE }
+    ]
+    const lid = adminLids?.[admin]
+    if (lid) {
+      routes.push({ name: `admin-dm-lid-${admin}`, platform: 'whatsapp', chat_id: `${lid}@lid`, profile: ADMIN_SPACE })
+    }
+    return routes
+  })
   // The resident fallback exists only when the operator explicitly opened
   // DMs AND a shared space exists to serve them. Under dmMode 'admins' the
   // native intake gate already filtered every non-admin, so no route is
@@ -222,7 +232,7 @@ const unionList = (existing, additions) => [
  *     existing route survives verbatim.
  * Existing non-owned keys — including the model block — survive verbatim.
  */
-export function buildGatewayConfig(contract, existingConfigText) {
+export function buildGatewayConfig(contract, existingConfigText, adminLids = {}) {
   const cfg = clone(parseExistingConfig(existingConfigText, 'config.yaml')) ?? {}
 
   const gateway = asMapping(clone(cfg.gateway))
@@ -239,7 +249,7 @@ export function buildGatewayConfig(contract, existingConfigText) {
     if (String(route.platform ?? '') !== 'whatsapp') return true
     return !ownedSlugs.has(String(route.profile ?? '')) && !ownedJids.has(String(route.chat_id ?? ''))
   })
-  cfg.profile_routes = [...foreignRoutes, ...buildRoutes(contract)]
+  cfg.profile_routes = [...foreignRoutes, ...buildRoutes(contract, adminLids)]
 
   const whatsapp = asMapping(clone(cfg.whatsapp))
   // DM audience (2026-08-16 user decision): enforced by Hermes' NATIVE intake
@@ -322,7 +332,7 @@ export function buildGatewayConfig(contract, existingConfigText) {
  * resident PRIVATE replies stay egress-blocked until the plugin learns a
  * dm-open grant; group replies are unaffected.
  */
-export function buildEgressPolicy(contract, existingPolicyText) {
+export function buildEgressPolicy(contract, existingPolicyText, adminLids = {}) {
   let existing = null
   if (typeof existingPolicyText === 'string' && existingPolicyText.trim()) {
     let parsed
@@ -350,7 +360,13 @@ export function buildEgressPolicy(contract, existingPolicyText) {
     ...base,
     community_sources: [
       ...contract.groups.map(g => ({ id: g.jid, type: 'group', platform: 'whatsapp' })),
-      ...contract.admins.map(a => ({ id: `${a}@s.whatsapp.net`, type: 'dm', platform: 'whatsapp' }))
+      ...contract.admins.flatMap(a => {
+        const entries = [{ id: `${a}@s.whatsapp.net`, type: 'dm', platform: 'whatsapp' }]
+        // A modern DM chat presents as `<lid>@lid` — the reply target the
+        // gate matches against is that chat id, so the grant must carry it.
+        if (adminLids?.[a]) entries.push({ id: `${adminLids[a]}@lid`, type: 'dm', platform: 'whatsapp' })
+        return entries
+      })
     ]
   }
 }
@@ -518,10 +534,15 @@ export function buildEnvFile(existingEnvText, ownedEnv = OWNED_ENV) {
  *     and the operator explicitly opted into open DMs;
  *   * admin space: WHATSAPP_ALLOWED_USERS = exactly the contract admins.
  */
-export function spaceOwnedEnv(space, contract) {
+export function spaceOwnedEnv(space, contract, adminLids = {}) {
   const owned = {}
   if (space.admin) {
-    owned.WHATSAPP_ALLOWED_USERS = contract.admins.join(',')
+    // Both identity forms per admin: msisdn AND (when the engine's own
+    // lid-mapping already knows it) the LID digits — DM senders present
+    // either, and the env allowlist match is plain string equality.
+    owned.WHATSAPP_ALLOWED_USERS = contract.admins
+      .flatMap(a => (adminLids?.[a] ? [a, adminLids[a]] : [a]))
+      .join(',')
   } else {
     owned.WHATSAPP_GROUP_ALLOWED_USERS = space.groups.map(g => g.jid).join(',')
     if (space.shared && contract.dmMode === 'open') {
@@ -661,7 +682,8 @@ export function generateArtifacts(
     existingEnvText,
     existingEgressPolicyText,
     readProfileConfigText,
-    readProfileEnvText
+    readProfileEnvText,
+    adminLids
   } = {}
 ) {
   if (typeof readKnowledgeSource !== 'function') {
@@ -679,7 +701,8 @@ export function generateArtifacts(
   const readProfileEnv = typeof readProfileEnvText === 'function' ? readProfileEnvText : () => undefined
 
   const artifacts = {}
-  const rootConfig = buildGatewayConfig(contract, existingConfigText)
+  const lids = adminLids ?? {}
+  const rootConfig = buildGatewayConfig(contract, existingConfigText, lids)
   artifacts['config.yaml'] = dumpConfig(rootConfig)
   // WHATSAPP_GROUP_ALLOWED_USERS at ROOT too: the intake authorization check
   // (authz_mixin._is_user_authorized) runs BEFORE the routed profile's secret
@@ -697,7 +720,7 @@ export function generateArtifacts(
   artifacts['community/archive-policy.json'] = `${JSON.stringify(buildArchivePolicy(contract), null, 2)}\n`
   // Egress authorization for contract chats in the companion WhatsApp gate —
   // without it, community replies are silently skipped at dispatch.
-  artifacts['business/whatsapp-policy.json'] = `${JSON.stringify(buildEgressPolicy(contract, existingEgressPolicyText), null, 2)}\n`
+  artifacts['business/whatsapp-policy.json'] = `${JSON.stringify(buildEgressPolicy(contract, existingEgressPolicyText, lids), null, 2)}\n`
 
   for (const name of COMMUNITY_ARCHIVE_PLUGIN_FILES) {
     const source = readCommunityPluginFile(name)
@@ -739,7 +762,7 @@ export function generateArtifacts(
     // group turn is dropped with "no user_id" before it can run.
     artifacts[`profiles/${space.slug}/.env`] = buildEnvFile(
       readProfileEnv(space.slug),
-      spaceOwnedEnv(space, contract)
+      spaceOwnedEnv(space, contract, lids)
     )
     artifacts[`profiles/${space.slug}/config.yaml`] = dumpConfig(
       buildProfileConfig(

@@ -434,6 +434,36 @@ describe('per-space artifacts (§2.1)', () => {
     expect(JSON.parse(gen()['community/archive-policy.json'])).toEqual(buildArchivePolicy(contract()))
   })
 
+  // Live finding 2026-08-16: WhatsApp DMs present chat_id as `<lid>@lid` and
+  // route matching is an exact string compare (profile_routing.py:102, no LID
+  // resolution) — the admin's DM fell into the DEFAULT profile. When the
+  // engine's own lid-mapping file knows the admin's LID, every surface must
+  // carry BOTH identity forms.
+  describe('admin LID identities (adminLids)', () => {
+    const LIDS = { '972501234567': '160868067200001' }
+
+    it('emits a second admin-DM route in LID form when the mapping is known', () => {
+      const routes = buildRoutes(contract(), LIDS)
+      expect(routes).toContainEqual({
+        name: 'admin-dm-lid-972501234567',
+        platform: 'whatsapp',
+        chat_id: '160868067200001@lid',
+        profile: ADMIN_SPACE
+      })
+      // The unmapped admin keeps only the classic route.
+      expect(routes.filter(r => r.name.includes('972529876543'))).toHaveLength(1)
+      // Without mappings nothing changes.
+      expect(buildRoutes(contract()).filter(r => r.chat_id?.endsWith('@lid'))).toHaveLength(0)
+    })
+
+    it('grants the LID chat id in the egress gate and the admin env allowlist', () => {
+      const policy = buildEgressPolicy(contract(), undefined, LIDS)
+      expect(policy.community_sources).toContainEqual({ id: '160868067200001@lid', type: 'dm', platform: 'whatsapp' })
+      const env = spaceOwnedEnv({ slug: ADMIN_SPACE, admin: true, shared: false, groups: [] }, contract(), LIDS)
+      expect(env.WHATSAPP_ALLOWED_USERS).toBe('972501234567,160868067200001,972529876543')
+    })
+  })
+
   // Live finding 2026-08-16 (gateway -vv): under multiplex the engine reads
   // platform gate env vars ONLY from the routed profile's own .env scope, and
   // triggered group messages carry no user_id — so each space profile MUST
