@@ -284,7 +284,40 @@ the friendly name. After first processed group turn the directory lists it.
    #85832's review points (lazy private import + ""-as-DM, regex vs scope
    gate duality, identity-compare fragility) are noted as fork follow-ups.
 
-## Guardrails (carried forward + new)
+## Negative-control fence test — PASSED with positive evidence (21:02)
+
+The "disallowed group stays silent" assertion now has AFFIRMATIVE proof, not
+just absence of a reply. Test group: "נסיון 2" (`120363418867938143@g.us`,
+only the admin + bot as members — replaces the family group as the negative
+control; created fresh, deliberately NOT added to the contract).
+
+- Pre-check: the JID appears NOWHERE in config.yaml, .env, profile_routes,
+  business/whatsapp-policy.json, profiles/**, or community.yaml.
+- Arrival proven: the gateway ran foreground `-vv` (full DEBUG); the admin
+  sent a wake-word message ("הרמס …") in נסיון 2 at 21:02:08 — the Baileys
+  sender-key ratchet file for that JID advanced at exactly that time, i.e.
+  our bridge received and decrypted the message.
+- Zero processing proven: the full DEBUG log contains NOT ONE line mentioning
+  the JID — dropped before even the `inbound message:` log point (adapter
+  group gate). No session file, no community/ archive row, no outbound send.
+- Positive control in the same minute: the same wake-word in the contract
+  trial group was routed to the village profile, processed (11.0s, 1 API
+  call) and replied — so the pipeline was demonstrably live while נסיון 2
+  was refused.
+
+## Operational findings 2026-08-16 evening (post-E2E)
+
+- Gateway died with the closing terminal session a THIRD time, and the
+  Startup login item turned out to be a STALE QA LEAK: Hermes_Gateway.vbs in
+  the user's real Startup folder pointed at a deleted temp QA home
+  (`hermes-qa-home-wMWeiM`) and quit silently — so logon recovery was dead
+  too. Root cause to chase: the packaged-E2E QA runtime override ran
+  `gateway install` against the QA home and overwrote the real login item.
+  Fixed live via official `hermes gateway install` (Startup-folder fallback;
+  Scheduled Task needs UAC). FOLLOW-UP: make the QA harness suppress/redirect
+  gateway install, and add a check that the login item targets the live home.
+- Orphan-bridge pattern (#87833) reproduced again on `gateway stop`: port
+  3000 still held by a dead run's bridge; killed before clean restart.
 
 - No second runtime/home/DB/dashboard/RAG; no Vercel deploys.
 - Community config merges must stay ADDITIVE on shared keys; never overwrite
