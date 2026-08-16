@@ -20,6 +20,7 @@ import {
   generateArtifacts,
   renderAdminSkill,
   renderKnowledgeSkill,
+  spaceOwnedEnv,
   wakeWordPattern
 } from './generate.mjs'
 import { ADMIN_SPACE, SHARED_SPACE } from './contract.mjs'
@@ -320,8 +321,11 @@ describe('gateway config generation', () => {
 })
 
 describe('.env generation (bridge posture — proven pilot pattern)', () => {
-  it('a fresh home gets exactly the owned keys', () => {
-    expect(gen()['.env']).toBe('WHATSAPP_ENABLED=true\nWHATSAPP_MODE=bot\nWHATSAPP_ALLOWED_USERS=*\n')
+  it('a fresh home gets exactly the owned keys (incl. the intake-time group allowlist)', () => {
+    expect(gen()['.env']).toBe(
+      'WHATSAPP_ENABLED=true\nWHATSAPP_MODE=bot\nWHATSAPP_ALLOWED_USERS=*\n' +
+        'WHATSAPP_GROUP_ALLOWED_USERS=120363000000000001@g.us,120363000000000002@g.us\n'
+    )
   })
 
   it('preserves non-owned lines (comments, other keys, engine-written entries) verbatim', () => {
@@ -357,18 +361,21 @@ describe('per-space artifacts (§2.1)', () => {
       'business/whatsapp-policy.json',
       'community/archive-policy.json',
       'config.yaml',
+      'profiles/emergency/.env',
       'profiles/emergency/SOUL.md',
       'profiles/emergency/config.yaml',
       'profiles/emergency/skills/emergency/SKILL.md',
       'profiles/emergency/skills/general/SKILL.md',
       ...COMMUNITY_ARCHIVE_PLUGIN_FILES.map(name => `plugins/${COMMUNITY_ARCHIVE_PLUGIN}/${name}`),
       ...COMMUNITY_ARCHIVE_PLUGIN_FILES.map(name => `profiles/${SHARED_SPACE}/plugins/${COMMUNITY_ARCHIVE_PLUGIN}/${name}`),
+      `profiles/${SHARED_SPACE}/.env`,
       `profiles/${SHARED_SPACE}/SOUL.md`,
       `profiles/${SHARED_SPACE}/config.yaml`,
       `profiles/${SHARED_SPACE}/skills/general/SKILL.md`,
       // The management space: admins' routed DM channel — admin skills,
       // archive plugin, and its own SOUL.
       ...COMMUNITY_ARCHIVE_PLUGIN_FILES.map(name => `profiles/${ADMIN_SPACE}/plugins/${COMMUNITY_ARCHIVE_PLUGIN}/${name}`),
+      `profiles/${ADMIN_SPACE}/.env`,
       `profiles/${ADMIN_SPACE}/SOUL.md`,
       `profiles/${ADMIN_SPACE}/config.yaml`,
       ...ADMIN_SKILLS.map(name => `profiles/${ADMIN_SPACE}/skills/${name}/SKILL.md`),
@@ -425,6 +432,58 @@ describe('per-space artifacts (§2.1)', () => {
       groups: [{ id: '120363000000000001@g.us', name: 'קבוצת היישוב הראשית' }]
     })
     expect(JSON.parse(gen()['community/archive-policy.json'])).toEqual(buildArchivePolicy(contract()))
+  })
+
+  // Live finding 2026-08-16 (gateway -vv): under multiplex the engine reads
+  // platform gate env vars ONLY from the routed profile's own .env scope, and
+  // triggered group messages carry no user_id — so each space profile MUST
+  // ship WHATSAPP_GROUP_ALLOWED_USERS (chat-scoped authz) in its own .env or
+  // every routed group turn dies as "Ignoring message with no user_id".
+  describe('per-space profile .env (routed-turn authorization scope)', () => {
+    it('the ROOT .env carries ALL contract group JIDs (intake authz runs before the profile scope exists)', () => {
+      expect(gen()['.env']).toContain(
+        'WHATSAPP_GROUP_ALLOWED_USERS=120363000000000001@g.us,120363000000000002@g.us'
+      )
+    })
+
+    it('group spaces get exactly their contract group JIDs as WHATSAPP_GROUP_ALLOWED_USERS', () => {
+      const artifacts = gen()
+      expect(artifacts[`profiles/${SHARED_SPACE}/.env`]).toContain(
+        'WHATSAPP_GROUP_ALLOWED_USERS=120363000000000001@g.us'
+      )
+      expect(artifacts['profiles/emergency/.env']).toContain(
+        'WHATSAPP_GROUP_ALLOWED_USERS=120363000000000002@g.us'
+      )
+      // dms defaults to 'admins': the shared space gets NO sender allowlist.
+      expect(artifacts[`profiles/${SHARED_SPACE}/.env`]).not.toContain('WHATSAPP_ALLOWED_USERS=')
+    })
+
+    it('the admin space allowlists exactly the contract admins for its routed DMs', () => {
+      const env = gen()[`profiles/${ADMIN_SPACE}/.env`]
+      expect(env).toContain('WHATSAPP_ALLOWED_USERS=972501234567,972529876543')
+      expect(env).not.toContain('WHATSAPP_GROUP_ALLOWED_USERS')
+    })
+
+    it("dms 'open' additionally opens the shared space's sender gate (native dm_policy already filtered intake)", () => {
+      const open = { ...contract(), dmMode: 'open' }
+      expect(spaceOwnedEnv({ slug: SHARED_SPACE, shared: true, admin: false, groups: contract().groups.slice(0, 1) }, open))
+        .toEqual({
+          WHATSAPP_GROUP_ALLOWED_USERS: '120363000000000001@g.us',
+          WHATSAPP_ALLOWED_USERS: '*'
+        })
+    })
+
+    it('preserves pre-existing profile .env content and rewrites only owned keys', () => {
+      const artifacts = gen({
+        readProfileEnvText: slug =>
+          slug === SHARED_SPACE ? '# comment\nOPENAI_API_KEY=sk-x\nWHATSAPP_GROUP_ALLOWED_USERS=stale@g.us\n' : undefined
+      })
+      const env = artifacts[`profiles/${SHARED_SPACE}/.env`]
+      expect(env).toContain('# comment')
+      expect(env).toContain('OPENAI_API_KEY=sk-x')
+      expect(env).toContain('WHATSAPP_GROUP_ALLOWED_USERS=120363000000000001@g.us')
+      expect(env).not.toContain('stale@g.us')
+    })
   })
 
   // Live finding 2026-08-16: the companion business-whatsapp-policy gate held

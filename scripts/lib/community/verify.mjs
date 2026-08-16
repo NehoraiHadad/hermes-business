@@ -144,8 +144,8 @@ const ENV_LINE_RE = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)$/
 /** Parse `.env` text into the OWNED-key view (last occurrence wins — dotenv
  * semantics — with surrounding quotes stripped). Non-owned lines are ignored:
  * the engine legitimately appends its own entries. */
-export function effectiveEnvOwnedView(envText) {
-  const view = Object.fromEntries(Object.keys(OWNED_ENV).map(k => [k, undefined]))
+export function effectiveEnvOwnedView(envText, ownedKeys = Object.keys(OWNED_ENV)) {
+  const view = Object.fromEntries(ownedKeys.map(k => [k, undefined]))
   for (const line of String(envText ?? '').split(/\r?\n/)) {
     const m = ENV_LINE_RE.exec(line)
     if (!m || !(m[1] in view)) continue
@@ -161,8 +161,15 @@ export function effectiveEnvOwnedView(envText) {
   return view
 }
 
-export function expectedEnvOwnedView() {
-  return { ...OWNED_ENV }
+/** Contract-aware: the intake-time chat allowlist (all contract group JIDs)
+ * is owned alongside the static bridge posture — verified live 2026-08-16,
+ * a static-only view let a missing group allowlist read as "ok". */
+export function expectedEnvOwnedView(contract) {
+  const base = { ...OWNED_ENV }
+  if (contract && Array.isArray(contract.groups)) {
+    base.WHATSAPP_GROUP_ALLOWED_USERS = contract.groups.map(g => g.jid).join(',')
+  }
+  return base
 }
 
 /** Compare two owned views; returns the list of drifted key paths. */
@@ -252,7 +259,8 @@ export function verifyArtifacts(contract, artifacts, { readFile } = {}) {
       continue
     }
     if (relPath === '.env') {
-      const drifted = diffOwnedViews(expectedEnvOwnedView(), effectiveEnvOwnedView(actual))
+      const expectedEnv = expectedEnvOwnedView(contract)
+      const drifted = diffOwnedViews(expectedEnv, effectiveEnvOwnedView(actual, Object.keys(expectedEnv)))
       report.push(
         drifted.length === 0
           ? { path: relPath, status: 'ok' }

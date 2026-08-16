@@ -473,8 +473,8 @@ const ENV_LINE_RE = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=/
  * occurrences of that key are dropped (dotenv last-wins would otherwise let a
  * stale duplicate override the owned value); missing keys are appended.
  */
-export function buildEnvFile(existingEnvText) {
-  const owned = { ...OWNED_ENV }
+export function buildEnvFile(existingEnvText, ownedEnv = OWNED_ENV) {
+  const owned = { ...ownedEnv }
   const seen = new Set()
   const out = []
   const lines = typeof existingEnvText === 'string' ? existingEnvText.split(/\r?\n/) : []
@@ -496,6 +496,39 @@ export function buildEnvFile(existingEnvText) {
     if (!seen.has(key)) out.push(`${key}=${owned[key]}`)
   }
   return out.join('\n') + '\n'
+}
+
+/**
+ * Per-SPACE profile .env — the authorization the engine actually consults on
+ * routed turns. Live finding 2026-08-16 (gateway -vv): under multiplex,
+ * `_platform_gate_env` reads ONLY the routed profile's secret scope
+ * (agent/secret_scope.py — os.environ fallback is disabled to stop
+ * cross-profile allowlist leaks, issue #72348), and triggered group messages
+ * carry NO user_id (the shared-transcript observe path strips sender
+ * identity), so authz_mixin's chat-scoped check
+ * (WHATSAPP_GROUP_ALLOWED_USERS) is the ONLY thing that can authorize them —
+ * and it must live in profiles/<space>/.env, not the root .env. Without it
+ * the turn dies as "Ignoring message with no user_id from whatsapp".
+ *
+ * Owned keys (exact fences, per space):
+ *   * group spaces: WHATSAPP_GROUP_ALLOWED_USERS = exactly that space's
+ *     contract group JIDs;
+ *   * shared space under dms 'open': WHATSAPP_ALLOWED_USERS='*' — resident
+ *     DMs were already intake-gated by the NATIVE dm_policy at the adapter,
+ *     and the operator explicitly opted into open DMs;
+ *   * admin space: WHATSAPP_ALLOWED_USERS = exactly the contract admins.
+ */
+export function spaceOwnedEnv(space, contract) {
+  const owned = {}
+  if (space.admin) {
+    owned.WHATSAPP_ALLOWED_USERS = contract.admins.join(',')
+  } else {
+    owned.WHATSAPP_GROUP_ALLOWED_USERS = space.groups.map(g => g.jid).join(',')
+    if (space.shared && contract.dmMode === 'open') {
+      owned.WHATSAPP_ALLOWED_USERS = '*'
+    }
+  }
+  return owned
 }
 
 /** Render one knowledge pack as a Hermes skill document. The description was
@@ -627,7 +660,8 @@ export function generateArtifacts(
     existingConfigText,
     existingEnvText,
     existingEgressPolicyText,
-    readProfileConfigText
+    readProfileConfigText,
+    readProfileEnvText
   } = {}
 ) {
   if (typeof readKnowledgeSource !== 'function') {
@@ -642,11 +676,21 @@ export function generateArtifacts(
     )
   }
   const readProfileConfig = typeof readProfileConfigText === 'function' ? readProfileConfigText : () => undefined
+  const readProfileEnv = typeof readProfileEnvText === 'function' ? readProfileEnvText : () => undefined
 
   const artifacts = {}
   const rootConfig = buildGatewayConfig(contract, existingConfigText)
   artifacts['config.yaml'] = dumpConfig(rootConfig)
-  artifacts['.env'] = buildEnvFile(existingEnvText)
+  // WHATSAPP_GROUP_ALLOWED_USERS at ROOT too: the intake authorization check
+  // (authz_mixin._is_user_authorized) runs BEFORE the routed profile's secret
+  // scope is installed, so it falls back to the process env — verified live
+  // 2026-08-16 with gateway -vv: with the var only in profiles/<space>/.env
+  // the group turn still died as "no user_id". Chat-scoped and exact: all
+  // contract group JIDs (the per-space fences stay in config + profile .env).
+  artifacts['.env'] = buildEnvFile(existingEnvText, {
+    ...OWNED_ENV,
+    WHATSAPP_GROUP_ALLOWED_USERS: contract.groups.map(g => g.jid).join(',')
+  })
   // No activation marker: under the single-home model there is no second
   // runtime to route to — the community capability is active exactly when the
   // generated fences + archive policy exist in this home.
@@ -690,6 +734,13 @@ export function generateArtifacts(
   }
 
   for (const space of contractSpaces(contract)) {
+    // The routed-turn authorization scope (see spaceOwnedEnv): without this
+    // file the engine's per-profile secret scope is empty and every routed
+    // group turn is dropped with "no user_id" before it can run.
+    artifacts[`profiles/${space.slug}/.env`] = buildEnvFile(
+      readProfileEnv(space.slug),
+      spaceOwnedEnv(space, contract)
+    )
     artifacts[`profiles/${space.slug}/config.yaml`] = dumpConfig(
       buildProfileConfig(
         readProfileConfig(space.slug),

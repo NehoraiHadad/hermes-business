@@ -112,7 +112,8 @@ function main() {
     existingConfigText: readIfFile(path.join(opts.home, 'config.yaml')),
     existingEnvText: readIfFile(path.join(opts.home, '.env')),
     existingEgressPolicyText: readIfFile(path.join(opts.home, 'business', 'whatsapp-policy.json')),
-    readProfileConfigText: space => readIfFile(path.join(opts.home, 'profiles', space, 'config.yaml'))
+    readProfileConfigText: space => readIfFile(path.join(opts.home, 'profiles', space, 'config.yaml')),
+    readProfileEnvText: space => readIfFile(path.join(opts.home, 'profiles', space, '.env'))
   })
 
   if (opts.command === 'generate') {

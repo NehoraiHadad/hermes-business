@@ -346,8 +346,22 @@ describe('verifyArtifacts — .env (owned keys only)', () => {
 
   it('effectiveEnvOwnedView: last occurrence wins, quotes stripped, non-owned ignored', () => {
     const view = effectiveEnvOwnedView('WHATSAPP_MODE="self-chat"\nOTHER=x\nWHATSAPP_MODE=\'bot\'\nWHATSAPP_ENABLED=true\nWHATSAPP_ALLOWED_USERS=*\n')
-    expect(view).toEqual(expectedEnvOwnedView())
+    expect(view).toEqual({ ...OWNED_ENV })
     expect(expectedEnvOwnedView()).toEqual({ ...OWNED_ENV })
+  })
+
+  it('expectedEnvOwnedView is contract-aware: a missing group allowlist is DRIFT, not ok', () => {
+    expect(expectedEnvOwnedView(contract()).WHATSAPP_GROUP_ALLOWED_USERS).toBe(
+      contract().groups.map(g => g.jid).join(',')
+    )
+    // A home whose .env lacks the group allowlist must NOT verify clean.
+    const artifacts = gen()
+    const home = { ...artifacts, '.env': 'WHATSAPP_ENABLED=true\nWHATSAPP_MODE=bot\nWHATSAPP_ALLOWED_USERS=*\n' }
+    const entry = verifyArtifacts(contract(), artifacts, { readFile: homeReader(home) }).artifacts.find(
+      a => a.path === '.env'
+    )
+    expect(entry.status).toBe('drift')
+    expect(entry.detail).toContain('WHATSAPP_GROUP_ALLOWED_USERS')
   })
 })
 
