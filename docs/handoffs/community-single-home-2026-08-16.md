@@ -186,9 +186,11 @@ group 120363428948689789@g.us):
 4. Archive query "הרמס מה נכתב בקבוצה?" → community_archive recent →
    full provenance + untrusted_evidence marker → reply LISTING the silently
    observed message. Observe→archive→retrieval chain proven end-to-end.
-Still pending: family-group silence confirmation (user-side), restart
-persistence, non-admin slash denial, deterministic count, dms:open resident
-flow. THREE live-only fixes were required (below) — all committed
+5. Family group (NOT in the contract): user confirmed ZERO bot responses
+   all day — the negative fence holds.
+Still pending (non-blocking follow-ups): full-restart persistence (several
+restarts already survived incl. pairing), non-admin slash denial,
+deterministic count, dms:open resident flow (known egress-gate gap). THREE live-only fixes were required (below) — all committed
 (f7e59c6, cb6fbb0, 2da8b55) and re-verified by tests (203 community lib).
 
 Operational notes: WHATSAPP_DEBUG diag flag added and REMOVED from root
