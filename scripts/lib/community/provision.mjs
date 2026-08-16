@@ -72,8 +72,8 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 export const DEFAULT_ENGINE_REPO_URL = 'https://github.com/NehoraiHadad/hermes-agent.git'
-export const DEFAULT_ENGINE_REF = 'community-engine-v0.2.2'
-export const DEFAULT_ENGINE_SHA = 'af04eb8bb85e0a5b6333cd0104921b7e49bcf1f9'
+export const DEFAULT_ENGINE_REF = 'community-engine-v0.3.0'
+export const DEFAULT_ENGINE_SHA = 'bb2591ab492d577ed597af8f66f6942040858690'
 
 
 export class ProvisionRefusedError extends Error {
