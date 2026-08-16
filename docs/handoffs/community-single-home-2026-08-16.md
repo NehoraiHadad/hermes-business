@@ -174,7 +174,51 @@ re-verify on a clean machine.
   line-ending noise) — verify `git checkout --detach` is not blocked by them
   before the live overlay; if it is, stash is acceptable (docs-only paths).
 
-## Live pilot E2E (2026-08-16 evening) — in progress
+## Live pilot E2E (2026-08-16 evening) — CORE ASSERTIONS PASSED
+
+Confirmed live on the real account (bot 972552610571, admin 972547401660,
+group 120363428948689789@g.us):
+1. Ambient message without the wake word → SILENT + durably observed.
+2. "הרמס בדיקה" → routed village turn → real reply SENT to the group
+   ("הבדיקה התקבלה 🙂 אני פעיל.").
+3. Admin DM (LID-presenting) → routed to the ADMIN space, management
+   persona replied, community-admin skill loaded — never the owner profile.
+4. Archive query "הרמס מה נכתב בקבוצה?" → community_archive recent →
+   full provenance + untrusted_evidence marker → reply LISTING the silently
+   observed message. Observe→archive→retrieval chain proven end-to-end.
+Still pending: family-group silence confirmation (user-side), restart
+persistence, non-admin slash denial, deterministic count, dms:open resident
+flow. THREE live-only fixes were required (below) — all committed
+(f7e59c6, cb6fbb0, 2da8b55) and re-verified by tests (203 community lib).
+
+Operational notes: WHATSAPP_DEBUG diag flag added and REMOVED from root
+.env; gateway returned to normal service mode. Bridge-zombie pattern: a
+gateway restart can leave the old bridge holding port 3000 while the new
+spawn briefly connects to WhatsApp and invalidates the survivor's socket —
+messages then queue server-side and later arrive as 'append' (deliberately
+ignored as stale). Remedy: kill the orphan bridge + one clean start;
+worth an upstream issue. Offline-redelivered ('append') messages are
+intentionally not dispatched.
+
+### The three live-only fixes (why unit/smoke could not catch them)
+1. EGRESS: the companion gate (business-whatsapp-policy) governs ALL
+   WhatsApp outbound; community chats needed generator-owned
+   community_sources (owner surface untouched).
+2. INTAKE AUTHZ: triggered group messages carry NO user_id (shared
+   transcript strips sender identity); only chat-scoped
+   WHATSAPP_GROUP_ALLOWED_USERS authorizes them, read from the PROCESS env
+   (the check runs before the profile secret scope exists) — generator now
+   owns it in the ROOT .env + per-space profiles/<slug>/.env; env
+   verification is contract-aware (static-only view masked the gap).
+   UPSTREAM-WORTHY: config whatsapp.group_allow_from is not consulted by
+   authz_mixin for routed turns.
+3. LID ROUTING: DM chat_ids present as <lid>@lid; route matching is exact
+   string compare (profile_routing.py:102). Generator reads the engine's
+   own lid-mapping-<msisdn>.json (best-effort) and emits a second admin
+   route in LID form + LID grants in the egress gate and admin env.
+   UPSTREAM-WORTHY: routing should resolve LIDs via the engine's mapping.
+
+## E2E session log (earlier same evening — kept for context)
 
 Contract applied to the LIVE home (user-authorized): group "נסיון - הרמס -
 תכלס קהילה" `120363428948689789@g.us` → village, admin 972547401660 → admin
