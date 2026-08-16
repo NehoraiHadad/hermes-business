@@ -272,7 +272,17 @@ the friendly name. After first processed group turn the directory lists it.
    0.4.0-alpha.4 installer predates this migration — it is now DOUBLY stale
    and must not be promoted.
 6. Maintain upstream PRs #85490 / #85832 / #87626; drop the overlay when the
-   observer lands in an official release.
+   observer lands in an official release. 2026-08-16 evening status: all
+   three OPEN + MERGEABLE, each carries an AI review (author-optional).
+   Posted: full live-E2E validation on #85490 (with commitments: collapse
+   body newlines, document native-bridge-only backfill, watermark/merge
+   comments) and the routing-layer LID gap on #87626 (offered a follow-up
+   PR: route matching should expand WhatsApp aliases). Filed issues:
+   #87830 (routed-turn authz ignores config group_allow_from — env-only,
+   silent drop), #87833 (restart orphans the bridge → silent inbound loss,
+   Windows), #87834 (bridge /groups listing endpoint for discovery).
+   #85832's review points (lazy private import + ""-as-DM, regex vs scope
+   gate duality, identity-compare fragility) are noted as fork follow-ups.
 
 ## Guardrails (carried forward + new)
 
