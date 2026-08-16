@@ -283,6 +283,22 @@ the friendly name. After first processed group turn the directory lists it.
    Windows), #87834 (bridge /groups listing endpoint for discovery).
    #85832's review points (lazy private import + ""-as-DM, regex vs scope
    gate duality, identity-compare fragility) are noted as fork follow-ups.
+   LATE-EVENING UPDATE — the follow-up batch is DONE (opus subagent):
+   #85490 got the three committed fixes (newline collapse via
+   neutralize_untrusted_inline_text max_chars=0 + native-bridge-only docs
+   + watermark/dedup comments; d691f3bef/74bf411f8/09a80c8a0), #85832 got
+   the public scope_for_chat_type refactor (ea9a23851; regex-vs-scope
+   dualism deliberately NOT unified — reasoned in the PR comment), #87626
+   got alias-aware profile routing reusing gateway.whatsapp_identity
+   (group JIDs stay exact-string; corrupt mapping warns once per file;
+   173e09182/cc4b63ebd). All pushed, each PR carries a summary comment.
+   Observer fixes cherry-picked onto community-release-observer →
+   tag community-engine-v0.3.0 (bb2591ab4) pushed; provision pin bumped
+   (e64ac6e, 203 lib tests pass); live home applied + gateway restarted
+   and reconnected on the new engine (22:03). NOTE: the stale local
+   feat/whatsapp-group-history-backfill branch was reset onto the fork
+   tip; old commit preserved as backup/feat-whatsapp-group-history-
+   backfill-stale.
 
 ## Negative-control fence test — PASSED with positive evidence (21:02)
 
