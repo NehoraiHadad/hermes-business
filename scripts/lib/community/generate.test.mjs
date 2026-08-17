@@ -3,6 +3,8 @@ import yaml from 'js-yaml'
 import {
   ADMIN_SKILLS,
   ADMIN_TOOLSET,
+  DM_OPEN_PLATFORMS,
+  RESIDENT_TOOLSET,
   COMMUNITY_ARCHIVE_PLUGIN,
   COMMUNITY_ARCHIVE_PLUGIN_FILES,
   COMMUNITY_ARCHIVE_TOOL,
@@ -23,8 +25,8 @@ import {
   spaceOwnedEnv,
   wakeWordPattern
 } from './generate.mjs'
-import { ADMIN_SPACE, SHARED_SPACE } from './contract.mjs'
-import { renderSharedSoul, renderSoul } from './persona.mjs'
+import { ADMIN_SPACE, RESIDENT_SPACE, SHARED_SPACE, contractSpaces } from './contract.mjs'
+import { renderResidentSoul, renderSharedSoul, renderSoul } from './persona.mjs'
 
 function contract() {
   return {
@@ -494,13 +496,16 @@ describe('per-space artifacts (§2.1)', () => {
       expect(env).not.toContain('WHATSAPP_GROUP_ALLOWED_USERS')
     })
 
-    it("dms 'open' additionally opens the shared space's sender gate (native dm_policy already filtered intake)", () => {
+    it("dms 'open' opens the RESIDENTS space's sender gate and leaves every group space chat-scoped", () => {
       const open = { ...contract(), dmMode: 'open' }
+      // The DM audience belongs to the residents space, so no group profile's
+      // sender gate is widened for it.
       expect(spaceOwnedEnv({ slug: SHARED_SPACE, shared: true, admin: false, groups: contract().groups.slice(0, 1) }, open))
-        .toEqual({
-          WHATSAPP_GROUP_ALLOWED_USERS: '120363000000000001@g.us',
-          WHATSAPP_ALLOWED_USERS: '*'
-        })
+        .toEqual({ WHATSAPP_GROUP_ALLOWED_USERS: '120363000000000001@g.us' })
+      // The residents space cannot list its senders by definition — the
+      // native dm_policy already gated intake.
+      expect(spaceOwnedEnv({ slug: RESIDENT_SPACE, shared: false, admin: false, resident: true, groups: [] }, open))
+        .toEqual({ WHATSAPP_ALLOWED_USERS: '*' })
     })
 
     it('preserves pre-existing profile .env content and rewrites only owned keys', () => {
@@ -795,5 +800,147 @@ describe('admin skills (default profile only)', () => {
         deployPaths
       })
     ).toThrow(/routing budget/)
+  })
+})
+
+// The `dms: open` capability is DORMANT: a contract that does not opt in must
+// produce byte-identical output to the day before this feature existed, and an
+// opted-in contract must produce a residents space that is fenced as tightly
+// as an isolated group.
+describe("dms 'open' — the residents DM space (§2.2)", () => {
+  const openContract = () => ({ ...contract(), dmMode: 'open' })
+  const genOpen = (overrides = {}) =>
+    generateArtifacts(openContract(), {
+      readKnowledgeSource: readSource,
+      readAdminSkillTemplate: name => adminTemplates[name],
+      readCommunityPluginFile,
+      deployPaths,
+      ...overrides
+    })
+
+  it('appends a residents space carrying the PUBLIC knowledge union only', () => {
+    const spaces = contractSpaces(openContract())
+    expect(spaces.map(s => s.slug)).toEqual([SHARED_SPACE, 'emergency', ADMIN_SPACE, RESIDENT_SPACE])
+    const residents = spaces.at(-1)
+    expect(residents.resident).toBe(true)
+    expect(residents.groups).toEqual([])
+    // 'emergency' is isolated — its pack never travels into a private chat.
+    expect(residents.knowledge).toEqual(['general'])
+  })
+
+  it('routes unclaimed DMs to it with a platform-only catch-all that cannot outrank an exact route', () => {
+    const routes = buildRoutes(openContract())
+    const catchAll = routes.at(-1)
+    expect(catchAll).toEqual({ name: 'residents-dm-catchall', platform: 'whatsapp', profile: RESIDENT_SPACE })
+    // No chat_id (and no guild/thread) — specificity 0, so the engine's
+    // most-specific-first sort keeps every exact route above it winning.
+    expect('chat_id' in catchAll).toBe(false)
+    expect(routes.filter(r => r.profile === RESIDENT_SPACE)).toHaveLength(1)
+    // The exact routes are untouched: same set, same order as under 'admins'.
+    expect(routes.slice(0, -1)).toEqual(buildRoutes(contract()))
+  })
+
+  it('fences the residents profile exactly like an isolated group — no archive, no session_search', () => {
+    const cfg = yaml.load(genOpen()[`profiles/${RESIDENT_SPACE}/config.yaml`])
+    expect(cfg.platform_toolsets.whatsapp).toEqual([...RESIDENT_TOOLSET])
+    expect(RESIDENT_TOOLSET).toEqual([...GROUP_TOOLSET])
+    expect(cfg.platform_toolsets.whatsapp).not.toContain(COMMUNITY_ARCHIVE_TOOL)
+    expect(cfg.agent.disabled_toolsets).toContain('session_search')
+    expect(cfg.plugins.enabled).not.toContain(COMMUNITY_ARCHIVE_PLUGIN)
+    expect(cfg.plugins.disabled).toContain(COMMUNITY_ARCHIVE_PLUGIN)
+    expect(cfg.memory.write_approval).toBe(true)
+    expect(cfg.skills.write_approval).toBe(true)
+  })
+
+  it('gives it the private-chat persona, the public knowledge skills and no management skill', () => {
+    const artifacts = genOpen()
+    expect(artifacts[`profiles/${RESIDENT_SPACE}/SOUL.md`]).toBe(
+      renderResidentSoul({ communityName: contract().name, wakeWord: contract().wakeWord })
+    )
+    expect(artifacts[`profiles/${RESIDENT_SPACE}/skills/general/SKILL.md`]).toBeDefined()
+    expect(artifacts[`profiles/${RESIDENT_SPACE}/skills/emergency/SKILL.md`]).toBeUndefined()
+    for (const name of ADMIN_SKILLS) {
+      expect(artifacts[`profiles/${RESIDENT_SPACE}/skills/${name}/SKILL.md`]).toBeUndefined()
+    }
+    for (const name of COMMUNITY_ARCHIVE_PLUGIN_FILES) {
+      expect(artifacts[`profiles/${RESIDENT_SPACE}/plugins/${COMMUNITY_ARCHIVE_PLUGIN}/${name}`]).toBeUndefined()
+    }
+    expect(artifacts[`profiles/${RESIDENT_SPACE}/.env`]).toContain('WHATSAPP_ALLOWED_USERS=*')
+    expect(artifacts[`profiles/${RESIDENT_SPACE}/.env`]).not.toContain('WHATSAPP_GROUP_ALLOWED_USERS')
+  })
+
+  it('grants the egress gate a DM SHAPE (unknown senders are unlistable) without touching the owner surface', () => {
+    const policy = buildEgressPolicy(openContract(), undefined)
+    expect(policy.community_dm_open_platforms).toEqual([...DM_OPEN_PLATFORMS])
+    expect(policy.community_dm_open_platforms).toEqual(['whatsapp'])
+    // The enumerated grants are unchanged by the shape grant.
+    expect(policy.community_sources).toEqual(buildEgressPolicy(contract(), undefined).community_sources)
+    expect(policy.mode).toBe('read_only')
+    expect(policy.behavior).toBe('monitor')
+    expect(policy.sources).toEqual([])
+    // Fixpoint over the owner's own file.
+    const owner = { version: 2, mode: 'selected_chats', behavior: 'assist', reply_chats: [], reply_groups: [], sources: [] }
+    const merged = buildEgressPolicy(openContract(), JSON.stringify(owner))
+    expect(merged.mode).toBe('selected_chats')
+    expect(buildEgressPolicy(openContract(), JSON.stringify(merged))).toEqual(merged)
+  })
+
+  it('RECLAIMS the open-DM surface when the contract goes back to admins (a grant never outlives its contract)', () => {
+    const opened = genOpen()
+    // Downgrade: feed the OPEN output back in as the state on disk.
+    const closed = gen({
+      existingConfigText: opened['config.yaml'],
+      existingEgressPolicyText: opened['business/whatsapp-policy.json']
+    })
+    const cfg = yaml.load(closed['config.yaml'])
+    expect(cfg.profile_routes.some(r => r.profile === RESIDENT_SPACE)).toBe(false)
+    expect(JSON.parse(closed['business/whatsapp-policy.json']).community_dm_open_platforms).toBeUndefined()
+  })
+
+  it("emits NOTHING of the residents surface under the default dms 'admins' (dormant)", () => {
+    const artifacts = gen()
+    expect(Object.keys(artifacts).filter(p => p.includes(RESIDENT_SPACE))).toEqual([])
+    expect(contractSpaces(contract()).some(s => s.resident)).toBe(false)
+    expect(buildRoutes(contract()).some(r => !('chat_id' in r))).toBe(false)
+    expect(buildEgressPolicy(contract(), undefined).community_dm_open_platforms).toBeUndefined()
+    expect(JSON.parse(artifacts['business/whatsapp-policy.json']).community_dm_open_platforms).toBeUndefined()
+  })
+
+  it("an explicit dms 'admins' is byte-identical to a contract that never mentioned dms", () => {
+    const explicit = generateArtifacts({ ...contract(), dmMode: 'admins' }, {
+      readKnowledgeSource: readSource,
+      readAdminSkillTemplate: name => adminTemplates[name],
+      readCommunityPluginFile,
+      deployPaths
+    })
+    expect(explicit).toEqual(gen())
+  })
+
+  it('the ONLY delta between admins and open is the residents surface plus the two owned keys', () => {
+    const closed = gen()
+    const opened = genOpen()
+    // Nothing an 'admins' deployment already has disappears...
+    expect(Object.keys(closed).filter(p => !(p in opened))).toEqual([])
+    // ...every NEW path belongs to the residents profile...
+    expect(Object.keys(opened).filter(p => !(p in closed)).map(p => p.split('/').slice(0, 2).join('/')))
+      .toEqual(expect.arrayContaining([`profiles/${RESIDENT_SPACE}`]))
+    expect(Object.keys(opened).filter(p => !(p in closed) && !p.startsWith(`profiles/${RESIDENT_SPACE}/`))).toEqual([])
+    // ...and exactly two shared files change: the appended catch-all route and
+    // the DM-shape grant. The village profile, its SOUL, its .env and every
+    // group fence stay byte-identical.
+    expect(Object.keys(closed).filter(p => closed[p] !== opened[p]).sort())
+      .toEqual(['business/whatsapp-policy.json', 'config.yaml'])
+  })
+
+  it('is a FIXPOINT: re-generating over its own output changes nothing', () => {
+    const first = genOpen()
+    const second = genOpen({
+      existingConfigText: first['config.yaml'],
+      existingEnvText: first['.env'],
+      existingEgressPolicyText: first['business/whatsapp-policy.json'],
+      readProfileConfigText: slug => first[`profiles/${slug}/config.yaml`],
+      readProfileEnvText: slug => first[`profiles/${slug}/.env`]
+    })
+    expect(second).toEqual(first)
   })
 })

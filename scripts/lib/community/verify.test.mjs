@@ -5,6 +5,8 @@ import { ADMIN_SPACE } from './contract.mjs'
 import {
   GROUP_TOOLSET,
   OWNED_ENV,
+  RESIDENT_SPACE,
+  RESIDENT_TOOLSET,
   SHARED_SPACE,
   SHARED_TOOLSET,
   contentChecksum,
@@ -448,5 +450,66 @@ describe('effective owned view', () => {
     const b = { ...a, 'whatsapp.dm_policy': 'open' }
     expect(diffOwnedViews(a, b)).toEqual(['whatsapp.dm_policy'])
     expect(diffOwnedViews(a, { ...a })).toEqual([])
+  })
+})
+
+// Every artifact the `dms: open` opt-in adds must be a drift surface too — a
+// residents profile that silently loses its fence, or a catch-all route quietly
+// deleted from the home, must never read as "ok".
+describe("verifyArtifacts — the residents DM space (dms 'open', §2.2)", () => {
+  const openContract = () => ({ ...contract(), dmMode: 'open' })
+  const genOpen = () =>
+    generateArtifacts(openContract(), {
+      readKnowledgeSource: p => sources[p],
+      readAdminSkillTemplate: name => adminTemplates[name],
+      readCommunityPluginFile,
+      deployPaths
+    })
+
+  it('verifies a freshly generated open home clean, residents artifacts included', () => {
+    const artifacts = genOpen()
+    const report = verifyArtifacts(openContract(), artifacts, { readFile: homeReader({ ...artifacts }) })
+    expect(report.ok, JSON.stringify(report.artifacts.filter(a => a.status !== 'ok'), null, 2)).toBe(true)
+    const paths = report.artifacts.map(a => a.path)
+    for (const suffix of ['config.yaml', 'SOUL.md', '.env', 'skills/general/SKILL.md']) {
+      expect(paths).toContain(`profiles/${RESIDENT_SPACE}/${suffix}`)
+    }
+  })
+
+  it('flags the community archive smuggled into the residents fence', () => {
+    const artifacts = genOpen()
+    const path = `profiles/${RESIDENT_SPACE}/config.yaml`
+    const parsed = yaml.load(artifacts[path])
+    parsed.platform_toolsets.whatsapp = [...SHARED_TOOLSET]
+    const entry = verifyArtifacts(openContract(), artifacts, {
+      readFile: homeReader({ ...artifacts, [path]: yaml.dump(parsed) })
+    }).artifacts.find(a => a.path === path)
+    expect(entry.status).toBe('drift')
+    expect(entry.detail).toContain('platform_toolsets.whatsapp')
+  })
+
+  it('flags a deleted catch-all route and a deleted residents profile', () => {
+    const artifacts = genOpen()
+    const parsed = yaml.load(artifacts['config.yaml'])
+    parsed.profile_routes = parsed.profile_routes.filter(r => r.profile !== RESIDENT_SPACE)
+    const home = Object.fromEntries(
+      Object.entries({ ...artifacts, 'config.yaml': yaml.dump(parsed) }).filter(
+        ([p]) => p !== `profiles/${RESIDENT_SPACE}/SOUL.md`
+      )
+    )
+    const report = verifyArtifacts(openContract(), artifacts, { readFile: homeReader(home) })
+    expect(report.ok).toBe(false)
+    const root = report.artifacts.find(a => a.path === 'config.yaml')
+    expect(root.status).toBe('drift')
+    expect(root.detail).toContain('profile_routes')
+    expect(report.artifacts.find(a => a.path === `profiles/${RESIDENT_SPACE}/SOUL.md`).status).toBe('missing')
+  })
+
+  it('expectedProfileOwnedView pins the residents fence, not the shared one', () => {
+    expect(expectedProfileOwnedView(RESIDENT_SPACE, undefined)['platform_toolsets.whatsapp']).toEqual(
+      [...RESIDENT_TOOLSET].sort()
+    )
+    expect(expectedProfileOwnedView(RESIDENT_SPACE, undefined)['plugins.community-archive.enabled']).toBe(false)
+    expect(expectedProfileOwnedView(RESIDENT_SPACE, undefined)['agent.session_search.disabled']).toBe(true)
   })
 })

@@ -62,10 +62,17 @@
 //     the DEFAULT profile's skills dir only — group profiles never see them —
 //     with the deployment paths substituted and the ≤60-char routing
 //     description enforced fail-closed (fact 9).
+//   * `dms: open` (spec §2.2) is DORMANT unless the contract opts in. Only
+//     then does the generator emit the RESIDENTS space (profile config with
+//     the group fence, public-knowledge skills, private-chat persona, own
+//     .env), the platform-only WhatsApp catch-all route onto it, and the
+//     DM-shape grant in the egress policy. Under the default `dms: admins`
+//     none of those artifacts or keys exist at all — an unknown DM sender is
+//     dropped by the engine's own intake gate before any model dispatch.
 
 import yaml from 'js-yaml'
-import { renderAdminSoul, renderSharedSoul, renderSoul } from './persona.mjs'
-import { ADMIN_SPACE, SHARED_SPACE, SKILL_DESCRIPTION_ROUTING_MAX, contractSpaces } from './contract.mjs'
+import { renderAdminSoul, renderResidentSoul, renderSharedSoul, renderSoul } from './persona.mjs'
+import { ADMIN_SPACE, RESIDENT_SPACE, SHARED_SPACE, SKILL_DESCRIPTION_ROUTING_MAX, contractSpaces } from './contract.mjs'
 
 // Fenced toolset for ISOLATED space profiles: public-group-safe, no
 // terminal/file/exec — and deliberately NO session_search: the engine tool's
@@ -95,6 +102,12 @@ export const GROUP_TOOLSET = Object.freeze(['web', 'skills', 'vision'])
 // policy must never become a cross-space read door.
 export const COMMUNITY_ARCHIVE_TOOL = 'community_archive'
 export const SHARED_TOOLSET = Object.freeze([...GROUP_TOOLSET, COMMUNITY_ARCHIVE_TOOL])
+// The residents' DM space (§2.2) reuses the plain group fence — deliberately
+// NOT the shared one: the archive facade reads the community's public group
+// history, and a private chat with an unidentified sender is the last place to
+// open that door. Same fence as an isolated group, for the same fail-closed
+// reason. Named separately so the intent survives any future divergence.
+export const RESIDENT_TOOLSET = GROUP_TOOLSET
 // Management toolset for the DEFAULT profile (admin DMs + host chat): terminal
 // + file are required to run the community CLIs; still no code_execution or
 // delegation. All names are engine "configurable keys" valid for whatsapp
@@ -121,6 +134,12 @@ export const COMMUNITY_ARCHIVE_PLUGIN_FILES = Object.freeze([
   'plugin.yaml'
 ])
 export const DISABLED_COMMUNITY_TOOLSETS = Object.freeze(['session_search'])
+
+// Platforms on which the egress gate may serve an UNENUMERABLE DM sender
+// (`dms: open`, §2.2). WhatsApp only: it is the one platform this generator
+// configures, and the plugin's DM-shape test is written against WhatsApp's
+// chat-id forms.
+export const DM_OPEN_PLATFORMS = Object.freeze(['whatsapp'])
 
 // The admin skills shipped in assets/community-skills/, installed into the
 // default profile's skills dir (skills/<name>/SKILL.md under HERMES_HOME).
@@ -154,11 +173,11 @@ export function buildRoutes(contract, adminLids = {}) {
   }))
   // DM model (2026-08-16, user decision "מי אמר ש-DM == מנהל"):
   //   * an ADMIN's DM routes to the management space — specificity 4 wins;
-  //   * EVERY OTHER DM falls back to the shared community persona via a
-  //     platform-only route (specificity 0, engine-sorted last) — a resident
-  //     can ask pool-hours/prayer-times privately with the SAME fenced
-  //     capability the groups get. Nothing ever falls through to the owner's
-  //     default profile.
+  //   * under `dms: open`, EVERY OTHER DM falls back to the RESIDENTS space
+  //     via a platform-only route (specificity 0, engine-sorted last) — a
+  //     resident can ask pool-hours/prayer-times privately, answered from the
+  //     public knowledge with the group fence. Nothing ever falls through to
+  //     the owner's default profile.
   // Classic DM JIDs are `<msisdn>@s.whatsapp.net` — but a modern WhatsApp DM
   // presents its chat_id as `<lid>@lid`, and route matching is an EXACT
   // string compare (gateway/profile_routing.py:102 — no LID resolution;
@@ -177,15 +196,21 @@ export function buildRoutes(contract, adminLids = {}) {
     }
     return routes
   })
-  // The resident fallback exists only when the operator explicitly opened
-  // DMs AND a shared space exists to serve them. Under dmMode 'admins' the
-  // native intake gate already filtered every non-admin, so no route is
-  // needed (and none is written — fail-safe over fail-open).
-  const hasShared = contract.groups.some(g => g.isolated !== true)
-  const dmFallback = contract.dmMode === 'open' && hasShared
-    ? [{ name: 'resident-dm', platform: 'whatsapp', profile: SHARED_SPACE }]
+  // The resident catch-all exists only when the operator explicitly opened
+  // DMs. Under dmMode 'admins' the native intake gate already filtered every
+  // non-admin, so no route is written — fail-safe over fail-open.
+  //
+  // It is a PLATFORM-ONLY route: no chat_id (and no guild/thread) means
+  // specificity 0, and the engine matches most-specific-first
+  // (gateway/profile_routing.py:109-170), so every exact route above — each
+  // group chat, each admin DM in msisdn AND LID form — still wins. This is the
+  // engine's native per-platform catch-all; it can only ever collect what
+  // nothing else claimed, which is exactly the unknown DM sender we cannot
+  // enumerate in advance.
+  const dmCatchAll = contract.dmMode === 'open'
+    ? [{ name: 'residents-dm-catchall', platform: 'whatsapp', profile: RESIDENT_SPACE }]
     : []
-  return [...groupRoutes, ...adminRoutes, ...dmFallback]
+  return [...groupRoutes, ...adminRoutes, ...dmCatchAll]
 }
 
 /** Deep-clone plain YAML data (objects/arrays/scalars only). */
@@ -241,7 +266,10 @@ export function buildGatewayConfig(contract, existingConfigText, adminLids = {})
   delete gateway.profile_routes
   cfg.gateway = gateway
 
-  const ownedSlugs = new Set(contractSpaces(contract).map(space => space.slug))
+  // RESIDENT_SPACE is owned even when the contract does NOT generate it: a
+  // deployment downgraded from `dms: open` back to 'admins' must have its
+  // catch-all route RECLAIMED (i.e. dropped), not preserved as a foreign route.
+  const ownedSlugs = new Set([...contractSpaces(contract).map(space => space.slug), RESIDENT_SPACE])
   const ownedJids = new Set(contract.groups.map(g => g.jid))
   const existingRoutes = Array.isArray(cfg.profile_routes) ? cfg.profile_routes : []
   const foreignRoutes = existingRoutes.filter(route => {
@@ -328,9 +356,15 @@ export function buildGatewayConfig(contract, existingConfigText, adminLids = {})
  * absent file starts from the plugin's own fail-closed defaults. A
  * present-but-unparseable file is REFUSED, never overwritten.
  *
- * KNOWN GAP: under dms 'open', resident DMs cannot be enumerated here, so
- * resident PRIVATE replies stay egress-blocked until the plugin learns a
- * dm-open grant; group replies are unaffected.
+ * `community_dm_open_platforms` is the SECOND generator-owned key, and it
+ * exists only under `dms: open` (§2.2). Resident DM senders cannot be
+ * enumerated in advance, so the contract grants a SHAPE instead of a list: the
+ * plugin authorizes a destination when the platform is named here AND the
+ * identifier is DM-shaped (bare msisdn, @s.whatsapp.net, @lid, @c.us —
+ * policy.py `_dm_open_allowed`). Groups, broadcast lists and newsletters are
+ * never DM-shaped, so the group fence is untouched. Owned in BOTH directions:
+ * downgrading back to `dms: admins` DELETES the key, so a grant can never
+ * outlive the contract that authorized it.
  */
 export function buildEgressPolicy(contract, existingPolicyText, adminLids = {}) {
   let existing = null
@@ -356,7 +390,7 @@ export function buildEgressPolicy(contract, existingPolicyText, adminLids = {}) 
     reply_groups: [],
     sources: []
   }
-  return {
+  const policy = {
     ...base,
     community_sources: [
       ...contract.groups.map(g => ({ id: g.jid, type: 'group', platform: 'whatsapp' })),
@@ -369,6 +403,9 @@ export function buildEgressPolicy(contract, existingPolicyText, adminLids = {}) 
       })
     ]
   }
+  if (contract.dmMode === 'open') policy.community_dm_open_platforms = [...DM_OPEN_PLATFORMS]
+  else delete policy.community_dm_open_platforms
+  return policy
 }
 
 /** Server-owned allowlist for the read-only archive facade. Sensitive/isolated
@@ -475,6 +512,26 @@ export function buildProfileConfig(
   return cfg
 }
 
+/** The toolset fence a space profile pins (§2.1, §2.2). Every space pins one:
+ * an absent profile config would silently fall back to the engine's FULL
+ * default whatsapp toolset. */
+export function spaceToolset(space) {
+  if (space.admin) return ADMIN_TOOLSET
+  if (space.shared) return SHARED_TOOLSET
+  if (space.resident) return RESIDENT_TOOLSET
+  return GROUP_TOOLSET
+}
+
+/** The SOUL.md a space profile ships — one persona renderer per space kind
+ * (§2.1, §2.2). */
+function renderSpaceSoul(space, contract) {
+  const identity = { communityName: contract.name, wakeWord: contract.wakeWord }
+  if (space.admin) return renderAdminSoul(identity)
+  if (space.resident) return renderResidentSoul(identity)
+  if (space.shared) return renderSharedSoul({ ...identity, groups: space.groups, tone: space.tone })
+  return renderSoul({ ...identity, group: space.groups[0] })
+}
+
 /** Deterministic YAML text for a config object (sorted keys, no line folding). */
 export function dumpConfig(cfg) {
   return yaml.dump(cfg, { sortKeys: true, lineWidth: -1, noRefs: true })
@@ -529,14 +586,18 @@ export function buildEnvFile(existingEnvText, ownedEnv = OWNED_ENV) {
  * Owned keys (exact fences, per space):
  *   * group spaces: WHATSAPP_GROUP_ALLOWED_USERS = exactly that space's
  *     contract group JIDs;
- *   * shared space under dms 'open': WHATSAPP_ALLOWED_USERS='*' — resident
- *     DMs were already intake-gated by the NATIVE dm_policy at the adapter,
- *     and the operator explicitly opted into open DMs;
+ *   * residents space (dms 'open' only): WHATSAPP_ALLOWED_USERS='*' — by
+ *     definition its senders cannot be listed, and they were already
+ *     intake-gated by the NATIVE dm_policy at the adapter, with the operator
+ *     explicitly opting into open DMs. No group key: nothing routes a group
+ *     here;
  *   * admin space: WHATSAPP_ALLOWED_USERS = exactly the contract admins.
  */
 export function spaceOwnedEnv(space, contract, adminLids = {}) {
   const owned = {}
-  if (space.admin) {
+  if (space.resident) {
+    owned.WHATSAPP_ALLOWED_USERS = '*'
+  } else if (space.admin) {
     // Both identity forms per admin: msisdn AND (when the engine's own
     // lid-mapping already knows it) the LID digits — DM senders present
     // either, and the env allowlist match is plain string equality.
@@ -544,10 +605,10 @@ export function spaceOwnedEnv(space, contract, adminLids = {}) {
       .flatMap(a => (adminLids?.[a] ? [a, adminLids[a]] : [a]))
       .join(',')
   } else {
+    // Group spaces stay chat-scoped only: under `dms: open` the DM audience
+    // belongs to the residents space, so no group profile's sender gate is
+    // widened for it.
     owned.WHATSAPP_GROUP_ALLOWED_USERS = space.groups.map(g => g.jid).join(',')
-    if (space.shared && contract.dmMode === 'open') {
-      owned.WHATSAPP_ALLOWED_USERS = '*'
-    }
   }
   return owned
 }
@@ -663,7 +724,8 @@ export function renderAdminSkill({ name, template, deployPaths }) {
  * groups share `profiles/village/` (union of their knowledge packs, one
  * shared-community SOUL, toolset with community_archive); each `isolated: true`
  * group gets `profiles/<slug>/` with the per-group SOUL and the fenced
- * toolset without archive/search access.
+ * toolset without archive/search access; under `dms: open` (§2.2) a
+ * `profiles/residents/` is added for DM senders nothing else claims.
  *
  * Returns `{ 'config.yaml': text, '.env': text,
  *            'skills/<admin skill>/SKILL.md': text,
@@ -767,7 +829,7 @@ export function generateArtifacts(
     artifacts[`profiles/${space.slug}/config.yaml`] = dumpConfig(
       buildProfileConfig(
         readProfileConfig(space.slug),
-        space.admin ? ADMIN_TOOLSET : space.shared ? SHARED_TOOLSET : GROUP_TOOLSET,
+        spaceToolset(space),
         rootConfig.model,
         // The archive serves the shared community persona AND the management
         // space; admins additionally keep session_search over their own
@@ -781,20 +843,7 @@ export function generateArtifacts(
           artifacts[`plugins/${COMMUNITY_ARCHIVE_PLUGIN}/${name}`]
       }
     }
-    artifacts[`profiles/${space.slug}/SOUL.md`] = space.admin
-      ? renderAdminSoul({ communityName: contract.name, wakeWord: contract.wakeWord })
-      : space.shared
-        ? renderSharedSoul({
-            communityName: contract.name,
-            wakeWord: contract.wakeWord,
-            groups: space.groups,
-            tone: space.tone
-          })
-        : renderSoul({
-            communityName: contract.name,
-            wakeWord: contract.wakeWord,
-            group: space.groups[0]
-          })
+    artifacts[`profiles/${space.slug}/SOUL.md`] = renderSpaceSoul(space, contract)
     if (space.admin) {
       // The routed admin DM channel carries the management skills. The root
       // copies installed by BusinessInstall stay owner-facing (companion).

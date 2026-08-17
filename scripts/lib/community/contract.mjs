@@ -61,6 +61,15 @@ export const SHARED_SPACE = 'village'
 // groups get. Admin capability is a ROUTE, not an assumption about DMs.
 export const ADMIN_SPACE = 'admin'
 
+// The residents DM space (spec §2.2) — DORMANT unless the contract opts into
+// `dms: open`. A DM sender who is neither an admin nor (identifiably) a group
+// member is the LEAST verified audience the deployment serves, so they get a
+// space of their own: public knowledge, the fenced group toolset, no community
+// archive, no management skills. Under the default `dms: admins` this space is
+// not generated at all — the native intake gate drops those senders before any
+// model dispatch, so there is nothing to serve.
+export const RESIDENT_SPACE = 'residents'
+
 // Reserved group slugs:
 //   * 'default' — the profile that OWNS the WhatsApp connection (spec §2
 //     fact 5); routing a group onto it would collide with the default-profile
@@ -68,7 +77,19 @@ export const ADMIN_SPACE = 'admin'
 //   * 'village' (SHARED_SPACE) — names the shared context-space profile; an
 //     isolated group with this slug would collide with it, and a non-isolated
 //     one would shadow the space/group distinction.
-export const RESERVED_SLUGS = new Set(['default', SHARED_SPACE, ADMIN_SPACE])
+//   * 'admin' (ADMIN_SPACE) / 'residents' (RESIDENT_SPACE) — name the two DM
+//     space profiles. Reserved UNCONDITIONALLY, including under `dms: admins`
+//     where the residents space is not generated: a slug that becomes illegal
+//     the day the operator opens DMs is a trap, not a validation rule.
+export const RESERVED_SLUGS = new Set(['default', SHARED_SPACE, ADMIN_SPACE, RESIDENT_SPACE])
+
+// Why each reserved slug is refused, in the operator's terms.
+const RESERVED_SLUG_REASON = {
+  default: 'the default profile owns the WhatsApp connection (engine fact 5)',
+  [SHARED_SPACE]: 'it names the shared context-space profile (spec §2.1)',
+  [ADMIN_SPACE]: 'it names the management space profile (spec §6.1)',
+  [RESIDENT_SPACE]: 'it names the residents DM space profile (spec §2.2)'
+}
 
 export class ContractError extends Error {
   constructor(errors) {
@@ -140,13 +161,14 @@ export function validateContract(raw, { fileExists } = {}) {
   // dispatch). The contract only CHOOSES between two native postures:
   //   * 'admins' (DEFAULT, fail-safe): dm_policy=allowlist, admins only —
   //     an unknown sender is dropped at intake and never reaches the AI;
-  //   * 'open' (explicit operator opt-in): residents may DM and are routed
-  //     to the fenced shared community persona.
+  //   * 'open' (explicit operator opt-in): residents may DM and are routed to
+  //     the fenced RESIDENT_SPACE persona (§2.2) — public knowledge, no
+  //     archive, no management skills.
   const rawDms = community?.dms
   let dmMode = 'admins'
   if (rawDms !== undefined) {
     if (rawDms === 'open' || rawDms === 'admins') dmMode = rawDms
-    else errors.push('community.dms: must be "admins" (default — unknown DM senders are filtered at intake) or "open" (residents get the fenced community persona)')
+    else errors.push('community.dms: must be "admins" (default — unknown DM senders are filtered at intake) or "open" (residents get the fenced residents-space persona)')
   }
 
   // ── admins (MANDATORY ≥1 — engine fact 8: empty admins = open /sethome) ──
@@ -228,11 +250,7 @@ export function validateContract(raw, { fileExists } = {}) {
       if (!isNonEmptyString(slug) || !SLUG_RE.test(slug) || slug.length > SLUG_MAX) {
         errors.push(`${at('slug')}: must match ${SLUG_RE} and be ≤${SLUG_MAX} chars (it becomes profiles/<slug>/)`)
       } else if (RESERVED_SLUGS.has(slug)) {
-        errors.push(
-          slug === SHARED_SPACE
-            ? `${at('slug')}: "${slug}" is reserved — it names the shared context-space profile (spec §2.1)`
-            : `${at('slug')}: "${slug}" is reserved — the default profile owns the WhatsApp connection (engine fact 5)`
-        )
+        errors.push(`${at('slug')}: "${slug}" is reserved — ${RESERVED_SLUG_REASON[slug]}`)
       } else if (seenSlugs.has(slug)) {
         errors.push(`${at('slug')}: duplicate slug "${slug}"`)
       } else {
@@ -322,8 +340,10 @@ export function validateContract(raw, { fileExists } = {}) {
 /**
  * Derive the CONTEXT SPACES of a validated contract (spec §2.1): the shared
  * `village` space first (when at least one group is non-isolated), then one
- * space per isolated group, in contract order. Each space is
- * `{ slug, shared, groups, tone, knowledge }` where `knowledge` is the UNION
+ * space per isolated group in contract order, then the management space, and
+ * — only under `dms: open` (§2.2) — the residents DM space. Each space is
+ * `{ slug, shared, admin, resident, groups, tone, knowledge }` where
+ * `knowledge` is the UNION
  * of the member groups' packs (first-appearance order, deduplicated) and
  * `tone` is the space's uniform tone (validation refuses a mixed shared
  * space, so the first member's tone is authoritative there).
@@ -333,14 +353,16 @@ export function validateContract(raw, { fileExists } = {}) {
 export function contractSpaces(contract) {
   const spaces = []
   const shared = contract.groups.filter(g => g.isolated !== true)
+  const publicKnowledge = [...new Set(shared.flatMap(g => g.knowledge ?? []))]
   if (shared.length > 0) {
     spaces.push({
       slug: SHARED_SPACE,
       shared: true,
       admin: false,
+      resident: false,
       groups: shared,
       tone: shared[0].tone ?? 'default',
-      knowledge: [...new Set(shared.flatMap(g => g.knowledge ?? []))]
+      knowledge: publicKnowledge
     })
   }
   for (const g of contract.groups) {
@@ -349,6 +371,7 @@ export function contractSpaces(contract) {
         slug: g.slug,
         shared: false,
         admin: false,
+        resident: false,
         groups: [g],
         tone: g.tone ?? 'default',
         knowledge: [...new Set(g.knowledge ?? [])]
@@ -357,7 +380,24 @@ export function contractSpaces(contract) {
   }
   // The management space always exists: admins are mandatory, and their DMs
   // must never land in the owner's default profile.
-  spaces.push({ slug: ADMIN_SPACE, shared: false, admin: true, groups: [], tone: 'default', knowledge: [] })
+  spaces.push({ slug: ADMIN_SPACE, shared: false, admin: true, resident: false, groups: [], tone: 'default', knowledge: [] })
+  // The residents DM space exists ONLY under `dms: open` (spec §2.2): under
+  // the default 'admins' posture the engine's intake gate drops unknown DM
+  // senders, so a profile for them would be dead configuration. It owns no
+  // group — nothing routes to it by chat id, only the platform catch-all route
+  // does (generate.mjs buildRoutes) — and carries the PUBLIC knowledge union
+  // only: an isolated group's packs never travel into a private chat.
+  if (contract.dmMode === 'open') {
+    spaces.push({
+      slug: RESIDENT_SPACE,
+      shared: false,
+      admin: false,
+      resident: true,
+      groups: [],
+      tone: 'default',
+      knowledge: publicKnowledge
+    })
+  }
   return spaces
 }
 

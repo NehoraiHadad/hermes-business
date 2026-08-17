@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   ADMIN_SPACE,
   ContractError,
+  RESIDENT_SPACE,
   contractSpaces,
   defaultPackDescription,
   loadContract,
@@ -180,6 +181,19 @@ describe('validateContract — groups', () => {
     expectSingleError(raw2, /reserved.*context-space/)
   })
 
+  it(`reserves the "${RESIDENT_SPACE}" slug even under the default dms 'admins' (§2.2)`, () => {
+    // The residents profile is only GENERATED under dms: open, but the slug is
+    // refused always: a group name that becomes illegal the day the operator
+    // opens DMs would be a trap.
+    const raw = validRaw()
+    raw.groups[0].slug = RESIDENT_SPACE
+    expectSingleError(raw, /reserved.*residents DM space/)
+    const raw2 = validRaw()
+    raw2.community.dms = 'open'
+    raw2.groups[1].slug = RESIDENT_SPACE
+    expectSingleError(raw2, /reserved.*residents DM space/)
+  })
+
   it('fails on duplicate slugs and duplicate JIDs', () => {
     const raw = validRaw()
     raw.groups[1].slug = 'main'
@@ -292,6 +306,29 @@ describe('contractSpaces', () => {
     expect(spaces).toHaveLength(2)
     expect(spaces[0].slug).toBe(SHARED_SPACE)
     expect(spaces[1]).toMatchObject({ slug: ADMIN_SPACE, admin: true, groups: [] })
+  })
+
+  it("adds the residents DM space ONLY under dms 'open', with public knowledge only (§2.2)", () => {
+    const groups = [
+      { slug: 'a', tone: 'default', knowledge: ['general'] },
+      { slug: 'b', tone: 'strict', isolated: true, knowledge: ['secret'] }
+    ]
+    expect(contractSpaces({ groups }).map(s => s.slug)).toEqual([SHARED_SPACE, 'b', ADMIN_SPACE])
+    expect(contractSpaces({ groups, dmMode: 'admins' }).some(s => s.resident)).toBe(false)
+    const open = contractSpaces({ groups, dmMode: 'open' })
+    expect(open.map(s => s.slug)).toEqual([SHARED_SPACE, 'b', ADMIN_SPACE, RESIDENT_SPACE])
+    expect(open.at(-1)).toMatchObject({ resident: true, admin: false, shared: false, groups: [] })
+    // The isolated group's pack never travels into a private chat.
+    expect(open.at(-1).knowledge).toEqual(['general'])
+  })
+
+  it("still emits the residents space when every group is isolated (dms 'open' has no shared space to lean on)", () => {
+    const spaces = contractSpaces({
+      groups: [{ slug: 'a', tone: 'strict', isolated: true, knowledge: ['secret'] }],
+      dmMode: 'open'
+    })
+    expect(spaces.map(s => s.slug)).toEqual(['a', ADMIN_SPACE, RESIDENT_SPACE])
+    expect(spaces.at(-1).knowledge).toEqual([])
   })
 })
 

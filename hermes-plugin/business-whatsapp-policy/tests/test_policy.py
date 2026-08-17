@@ -174,6 +174,130 @@ class CommunitySources(TempHomeCase, unittest.TestCase):
         self.assertFalse(can_reply(fallback, "120363428948689789@g.us", platform="whatsapp"))
 
 
+class CommunityDmOpenGrant(TempHomeCase, unittest.TestCase):
+    """The `dms: open` grant (community.yaml -> generator -> policy file).
+
+    Unknown residents writing privately cannot be enumerated in a policy file,
+    so the generator opens a SHAPE on named platforms instead of a list of ids.
+    Everything about this class is about the shape holding: it must cover every
+    DM chat-id form the bridge presents, and it must never leak into groups,
+    broadcasts, channels, other platforms or the owner's surface."""
+
+    def _write(self, payload):
+        business = self.home / "business"
+        business.mkdir(exist_ok=True)
+        (business / "whatsapp-policy.json").write_text(
+            json.dumps(payload), encoding="utf-8"
+        )
+
+    def _open_policy(self, **overrides):
+        payload = {
+            "mode": "read_only",
+            "behavior": "monitor",
+            "reply_chats": [],
+            "reply_groups": [],
+            "sources": [],
+            "community_sources": [],
+            "community_dm_open_platforms": ["whatsapp"],
+        }
+        payload.update(overrides)
+        self._write(payload)
+        return load_policy(self.home)
+
+    def test_grants_every_dm_form_on_whatsapp(self):
+        policy = self._open_policy()
+        for identifier in (
+            "972501234567",
+            "972501234567@s.whatsapp.net",
+            "160868067200001@lid",
+            "972501234567@c.us",
+            "whatsapp:972501234567@s.whatsapp.net",
+            "+972501234567",
+        ):
+            with self.subTest(identifier=identifier):
+                self.assertTrue(can_process(policy, identifier, platform="whatsapp"))
+                self.assertTrue(can_reply(policy, identifier, platform="whatsapp"))
+
+    def test_never_grants_groups_broadcasts_or_channels(self):
+        policy = self._open_policy()
+        for identifier in (
+            "120363428948689789@g.us",
+            # A bare group id is 18 digits -- past the E.164 ceiling, so it
+            # cannot pass as a DM even with its suffix stripped.
+            "120363428948689789",
+            "status@broadcast",
+            "120363428948689789@broadcast",
+            "120363428948689789@newsletter",
+            "",
+            None,
+            "some name",
+        ):
+            with self.subTest(identifier=identifier):
+                self.assertFalse(can_process(policy, identifier, platform="whatsapp"))
+                self.assertFalse(can_reply(policy, identifier, platform="whatsapp"))
+
+    def test_grant_is_platform_scoped(self):
+        policy = self._open_policy()
+        self.assertFalse(can_reply(policy, "972501234567", platform="whatsapp_cloud"))
+        # A platform the generator never opens grants nothing, whatever shape
+        # the identifier has.
+        other = self._open_policy(community_dm_open_platforms=["whatsapp_cloud"])
+        self.assertEqual(other["community_dm_open_platforms"], [])
+        self.assertFalse(can_reply(other, "972501234567", platform="whatsapp"))
+
+    def test_dormant_when_the_key_is_absent(self):
+        self._write({
+            "mode": "read_only",
+            "reply_chats": [],
+            "reply_groups": [],
+            "sources": [],
+            "community_sources": [],
+        })
+        policy = load_policy(self.home)
+        self.assertEqual(policy["community_dm_open_platforms"], [])
+        self.assertFalse(can_process(policy, "972501234567", platform="whatsapp"))
+        self.assertFalse(can_reply(policy, "972501234567@s.whatsapp.net", platform="whatsapp"))
+        # The fail-closed defaults are dormant too.
+        self.assertFalse(can_reply(load_policy(self.home / "nowhere"), "972501234567", platform="whatsapp"))
+
+    def test_malformed_grant_fails_closed(self):
+        for raw in ("whatsapp", {"platform": "whatsapp"}, [None, 7, {}], [""], ["telegram"], []):
+            with self.subTest(raw=raw):
+                policy = self._open_policy(community_dm_open_platforms=raw)
+                self.assertEqual(policy["community_dm_open_platforms"], [])
+                self.assertFalse(can_reply(policy, "972501234567", platform="whatsapp"))
+        # A corrupt file grants nothing at all.
+        (self.home / "business" / "whatsapp-policy.json").write_text(
+            "{ not json", encoding="utf-8"
+        )
+        self.assertFalse(can_reply(load_policy(self.home), "972501234567", platform="whatsapp"))
+
+    def test_does_not_widen_the_owner_surface(self):
+        policy = self._open_policy(
+            mode="selected_chats",
+            behavior="monitor",
+            reply_chats=["15551234567"],
+            sources=[{"id": "15551234567", "type": "dm", "platform": "whatsapp"}],
+        )
+        # The owner's own monitored chat is a DM, but it is LISTED: the owner
+        # decided "process, do not reply" and opening community DMs must not
+        # silently overturn that.
+        self.assertTrue(can_process(policy, "15551234567", platform="whatsapp"))
+        self.assertFalse(can_reply(policy, "15551234567", platform="whatsapp"))
+        # An unknown sender -- the audience the grant exists for -- is served.
+        self.assertTrue(can_reply(policy, "972509999999", platform="whatsapp"))
+        self.assertFalse(can_reply(policy, "120363428948689789@g.us", platform="whatsapp"))
+        # Owner-surface keys survive the read verbatim.
+        self.assertEqual(policy["mode"], "selected_chats")
+        self.assertEqual(policy["behavior"], "monitor")
+        self.assertEqual(policy["reply_chats"], ["15551234567"])
+
+    def test_normalizes_and_dedupes_the_platform_list(self):
+        policy = self._open_policy(community_dm_open_platforms=[" WhatsApp ", "whatsapp", "telegram"])
+        self.assertEqual(policy["community_dm_open_platforms"], ["whatsapp"])
+        self.assertTrue(can_reply(policy, "972501234567", platform="whatsapp"))
+
+
 class PassiveIngest(TempHomeCase, unittest.TestCase):
     def test_preserves_alternation(self):
         store = Store()

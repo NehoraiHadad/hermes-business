@@ -8,7 +8,8 @@
 //     acceptance gates, admin DM allowlist, admin toolset, write approvals);
 //   * each profiles/<space>/config.yaml compares the PROFILE owned view for
 //     THAT space (§2.1: the shared `village` space's toolset includes
-//     community_archive, isolated spaces stay on the fenced set without it) —
+//     community_archive, isolated spaces and the `dms: open` residents space
+//     stay on the fenced set without it) —
 //     spec §6.1: an absent/drifted profile config silently reopens the FULL
 //     default whatsapp toolset for that space;
 //   * `.env` compares the owned KEYS only (the engine appends its own entries,
@@ -25,12 +26,13 @@
 
 import { createHash } from 'node:crypto'
 import yaml from 'js-yaml'
-import { ADMIN_SPACE, SHARED_SPACE } from './contract.mjs'
+import { ADMIN_SPACE, RESIDENT_SPACE, SHARED_SPACE } from './contract.mjs'
 import {
   ADMIN_TOOLSET,
   GROUP_TOOLSET,
   HISTORY_BACKFILL_LIMIT,
   OWNED_ENV,
+  RESIDENT_TOOLSET,
   SHARED_TOOLSET,
   buildGatewayConfig,
   buildProfileConfig,
@@ -125,12 +127,21 @@ export function effectiveProfileOwnedView(cfgData) {
 }
 
 /** The owned view a SPACE profile must carry: the shared space's fence
- * includes community_archive, every other (isolated) space keeps the plain
- * fenced set (§2.1), and every space mirrors `rootModel` — the ROOT config's
- * model block as it actually stands on disk. */
+ * includes community_archive, the residents DM space (§2.2) and every isolated
+ * space keep the plain fenced set WITHOUT it, and every space mirrors
+ * `rootModel` — the ROOT config's model block as it actually stands on disk.
+ * The residents case is spelled out rather than left to the fallthrough: a
+ * silently archive-enabled residents profile is exactly the drift this view
+ * exists to catch. */
 export function expectedProfileOwnedView(spaceSlug, rootModel) {
   const toolset =
-    spaceSlug === ADMIN_SPACE ? ADMIN_TOOLSET : spaceSlug === SHARED_SPACE ? SHARED_TOOLSET : GROUP_TOOLSET
+    spaceSlug === ADMIN_SPACE
+      ? ADMIN_TOOLSET
+      : spaceSlug === SHARED_SPACE
+        ? SHARED_TOOLSET
+        : spaceSlug === RESIDENT_SPACE
+          ? RESIDENT_TOOLSET
+          : GROUP_TOOLSET
   return effectiveProfileOwnedView(
     buildProfileConfig(undefined, toolset, rootModel, {
       archivePlugin: spaceSlug === SHARED_SPACE || spaceSlug === ADMIN_SPACE,
@@ -284,6 +295,8 @@ export {
   GROUP_TOOLSET,
   HISTORY_BACKFILL_LIMIT,
   OWNED_ENV,
+  RESIDENT_SPACE,
+  RESIDENT_TOOLSET,
   SHARED_SPACE,
   SHARED_TOOLSET,
   buildRoutes,
