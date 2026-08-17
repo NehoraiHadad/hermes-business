@@ -1,6 +1,7 @@
 import type { OnboardingData } from './onboarding-contract'
 import type { ProviderStatus } from './provider-readiness'
 
+export const WELCOME_COMMAND: string
 export const BOOTSTRAP_COMMAND: string
 
 export function buildBootstrapPrompt(input?: {

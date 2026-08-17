@@ -40,6 +40,7 @@ const { hermesHome } = require(rel('electron/paths.cjs'))
 
 const source = readFileSync(rel('hermes-plugin/business-shell/plugin.js'), 'utf8')
 const bootstrapSkill = readFileSync(rel('hermes-plugin/business-shell/skills/business-bootstrap/SKILL.md'), 'utf8')
+const welcomeSkill = readFileSync(rel('hermes-plugin/business-shell/skills/tachles-welcome/SKILL.md'), 'utf8')
 const snapshot = JSON.parse(readFileSync(rel('scripts/hermes-desktop-contract.json'), 'utf8'))
 const failures = []
 
@@ -48,7 +49,8 @@ if (!source.includes("from '@hermes/plugin-sdk'")) failures.push('missing offici
 if (!source.includes("id: 'business-shell'")) failures.push('plugin id is missing')
 if (!source.includes('ROUTES_AREA')) failures.push('route contribution is missing')
 if (!source.includes('SIDEBAR_NAV_AREA')) failures.push('sidebar contribution is missing')
-if (!source.includes('business-bootstrap')) failures.push('guided first-run Skill is not referenced')
+if (!source.includes('business-bootstrap')) failures.push('business onboarding Skill is not referenced')
+if (!source.includes('tachles-welcome')) failures.push('guided first-run Skill is not referenced')
 if (source.match(/from ['"](@\/|electron|fs|node:)/)) failures.push('plugin imports a forbidden module')
 if (/<[A-Z][A-Za-z]*[ >]/.test(source)) failures.push('disk plugin contains JSX, which Hermes does not compile')
 if (!bootstrapSkill.includes('name: business-bootstrap')) failures.push('business-bootstrap Skill metadata is missing')
@@ -62,6 +64,20 @@ if (!/draft/i.test(bootstrapSkill) || !/explicit confirmation/i.test(bootstrapSk
 if (!/stay unknown/i.test(bootstrapSkill)) failures.push('business-bootstrap must keep unconfirmed facts unknown instead of guessing')
 if (!/stated goal/i.test(bootstrapSkill)) failures.push('business-bootstrap connections must be intent-led (tied to a stated goal)')
 if (!/First value before optional setup/i.test(bootstrapSkill)) failures.push('business-bootstrap must deliver first value before optional setup')
+// The first conversation after an install: it senses business vs community from the
+// user's own words and hands off, so it must never degrade into a role picker.
+if (!welcomeSkill.includes('name: tachles-welcome')) failures.push('tachles-welcome Skill metadata is missing')
+const welcomeDescription = (welcomeSkill.match(/^description:\s*(.*)$/m)?.[1] || '').trim().replace(/^['"]|['"]$/g, '')
+if (!welcomeDescription) failures.push('tachles-welcome has no routing description')
+else if (welcomeDescription.length > 60) {
+  failures.push(`tachles-welcome description is ${welcomeDescription.length} chars; Hermes truncates the skill index at 60 and would never route to it`)
+}
+if (!welcomeSkill.includes('business-bootstrap')) failures.push('tachles-welcome does not hand business work to business-bootstrap')
+if (!welcomeSkill.includes('community-bootstrap')) failures.push('tachles-welcome does not hand community work to community-bootstrap')
+if (!welcomeSkill.includes('שאל שאלה קצרה אחת בכל פעם')) failures.push('tachles-welcome lacks the one-question-at-a-time rule')
+if (!welcomeSkill.includes('זו שיחה, לא אשף')) failures.push('tachles-welcome must state it is a conversation, not a wizard')
+if (!welcomeSkill.includes('אל תבקש מהמשתמש לבחור מצב')) failures.push('tachles-welcome must forbid a role picker')
+if (/^#+\s*(?:Phase|Step|שלב)\s*\d/im.test(welcomeSkill)) failures.push('tachles-welcome exposes numbered steps; the first run must read as one conversation')
 const partnerSkill = readFileSync(rel('hermes-plugin/business-partner/SKILL.md'), 'utf8')
 if (!partnerSkill.includes('name: business-partner')) failures.push('business-partner Skill metadata is missing')
 if (!/explicit owner approval/i.test(partnerSkill)) failures.push('business-partner lacks the explicit-approval boundary for send/spend/publish/delete')

@@ -2,13 +2,18 @@ import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 
-// Static contract for the conversation-first redesign of the two shipped
-// business Skills. These are the behavioral guarantees the UI relies on:
+// Static contract for the conversation-first redesign of the shipped Skills.
+// These are the behavioral guarantees the UI relies on: the first run senses
+// what the user wants tachles for instead of asking them to pick a role,
 // onboarding reads as one conversation (no wizard), knowledge is persisted
 // only after explicit confirmation, connections are intent-led, and the
 // partner keeps read/draft vs send/spend/delete boundaries explicit.
 
 const repoRoot = path.resolve(__dirname, '..', '..')
+const welcome = readFileSync(
+  path.join(repoRoot, 'hermes-plugin', 'business-shell', 'skills', 'tachles-welcome', 'SKILL.md'),
+  'utf8'
+)
 const bootstrap = readFileSync(
   path.join(repoRoot, 'hermes-plugin', 'business-shell', 'skills', 'business-bootstrap', 'SKILL.md'),
   'utf8'
@@ -17,6 +22,45 @@ const partner = readFileSync(
   path.join(repoRoot, 'hermes-plugin', 'business-partner', 'SKILL.md'),
   'utf8'
 )
+
+describe('tachles-welcome first-conversation contract', () => {
+  it('routes business work to business-bootstrap and community work to community-bootstrap', () => {
+    expect(welcome).toMatch(/`business-bootstrap`/)
+    expect(welcome).toMatch(/`community-bootstrap`/)
+    // community-bootstrap owns provisioning; the welcome must not do it itself.
+    expect(welcome).toMatch(/אל תקים קהילה בעצמך/)
+  })
+
+  it('opens by asking what the user wants, never by asking them to pick a role', () => {
+    expect(welcome).toMatch(/במה תרצה שאעזור\?/)
+    expect(welcome).toMatch(/אל תבקש מהמשתמש לבחור מצב/)
+    expect(welcome).toMatch(/אל תכריח הכרעה ואל תשאל "עסק או קהילה\?"/)
+    // No wizard framing: no menu/form, no numbered steps as headings.
+    expect(welcome).toMatch(/זו שיחה, לא אשף/)
+    expect(welcome).toMatch(/תפריט בחירה/)
+    expect(welcome).not.toMatch(/^#+\s*(?:Phase|Step|שלב)\s*\d/im)
+  })
+
+  it('keeps one question at a time, bounded inspection, and the hard safety gates', () => {
+    expect(welcome).toMatch(/שאל שאלה קצרה אחת בכל פעם/)
+    expect(welcome).toMatch(/שלוש בדיקות קריאה קצרות/)
+    expect(welcome).toMatch(/אל תריץ doctor/)
+    expect(welcome).toMatch(/אל תבקש סיסמאות, מפתחות API/)
+    expect(welcome).toMatch(/בלי אישור מפורש/)
+  })
+
+  it('persists nothing itself and never claims unverified success', () => {
+    expect(welcome).toMatch(/לא שומר ידע בעצמו/)
+    expect(welcome).toMatch(/מה שלא אושר נשאר לא ידוע/)
+    expect(welcome).toMatch(/לפני שבדיקה בטוחה עברה בפועל/)
+  })
+
+  it('fits Hermes\' 60-char routing budget', () => {
+    const description = welcome.match(/^description:\s*(.*)$/m)?.[1].trim().replace(/^['"]|['"]$/g, '')
+    expect(description).toBeTruthy()
+    expect(description!.length).toBeLessThanOrEqual(60)
+  })
+})
 
 describe('business-bootstrap conversation-first contract', () => {
   it('reads as one conversation: no numbered phases, steps, or checklist framing', () => {

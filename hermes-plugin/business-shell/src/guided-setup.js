@@ -1,12 +1,14 @@
 import { host } from '@hermes/plugin-sdk'
 import { flattenSkillNames } from './helpers.js'
-import { buildBootstrapPrompt, buildModelSnapshot } from '../../../shared/onboarding-bootstrap.js'
-import { submitBusinessBootstrap } from './bootstrap-session.js'
+import { WELCOME_COMMAND, buildBootstrapPrompt, buildModelSnapshot } from '../../../shared/onboarding-bootstrap.js'
+import { submitFirstRunSkill } from './bootstrap-session.js'
 
 // The guided first-run flow. Instead of a giant static prompt, the trusted wrapper
 // performs a bounded inspection through official host APIs, then opens one real
-// Hermes session pointed at the business-bootstrap Skill. The handoff payload comes
-// from the single canonical builder so it can never drift from the React wrapper.
+// Hermes session pointed at the tachles-welcome Skill, which senses whether the user
+// wants a business or a community assistant and continues into the matching
+// bootstrap. The handoff payload comes from the single canonical builder so it can
+// never drift from the React wrapper.
 
 export const GUIDED_SETUP_VERSION = 2
 
@@ -53,7 +55,7 @@ export async function startGuidedSetup(storage, { force = false } = {}) {
       title: "הקמת תכל'ס",
       source: 'desktop'
     })
-    await submitBusinessBootstrap(created.session_id, guidedSetupPrompt(snapshot))
+    await submitFirstRunSkill(created.session_id, guidedSetupPrompt(snapshot), WELCOME_COMMAND)
     const next = {
       version: GUIDED_SETUP_VERSION,
       status: 'active',

@@ -3,8 +3,8 @@ import { Button, host } from '@hermes/plugin-sdk'
 import { h } from '../dom.js'
 import { Card, Field } from '../ui.js'
 import { EMPTY_ONBOARDING, ONBOARDING_STEPS, STORAGE_KEYS, normalizeOnboarding } from '../../../../shared/onboarding-contract.js'
-import { buildBootstrapPrompt } from '../../../../shared/onboarding-bootstrap.js'
-import { submitBusinessBootstrap } from '../bootstrap-session.js'
+import { BOOTSTRAP_COMMAND, buildBootstrapPrompt } from '../../../../shared/onboarding-bootstrap.js'
+import { submitFirstRunSkill } from '../bootstrap-session.js'
 
 // A quick fallback questionnaire used only when the guided setup session cannot
 // start. Field keys and defaults come from the shared canonical contract, so any
@@ -28,7 +28,9 @@ export function Onboarding({ storage, onDone, onCancel }) {
         title: `היכרות עם ${form.businessName || 'העסק'}`,
         source: 'desktop'
       })
-      await submitBusinessBootstrap(created.session_id, prompt)
+      // The form has already established this is business work, so it goes straight
+      // to business-bootstrap rather than through the role-sensing welcome.
+      await submitFirstRunSkill(created.session_id, prompt, BOOTSTRAP_COMMAND)
       storage.set(STORAGE_KEYS.pluginComplete, true)
       host.notify({
         kind: 'success',

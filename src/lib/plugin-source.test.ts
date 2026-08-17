@@ -15,13 +15,13 @@ describe('shipped Hermes Desktop Plugin', () => {
 
   it('creates one real guided session and resumes it idempotently', async () => {
     const request = vi.fn(async (method: string, _params?: Record<string, unknown>) => {
-      if (method === 'skills.manage') return { skills: [{ name: 'business-bootstrap' }] }
+      if (method === 'skills.manage') return { skills: [{ name: 'tachles-welcome' }] }
       if (method === 'cron.manage') return { jobs: [] }
       if (method === 'session.create') {
         return { session_id: 'runtime-1', stored_session_id: 'stored-1' }
       }
       if (method === 'command.dispatch') {
-        return { type: 'skill', name: 'business-bootstrap', message: 'expanded-bootstrap-message' }
+        return { type: 'skill', name: 'tachles-welcome', message: 'expanded-bootstrap-message' }
       }
       return { status: 'streaming' }
     })
@@ -48,9 +48,11 @@ describe('shipped Hermes Desktop Plugin', () => {
       'command.dispatch',
       'prompt.submit'
     ])
+    // The guided first run opens the role-sensing welcome, not the business
+    // onboarding: at this point nothing is known about what the user wants.
     expect(request.mock.calls[3][1]).toMatchObject({
       session_id: 'runtime-1',
-      name: 'business-bootstrap'
+      name: 'tachles-welcome'
     })
     expect(request.mock.calls[4][1]).toEqual({
       session_id: 'runtime-1',
@@ -58,6 +60,7 @@ describe('shipped Hermes Desktop Plugin', () => {
     })
     expect(navigate).toHaveBeenLastCalledWith('/stored-1')
     const prompt = runtime.__helpers.guidedSetupPrompt()
+    expect(prompt).not.toContain('/tachles-welcome')
     expect(prompt).not.toContain('/business-bootstrap')
     expect(prompt).toContain('WRAPPER_VERIFIED_SNAPSHOT')
     expect(prompt).toContain('Never run hermes doctor')
@@ -65,7 +68,7 @@ describe('shipped Hermes Desktop Plugin', () => {
 
   it('does not submit when Hermes does not resolve the bootstrap Skill', async () => {
     const request = vi.fn(async (method: string, _params?: Record<string, unknown>) => {
-      if (method === 'skills.manage') return { skills: [{ name: 'business-bootstrap' }] }
+      if (method === 'skills.manage') return { skills: [{ name: 'tachles-welcome' }] }
       if (method === 'cron.manage') return { jobs: [] }
       if (method === 'session.create') return { session_id: 'runtime-1', stored_session_id: 'stored-1' }
       if (method === 'command.dispatch') return { type: 'send', message: 'wrong route' }

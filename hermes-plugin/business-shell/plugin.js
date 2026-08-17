@@ -782,12 +782,19 @@ function resolveModelReadiness(model) {
 }
 
 // The ONE canonical agent-handoff payload. Both the React/Electron wrapper and the
-// Hermes Desktop plugin build the argument dispatched to the business-bootstrap Skill
-// from here, so the product intent (one concise question at a time, connect official
+// Hermes Desktop plugin build the argument dispatched to the first-run Skill from
+// here, so the product intent (one concise question at a time, connect official
 // integrations, confirm before sensitive actions, no false completion, persist into
 // Profile/Memory/Skills — never a giant system prompt) lives in a single place.
 
 
+// The first conversation after an install, before anything is known about what the
+// user wants tachles for. It senses business vs community from the answer and then
+// continues into the matching bootstrap Skill.
+const WELCOME_COMMAND = 'tachles-welcome';
+
+// The business onboarding conversation. Still dispatched directly whenever the
+// business role is already established (e.g. the plugin's fallback questionnaire).
 const BOOTSTRAP_COMMAND = 'business-bootstrap';
 
 const LINES = [
@@ -795,7 +802,9 @@ const LINES = [
   'המעטפת ביצעה בדיקה תחומה דרך ה־APIs הרשמיים של Hermes. Use this verified snapshot and do not repeat its checks before asking the first missing question.',
   'Never run hermes doctor, broad scans, connectivity suites, update checks, or CLI --help discovery during onboarding.',
   'שאל שאלה אחת קצרה בכל פעם (לכל היותר שתי שאלות קרובות), ורק אם היא נחוצה כדי לקדם את הבקשה — אין שאלון התקנה.',
-  'אל תבקש שוב מידע שכבר נמסר. שמור עובדות יציבות דרך Hermes Memory/Profile ותחזק Skill בשם business-context; אל תיצור System Prompt גדול.',
+  // Role-neutral: the same payload now also opens a community-only first run, so the
+  // business-context Skill is named as a conditional, not as an unconditional step.
+  'אל תבקש שוב מידע שכבר נמסר. שמור עובדות יציבות דרך Hermes Memory/Profile; אם מדובר בעבודה עסקית — תחזק גם Skill בשם business-context. אל תיצור System Prompt גדול.',
   'הצע אינטגרציה או חיבור רשמי אחד רק כאשר הבקשה הנוכחית זקוקה לו; הסבר את הערך ואשר עם המשתמש לפני פעולה רגישה.',
   'אין לבצע פעולה חיצונית ואין לבקש secret בצ׳אט.',
   'אל תסמן סיום אם אין ספק/מודל זמין או שחיבור שהוצהר לא עבר בדיקת קריאה בטוחה; אפשר להשהות ולחזור להשלים.',
@@ -859,25 +868,32 @@ function buildModelSnapshot(input = {}) {
 
 // Resolve the installed Skill through Hermes before submitting the expanded
 // model-facing message. A literal slash prompt bypasses this official path.
-async function submitBusinessBootstrap(sessionId, arg) {
+//
+// The Skill name is an explicit argument because the two plugin entry points open
+// different conversations: the guided first run does not know yet whether the user
+// wants tachles for a business or for a community (tachles-welcome), while the
+// fallback questionnaire has already collected business answers (business-bootstrap).
+async function submitFirstRunSkill(sessionId, arg, name) {
   const dispatch = await host.request('command.dispatch', {
     session_id: sessionId,
-    name: BOOTSTRAP_COMMAND,
+    name,
     arg
   });
-  if (dispatch?.type !== 'skill' || dispatch?.name !== BOOTSTRAP_COMMAND) {
-    throw new Error(`Hermes did not resolve /${BOOTSTRAP_COMMAND} as the requested Skill.`)
+  if (dispatch?.type !== 'skill' || dispatch?.name !== name) {
+    throw new Error(`Hermes did not resolve /${name} as the requested Skill.`)
   }
   if (typeof dispatch.message !== 'string' || !dispatch.message.trim()) {
-    throw new Error(`Hermes resolved /${BOOTSTRAP_COMMAND}, but returned no Skill message.`)
+    throw new Error(`Hermes resolved /${name}, but returned no Skill message.`)
   }
   await host.request('prompt.submit', { session_id: sessionId, text: dispatch.message });
 }
 
 // The guided first-run flow. Instead of a giant static prompt, the trusted wrapper
 // performs a bounded inspection through official host APIs, then opens one real
-// Hermes session pointed at the business-bootstrap Skill. The handoff payload comes
-// from the single canonical builder so it can never drift from the React wrapper.
+// Hermes session pointed at the tachles-welcome Skill, which senses whether the user
+// wants a business or a community assistant and continues into the matching
+// bootstrap. The handoff payload comes from the single canonical builder so it can
+// never drift from the React wrapper.
 
 const GUIDED_SETUP_VERSION = 2;
 
@@ -924,7 +940,7 @@ async function startGuidedSetup(storage, { force = false } = {}) {
       title: "הקמת תכל'ס",
       source: 'desktop'
     });
-    await submitBusinessBootstrap(created.session_id, guidedSetupPrompt(snapshot));
+    await submitFirstRunSkill(created.session_id, guidedSetupPrompt(snapshot), WELCOME_COMMAND);
     const next = {
       version: GUIDED_SETUP_VERSION,
       status: 'active',
@@ -1206,7 +1222,9 @@ function Onboarding({ storage, onDone, onCancel }) {
         title: `היכרות עם ${form.businessName || 'העסק'}`,
         source: 'desktop'
       });
-      await submitBusinessBootstrap(created.session_id, prompt);
+      // The form has already established this is business work, so it goes straight
+      // to business-bootstrap rather than through the role-sensing welcome.
+      await submitFirstRunSkill(created.session_id, prompt, BOOTSTRAP_COMMAND);
       storage.set(STORAGE_KEYS.pluginComplete, true);
       host.notify({
         kind: 'success',

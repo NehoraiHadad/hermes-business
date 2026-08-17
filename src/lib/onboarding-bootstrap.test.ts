@@ -1,11 +1,27 @@
 import { describe, expect, it } from 'vitest'
-import { buildBootstrapPrompt, buildModelSnapshot } from '../../shared/onboarding-bootstrap.js'
+import {
+  BOOTSTRAP_COMMAND,
+  WELCOME_COMMAND,
+  buildBootstrapPrompt,
+  buildModelSnapshot
+} from '../../shared/onboarding-bootstrap.js'
 import { EMPTY_ONBOARDING } from '../../shared/onboarding-contract.js'
 
 describe('canonical bootstrap payload', () => {
+  it('names both first-run Skills: the role-sensing welcome and the business onboarding', () => {
+    expect(WELCOME_COMMAND).toBe('tachles-welcome')
+    expect(BOOTSTRAP_COMMAND).toBe('business-bootstrap')
+  })
+
+  it('stays role-neutral: business-context is conditional, not an unconditional step', () => {
+    const prompt = buildBootstrapPrompt({})
+    expect(prompt).toContain('אם מדובר בעבודה עסקית — תחזק גם Skill בשם business-context')
+  })
+
   it('is one dispatch argument shared by React and plugin: snapshot and guardrails', () => {
     const snapshot = { provider_ready: false, provider_state: 'runtime_only' }
     const prompt = buildBootstrapPrompt({ snapshot })
+    expect(prompt).not.toContain('/tachles-welcome')
     expect(prompt).not.toContain('/business-bootstrap')
     expect(prompt).toContain('WRAPPER_VERIFIED_SNAPSHOT=' + JSON.stringify(snapshot))
     // Product intent enforced in the single source of truth:

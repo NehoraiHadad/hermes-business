@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { hermesClient } from '../lib/hermes-client'
 import { buildOnboardingPrompt } from '../lib/onboarding-prompt'
-import { BOOTSTRAP_COMMAND } from '../../shared/onboarding-bootstrap.js'
+import { WELCOME_COMMAND } from '../../shared/onboarding-bootstrap.js'
 import { buildBusinessContext, persistBusinessContext, providerReadyForCompletion } from '../lib/business-context'
 import { buildVerifiedSnapshot } from '../lib/onboarding-snapshot'
 import type { ProviderStatus } from '../lib/provider-readiness'
@@ -57,7 +57,7 @@ export function OnboardingSurface({
     try {
       await beginConversation({
         userMessage: 'פתחתי את תכל׳ס. עזור לי להתחיל במה שאני צריך עכשיו, בלי שאלון התקנה.',
-        skillName: BOOTSTRAP_COMMAND,
+        skillName: WELCOME_COMMAND,
         instruction: buildOnboardingPrompt(data, snapshot)
       })
     } catch {

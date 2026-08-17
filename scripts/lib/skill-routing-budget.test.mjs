@@ -48,6 +48,7 @@ describe('shipped skill descriptions fit Hermes\' 60-char routing budget', () =>
     const names = skillFiles.map(file => path.relative(repoRoot, file))
     expect(names.some(name => name.includes('business-partner'))).toBe(true)
     expect(names.some(name => name.includes('business-bootstrap'))).toBe(true)
+    expect(names.some(name => name.includes('tachles-welcome'))).toBe(true)
   })
 
   it.each([['SKILL_DESCRIPTION_ROUTING_MAX mirrors the installed agent limit', SKILL_DESCRIPTION_ROUTING_MAX, 60]])(
