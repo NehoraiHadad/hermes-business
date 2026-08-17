@@ -49,9 +49,20 @@ export function parseProcTable(text) {
   return { byPid, parentByPid }
 }
 
+function creationMs(rec) {
+  if (!rec || !rec.creation) return null
+  const t = Date.parse(rec.creation)
+  return Number.isFinite(t) ? t : null
+}
+
 /** Walk a { pid -> parentPid } map to every transitive descendant of `rootPid`
- *  (inclusive). Pure; cycle-safe. */
-export function descendantsFromMap(rootPid, parentByPid) {
+ *  (inclusive). Pure; cycle-safe. When `byPid` identity records are supplied,
+ *  a PPID edge is followed only if the child's CreationDate is not earlier than
+ *  its claimed parent's — a real child can never predate its parent, so an edge
+ *  that violates this is a recycled PID: an unrelated pre-existing process
+ *  (e.g. a boot-time system process whose true parent died) whose PPID now
+ *  collides with one of ours, and it must never join the owned tree. */
+export function descendantsFromMap(rootPid, parentByPid, byPid = null) {
   const childrenOf = new Map()
   for (const [pid, ppid] of Object.entries(parentByPid)) {
     const p = Number(ppid)
@@ -61,11 +72,16 @@ export function descendantsFromMap(rootPid, parentByPid) {
   const seen = new Set([Number(rootPid)])
   const stack = [Number(rootPid)]
   while (stack.length) {
-    for (const child of childrenOf.get(stack.pop()) || []) {
-      if (!seen.has(child)) {
-        seen.add(child)
-        stack.push(child)
+    const parent = stack.pop()
+    for (const child of childrenOf.get(parent) || []) {
+      if (seen.has(child)) continue
+      if (byPid) {
+        const parentCreated = creationMs(byPid.get(parent))
+        const childCreated = creationMs(byPid.get(child))
+        if (parentCreated === null || childCreated === null || childCreated < parentCreated) continue
       }
+      seen.add(child)
+      stack.push(child)
     }
   }
   return [...seen]
@@ -116,7 +132,7 @@ export function snapshotOwnedProcs(rootPid) {
   if (!cur.ok) return { ok: false, records: [], error: cur.error }
   const parentByPid = {}
   for (const rec of cur.byPid.values()) parentByPid[rec.pid] = rec.ppid
-  const pids = descendantsFromMap(rootPid, parentByPid)
+  const pids = descendantsFromMap(rootPid, parentByPid, cur.byPid)
   return { ok: true, records: pids.map(p => cur.byPid.get(p)).filter(Boolean) }
 }
 
@@ -149,7 +165,7 @@ export function snapshotOwnedByCmdline(marker) {
   for (const rec of cur.byPid.values()) parentByPid[rec.pid] = rec.ppid
   const pids = new Set()
   for (const root of pidsMatchingCmdline(marker, cur.byPid, { excludePid: process.pid })) {
-    for (const pid of descendantsFromMap(root, parentByPid)) {
+    for (const pid of descendantsFromMap(root, parentByPid, cur.byPid)) {
       if (pid !== process.pid) pids.add(pid)
     }
   }

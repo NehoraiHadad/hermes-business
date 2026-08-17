@@ -49,6 +49,29 @@ describe('real-loader-procs pure PID-tree logic', () => {
     expect(descendantsFromMap(1, { 2: 1, 1: 2 }).sort((a, b) => a - b)).toEqual([1, 2])
     expect(descendantsFromMap(42, { 7: 8 })).toEqual([42])
   })
+
+  it('with identities, refuses a PPID edge whose child predates the parent (recycled PID)', () => {
+    // Live incident 2026-08-17: an owned process received the recycled PID of a
+    // long-dead boot process, so csrss/winlogon (created at boot, PPID now
+    // colliding with ours) joined the owned tree and their children with them.
+    const id = (pid, creation) => [pid, { pid, creation, exe: 'x' }]
+    const byPid = new Map([
+      id(100, '2026-08-17T16:20:00.000+03:00'), // our root, created today
+      id(200, '2026-08-17T16:20:01.000+03:00'), // real child — after parent
+      id(888, '2026-08-16T20:17:38.000+03:00'), // "child" created YESTERDAY — recycled PPID
+      id(1436, '2026-08-16T20:17:46.000+03:00') // its descendant must not join either
+    ])
+    const parents = { 200: 100, 888: 100, 1436: 888 }
+    expect(descendantsFromMap(100, parents, byPid).sort((a, b) => a - b)).toEqual([100, 200])
+    // equal creation timestamps stay owned (same-millisecond spawn)
+    const tie = new Map([id(1, '2026-08-17T10:00:00.000+03:00'), id(2, '2026-08-17T10:00:00.000+03:00')])
+    expect(descendantsFromMap(1, { 2: 1 }, tie).sort((a, b) => a - b)).toEqual([1, 2])
+    // unparseable/missing identity on either side: the edge is refused, never adopted
+    const bad = new Map([id(1, 'not-a-date'), id(2, '2026-08-17T10:00:00.000+03:00')])
+    expect(descendantsFromMap(1, { 2: 1, 3: 2 }, bad)).toEqual([1])
+    // without identities the walk is unchanged (pure PPID descent)
+    expect(descendantsFromMap(100, parents).sort((a, b) => a - b)).toEqual([100, 200, 888, 1436])
+  })
 })
 
 describe('real-loader-procs identity + kill partitioning (PID-reuse safety)', () => {
