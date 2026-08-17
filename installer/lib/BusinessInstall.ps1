@@ -61,7 +61,19 @@ function Install-BusinessPayload {
     if (-not (Test-Path -LiteralPath $template -PathType Leaf)) {
       throw "The community Skill template is missing: $template. No changes were made."
     }
-    $rendered = Get-Content -Raw -LiteralPath $template
+    # Read + write with the explicit UTF-8 helpers, never a bare Get-Content:
+    # under Windows PowerShell 5.1 the default ANSI decode mojibake'd the
+    # Hebrew templates AND pushed the routing description past the 60-char
+    # budget, so the installed skill never routed.
+    #
+    # The render mirrors scripts/lib/community/generate.mjs renderAdminSkill
+    # byte-for-byte for the same home (LF-normalize, substitute the full
+    # DEPLOY_PATH_KEYS set, refuse leftovers, guarantee one trailing newline)
+    # and targets the generator's canonical `skills\<name>\SKILL.md` at the
+    # HOME root. The generator OWNS that path once a community contract is
+    # applied; byte-parity means the first apply reports the file unchanged
+    # instead of rewriting it or flagging drift.
+    $rendered = (Read-Utf8File -Path $template).Replace("`r`n", "`n")
     $rendered = $rendered.Replace('{{HOME_DIR}}', $HermesHome)
     $rendered = $rendered.Replace('{{CONTRACT_PATH}}', $communityContract)
     $rendered = $rendered.Replace('{{INSTALL_ROOT}}', $communityEngineDir)
@@ -70,11 +82,14 @@ function Install-BusinessPayload {
     if ($rendered -match '\{\{[A-Z_]+\}\}') {
       throw "The rendered $skillName Skill still contains an unresolved placeholder. No changes were made."
     }
+    if (-not $rendered.EndsWith("`n")) {
+      $rendered += "`n"
+    }
     $renderedSource = Join-Path $PayloadRoot ".$skillName.rendered.SKILL.md"
-    [IO.File]::WriteAllText($renderedSource, $rendered, (New-Object Text.UTF8Encoding($false)))
+    Write-Utf8File -Path $renderedSource -Content $rendered
     $files += @{
       Source = $renderedSource
-      Target = (Join-Path $HermesHome "skills\community\$skillName\SKILL.md")
+      Target = (Join-Path $HermesHome "skills\$skillName\SKILL.md")
     }
   }
 
@@ -167,6 +182,26 @@ function Install-BusinessPayload {
         Remove-Item -LiteralPath $obsoletePath -Force
       }
     }
+  }
+
+  # Earlier installers rendered the community skills to skills\community\<name>\
+  # while the generator wrote the canonical skills\<name>\ — leaving a home with
+  # TWO copies under one skill name. Prune only the exact legacy files after the
+  # replacement payload committed successfully, then drop their now-empty
+  # directories (never a directory that still holds anything else).
+  foreach ($legacySkill in @('community-bootstrap', 'community-admin')) {
+    $legacyPath = Join-Path $HermesHome "skills\community\$legacySkill\SKILL.md"
+    if (Test-Path -LiteralPath $legacyPath -PathType Leaf) {
+      Remove-Item -LiteralPath $legacyPath -Force
+    }
+    $legacyDir = Split-Path -Parent $legacyPath
+    if ((Test-Path -LiteralPath $legacyDir -PathType Container) -and -not (Get-ChildItem -LiteralPath $legacyDir -Force)) {
+      Remove-Item -LiteralPath $legacyDir -Force
+    }
+  }
+  $legacyCommunityDir = Join-Path $HermesHome 'skills\community'
+  if ((Test-Path -LiteralPath $legacyCommunityDir -PathType Container) -and -not (Get-ChildItem -LiteralPath $legacyCommunityDir -Force)) {
+    Remove-Item -LiteralPath $legacyCommunityDir -Force
   }
 }
 

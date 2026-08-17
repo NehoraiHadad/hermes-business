@@ -131,7 +131,9 @@ function Assert-BackendHealthy {
       throw "Companion backend health check failed: missing installed file $name."
     }
   }
-  $manifest = Get-Content -Raw -LiteralPath (Join-Path $targetDir 'manifest.json') | ConvertFrom-Json
+  # Explicit UTF-8 (Read-Utf8File): the manifest may carry non-ASCII strings and
+  # must parse identically under Windows PowerShell 5.1 (ANSI default) and 7.
+  $manifest = Read-Utf8File -Path (Join-Path $targetDir 'manifest.json') | ConvertFrom-Json
   if ([string]::IsNullOrWhiteSpace([string]$manifest.api)) {
     throw 'Companion backend health check failed: manifest.json does not declare an api entrypoint.'
   }

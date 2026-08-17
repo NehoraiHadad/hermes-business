@@ -38,7 +38,11 @@ function Read-CompanionRelease {
 
   $localManifest = Join-Path $PayloadRoot 'companion-release.json'
   if (Test-Path -LiteralPath $localManifest -PathType Leaf) {
-    return Get-Content -Raw -LiteralPath $localManifest | ConvertFrom-Json
+    # Explicit UTF-8, framework-direct: release names/notes may carry non-ASCII
+    # and must parse identically under Windows PowerShell 5.1 (ANSI default)
+    # and PowerShell 7. Inline (not FileOps' Read-Utf8File) because
+    # bootstrap-companion.ps1 loads this module WITHOUT FileOps.ps1.
+    return [System.IO.File]::ReadAllText([System.IO.Path]::GetFullPath($localManifest), (New-Object System.Text.UTF8Encoding($false))) | ConvertFrom-Json
   }
   return $null
 }

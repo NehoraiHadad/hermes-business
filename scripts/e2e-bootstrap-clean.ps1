@@ -17,6 +17,15 @@ Copy-Item -LiteralPath (Join-Path $root 'hermes-plugin\business-shell\plugin.js'
   -Destination (Join-Path $payloadRoot 'plugin.js')
 Copy-Item -LiteralPath (Join-Path $root 'hermes-plugin\business-shell\skills\business-bootstrap\SKILL.md') `
   -Destination (Join-Path $payloadRoot 'business-bootstrap.SKILL.md')
+# Install-BusinessPayload REQUIRES these two skills alongside business-bootstrap
+# (see installer/lib/BusinessInstall.ps1) — every real install door (NSIS,
+# Electron) stages them too. Omitting them here previously made the clean
+# install hard-throw "Cannot hash a file that does not exist" the moment
+# BusinessInstall.ps1 ran against this staged payload.
+Copy-Item -LiteralPath (Join-Path $root 'hermes-plugin\business-shell\skills\tachles-welcome\SKILL.md') `
+  -Destination (Join-Path $payloadRoot 'tachles-welcome.SKILL.md')
+Copy-Item -LiteralPath (Join-Path $root 'hermes-plugin\business-partner\SKILL.md') `
+  -Destination (Join-Path $payloadRoot 'business-partner.SKILL.md')
 Copy-Item -LiteralPath (Join-Path $root 'installer\bootstrap-companion.ps1') `
   -Destination (Join-Path $payloadRoot 'bootstrap-companion.ps1')
 
@@ -63,14 +72,16 @@ try {
   $hermesExe = Join-Path $hermesHome 'hermes-agent\venv\Scripts\hermes.exe'
   $plugin = Join-Path $hermesHome 'desktop-plugins\business-shell\plugin.js'
   $skill = Join-Path $hermesHome 'skills\productivity\business-bootstrap\SKILL.md'
+  $welcomeSkill = Join-Path $hermesHome 'skills\productivity\tachles-welcome\SKILL.md'
+  $partnerSkill = Join-Path $hermesHome 'skills\business\business-partner\SKILL.md'
   $receipt = Join-Path $hermesHome 'desktop-plugins\business-shell\install-receipt.json'
   $policyDir = Join-Path $hermesHome 'plugins\business-whatsapp-policy'
   $policyInit = Join-Path $policyDir '__init__.py'
   $backendApi = Join-Path $hermesHome 'plugins\business-shell\dashboard\plugin_api.py'
   $backendManifest = Join-Path $hermesHome 'plugins\business-shell\dashboard\manifest.json'
-  # The plugin, skill, policy AND companion backend now install as one
+  # The plugin, skills, policy AND companion backend now install as one
   # transactional unit with a single completion receipt at the plugin directory.
-  foreach ($required in @($hermesExe, $plugin, $skill, $receipt, $policyInit, $backendApi, $backendManifest)) {
+  foreach ($required in @($hermesExe, $plugin, $skill, $welcomeSkill, $partnerSkill, $receipt, $policyInit, $backendApi, $backendManifest)) {
     if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
       throw "Clean bootstrap did not create required file: $required"
     }
@@ -87,13 +98,28 @@ try {
     throw "Clean bootstrap did not register the WhatsApp reply-policy plugin.`n$enabledPlugins"
   }
   $versionOutput = (& $hermesExe --version 2>&1 | Out-String).Trim()
-  if ($versionOutput -notmatch '0\.19\.\d+') {
-    throw "Clean bootstrap installed an untested Hermes version: $versionOutput"
+  # Derive the supported range from the canonical manifest (hermes-compat.json)
+  # instead of a hard-coded minor version, so this E2E can never drift from the
+  # single source of truth every other layer (electron/hermes-compat.cjs,
+  # src/lib/hermes/compat.ts, scripts/plugin-sdk-contract.mjs, installer/bootstrap.ps1)
+  # is asserted against by src/lib/hermes-compat-policy.test.ts.
+  $compat = Get-Content -Raw -LiteralPath (Join-Path $root 'hermes-compat.json') | ConvertFrom-Json
+  $minHermesVersion = [version]$compat.minVersion
+  $maxHermesVersionExclusive = [version]$compat.maxVersionExclusive
+  $versionMatch = [regex]::Match($versionOutput, '\d+\.\d+\.\d+')
+  if (-not $versionMatch.Success) {
+    throw "Clean bootstrap produced an unparseable Hermes version: $versionOutput"
+  }
+  $installedVersion = [version]$versionMatch.Value
+  if ($installedVersion -lt $minHermesVersion -or $installedVersion -ge $maxHermesVersionExclusive) {
+    throw "Clean bootstrap installed a Hermes version outside the supported range [$minHermesVersion, $maxHermesVersionExclusive): $versionOutput"
   }
   $installReceipt = Get-Content -Raw -LiteralPath $receipt | ConvertFrom-Json
   if (
     $installReceipt.pluginSha256 -ne (Get-FileHash -Algorithm SHA256 -LiteralPath $plugin).Hash -or
-    $installReceipt.bootstrapSkillSha256 -ne (Get-FileHash -Algorithm SHA256 -LiteralPath $skill).Hash
+    $installReceipt.bootstrapSkillSha256 -ne (Get-FileHash -Algorithm SHA256 -LiteralPath $skill).Hash -or
+    $installReceipt.welcomeSkillSha256 -ne (Get-FileHash -Algorithm SHA256 -LiteralPath $welcomeSkill).Hash -or
+    $installReceipt.businessPartnerSkillSha256 -ne (Get-FileHash -Algorithm SHA256 -LiteralPath $partnerSkill).Hash
   ) {
     throw 'Clean bootstrap receipt hashes do not match the installed payload.'
   }
@@ -104,6 +130,8 @@ try {
     version = $versionOutput
     plugin = $true
     bootstrapSkill = $true
+    welcomeSkill = $true
+    businessPartnerSkill = $true
     receiptVerified = $true
     cleaned = $false
   }

@@ -22,7 +22,9 @@ function Assert-PluginSdkContract {
   if (-not (Test-Path -LiteralPath $sdkPath -PathType Leaf)) {
     throw "Hermes Desktop Plugin SDK source was not found at $sdkPath."
   }
-  $sdk = Get-Content -Raw -LiteralPath $sdkPath
+  # Explicit UTF-8 (Read-Utf8File): the SDK source is UTF-8 without BOM; a bare
+  # Get-Content under Windows PowerShell 5.1 would decode it as ANSI.
+  $sdk = Read-Utf8File -Path $sdkPath
   $requiredSymbols = @(
     'Badge', 'Button', 'Input', 'Loader', 'PALETTE_AREA', 'ROUTES_AREA',
     'SIDEBAR_NAV_AREA', 'StatusDot', 'Textarea', 'evaluateRuntimeReadiness',
@@ -142,7 +144,10 @@ function Invoke-PayloadTransaction {
       preservesExistingHermesState = $true
     }
     $rollbackPath = Join-Path (Get-ReceiptDirectory -HermesHome $HermesHome) "$Label-rollback.json"
-    $rollbackReceipt | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $rollbackPath -Encoding UTF8
+    # Write-Utf8File: BOM-free UTF-8 under every host (PS 5.1's Set-Content
+    # -Encoding UTF8 prepends a BOM; PS 7's does not) so receipts are
+    # byte-stable regardless of which PowerShell ran the bootstrap.
+    Write-Utf8File -Path $rollbackPath -Content (($rollbackReceipt | ConvertTo-Json -Depth 5) + "`r`n")
     Write-Step "Rollback complete. Receipt: $rollbackPath"
     Remove-Item -LiteralPath $txnRoot -Recurse -Force -ErrorAction SilentlyContinue
     throw "The '$Label' payload could not be installed and was rolled back. Your previous install is intact. Cause: $($_.Exception.Message)"
@@ -168,7 +173,8 @@ function Invoke-PayloadTransaction {
     foreach ($key in $ReceiptExtra.Keys) { $receipt[$key] = $ReceiptExtra[$key] }
   }
   New-Item -ItemType Directory -Force -Path (Split-Path -Parent $ReceiptTarget) | Out-Null
-  $receipt | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $ReceiptTarget -Encoding UTF8
+  # Write-Utf8File: BOM-free UTF-8 under every host (see the rollback receipt).
+  Write-Utf8File -Path $ReceiptTarget -Content (($receipt | ConvertTo-Json -Depth 5) + "`r`n")
   Remove-Item -LiteralPath $txnRoot -Recurse -Force -ErrorAction SilentlyContinue
   Write-Step "The '$Label' payload was installed. Receipt: $ReceiptTarget"
   return $ReceiptTarget

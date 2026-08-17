@@ -13,7 +13,7 @@ $root = [System.IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))
 $lib = Join-Path $root 'installer\lib'
 
 # --- Load modules under test. ------------------------------------------------
-foreach ($module in @('Logging.ps1', 'Hashing.ps1', 'HttpRetry.ps1', 'HttpDownload.ps1', 'FileOps.ps1', 'ZipPolicy.ps1', 'SafeZip.ps1', 'HermesEnv.ps1', 'Release.ps1', 'Payload.ps1', 'BackendEnable.ps1')) {
+foreach ($module in @('Logging.ps1', 'Hashing.ps1', 'HttpRetry.ps1', 'HttpDownload.ps1', 'FileOps.ps1', 'ZipPolicy.ps1', 'SafeZip.ps1', 'HermesEnv.ps1', 'Release.ps1', 'Payload.ps1', 'BackendEnable.ps1', 'BusinessInstall.ps1')) {
   . (Join-Path $lib $module)
 }
 # The companion installer resolves headers from $BootstrapVersion when dot-sourced.
@@ -70,7 +70,8 @@ foreach ($suite in @(
     'http-integrity.tests.ps1', 'payload-transaction.tests.ps1', 'version-gate.tests.ps1',
     'companion-contract.tests.ps1', 'safezip-entrypoint.tests.ps1',
     'companion-install.tests.ps1', 'release-acquisition.tests.ps1',
-    'release-packaging.tests.ps1', 'backend-enable.tests.ps1', 'backend-bundling.tests.ps1')) {
+    'release-packaging.tests.ps1', 'backend-enable.tests.ps1', 'backend-bundling.tests.ps1',
+    'business-install.tests.ps1')) {
   . (Join-Path $PSScriptRoot "lib\tests\$suite")
 }
 
@@ -93,7 +94,7 @@ $parseTargets = @(
   'scripts\lib\tests\safezip-entrypoint.tests.ps1',
   'scripts\lib\tests\companion-install.tests.ps1', 'scripts\lib\tests\release-acquisition.tests.ps1',
   'scripts\lib\tests\release-packaging.tests.ps1', 'scripts\lib\tests\backend-enable.tests.ps1',
-  'scripts\lib\tests\backend-bundling.tests.ps1',
+  'scripts\lib\tests\backend-bundling.tests.ps1', 'scripts\lib\tests\business-install.tests.ps1',
   'scripts\e2e-companion-nsis-contract.ps1', 'scripts\lib\fixture-companion-installer.ps1',
   'scripts\test-bootstrap-lib.ps1'
 )
@@ -121,6 +122,7 @@ try {
   Invoke-ReleasePackagingTests -Root $root
   Invoke-BackendEnableTests -WorkRoot $workRoot
   Invoke-BackendBundlingTests -Root $root
+  Invoke-BusinessInstallTests -Root $root -WorkRoot $workRoot
 }
 finally {
   if (Test-Path -LiteralPath $workRoot) {
