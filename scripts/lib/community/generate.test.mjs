@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import yaml from 'js-yaml'
 import {
   ADMIN_SKILLS,
-  ADMIN_TOOLSET,
+  ADMIN_NATIVE_TOOLSET,
   DM_OPEN_PLATFORMS,
   RESIDENT_TOOLSET,
   COMMUNITY_ARCHIVE_PLUGIN,
@@ -226,8 +226,8 @@ describe('gateway config generation', () => {
 
   it('leaves the ROOT toolset to the owner entirely and keeps session_search at root', () => {
     const c = cfg()
-    // Every WhatsApp audience is routed to a space profile; ADMIN_TOOLSET
-    // lives in profiles/admin, so the root toolset is not even seeded.
+    // Every WhatsApp audience is routed to a space profile; the admin space
+    // pins no toolset of its own, so the root toolset is not even seeded.
     expect(c.platform_toolsets?.whatsapp).toBeUndefined()
     expect(c.memory.write_approval).toBe(true)
     expect(c.skills.write_approval).toBe(true)
@@ -249,11 +249,30 @@ describe('gateway config generation', () => {
     expect(c.skills.write_approval).toBe(false)
   })
 
-  it('the ADMIN toolset can run the CLIs (terminal+file) but never code_execution/delegation', () => {
-    expect(ADMIN_TOOLSET).toContain('terminal')
-    expect(ADMIN_TOOLSET).toContain('file')
-    expect(ADMIN_TOOLSET).not.toContain('code_execution')
-    expect(ADMIN_TOOLSET).not.toContain('delegation')
+  it('the ADMIN space pins NO toolset — full native Hermes for the operator (2026-08-17)', () => {
+    // Simplification lives in the persona and admin skills, never in the
+    // toolset: narrowing bought nothing (terminal+file already grant full
+    // home access) and cost memory/cron/delegation/code. Null = engine's
+    // full whatsapp default via the absent-pin fallback.
+    expect(ADMIN_NATIVE_TOOLSET).toBeNull()
+    const admin = buildProfileConfig(
+      yaml.dump({ platform_toolsets: { whatsapp: ['terminal', 'file'] } }),
+      ADMIN_NATIVE_TOOLSET,
+      undefined,
+      { archivePlugin: true, disableSessionSearch: false }
+    )
+    // A stale pin from an earlier deploy is evicted, not preserved.
+    expect(admin.platform_toolsets).toBeUndefined()
+  })
+
+  it('a stale admin pin on ANOTHER platform survives the whatsapp-pin eviction', () => {
+    const admin = buildProfileConfig(
+      yaml.dump({ platform_toolsets: { whatsapp: ['terminal'], telegram: ['web'] } }),
+      ADMIN_NATIVE_TOOLSET,
+      undefined,
+      { archivePlugin: true, disableSessionSearch: false }
+    )
+    expect(admin.platform_toolsets).toEqual({ telegram: ['web'] })
   })
 
   it('preserves the model block and other non-owned keys from an existing config', () => {
@@ -583,7 +602,8 @@ describe('per-space artifacts (§2.1)', () => {
   it('never gives a GROUP the clarify tool (a blocking prompt hangs a public group), but keeps it for admin DMs', () => {
     expect(GROUP_TOOLSET).not.toContain('clarify')
     expect(SHARED_TOOLSET).not.toContain('clarify')
-    expect(ADMIN_TOOLSET).toContain('clarify')
+    // Admin DMs keep clarify via the native default toolset (no pin at all).
+    expect(ADMIN_NATIVE_TOOLSET).toBeNull()
   })
 
   it('the group persona asks for clarification in plain text instead of opening a poll', () => {

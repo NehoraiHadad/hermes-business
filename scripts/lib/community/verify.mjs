@@ -28,7 +28,7 @@ import { createHash } from 'node:crypto'
 import yaml from 'js-yaml'
 import { ADMIN_SPACE, RESIDENT_SPACE, SHARED_SPACE } from './contract.mjs'
 import {
-  ADMIN_TOOLSET,
+  ADMIN_NATIVE_TOOLSET,
   GROUP_TOOLSET,
   HISTORY_BACKFILL_LIMIT,
   OWNED_ENV,
@@ -136,7 +136,7 @@ export function effectiveProfileOwnedView(cfgData) {
 export function expectedProfileOwnedView(spaceSlug, rootModel) {
   const toolset =
     spaceSlug === ADMIN_SPACE
-      ? ADMIN_TOOLSET
+      ? ADMIN_NATIVE_TOOLSET
       : spaceSlug === SHARED_SPACE
         ? SHARED_TOOLSET
         : spaceSlug === RESIDENT_SPACE
@@ -291,7 +291,7 @@ export function verifyArtifacts(contract, artifacts, { readFile, adminLids = {} 
 // Re-exported so CLI/test callers can assert the exact contract constants
 // without importing the generator internals separately.
 export {
-  ADMIN_TOOLSET,
+  ADMIN_NATIVE_TOOLSET,
   GROUP_TOOLSET,
   HISTORY_BACKFILL_LIMIT,
   OWNED_ENV,

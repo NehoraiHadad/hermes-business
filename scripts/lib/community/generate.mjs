@@ -51,11 +51,11 @@
 //     profile config falls back to the platform DEFAULT toolset — the full
 //     hermes-whatsapp core set incl. terminal/write_file/execute_code
 //     (tools_config.py:2279-2286, toolsets.py:531-533) — NOT to the root
-//     config. So every SPACE profile gets its own config.yaml pinning its
-//     fence (SHARED_TOOLSET for the shared space, GROUP_TOOLSET for isolated
-//     ones), and the ROOT config (default profile = the admin-DM channel)
-//     gets the ADMIN_TOOLSET with terminal+file so the agent can run the
-//     community CLIs.
+//     config. So every RESIDENT-FACING space profile gets its own config.yaml
+//     pinning its fence (SHARED_TOOLSET for the shared space, GROUP_TOOLSET
+//     for isolated ones); the ADMIN space deliberately pins nothing and rides
+//     that same native-default fallback — full Hermes for the operator
+//     (ADMIN_NATIVE_TOOLSET).
 //   * memory/skills write approvals stay ON so resident chatter can never
 //     silently become bot "knowledge" (spec §5.1).
 //   * the shipped admin skills (assets/community-skills/) are installed into
@@ -92,8 +92,9 @@ import { ADMIN_SPACE, RESIDENT_SPACE, SHARED_SPACE, SKILL_DESCRIPTION_ROUTING_MA
 // that wait. A public community group is exactly the wrong place for a
 // blocking interactive prompt — one unanswered question takes the bot down
 // for every resident — so the persona asks for clarification in plain text
-// instead (persona.mjs). The admin DM keeps the tool (ADMIN_TOOLSET): it is a
-// 1:1 channel with the operator, where blocking is the intended behaviour.
+// instead (persona.mjs). The admin DM keeps the tool (it runs the engine's
+// full native default toolset — see spaceToolset): it is a 1:1 channel with
+// the operator, where blocking is the intended behaviour.
 export const GROUP_TOOLSET = Object.freeze(['web', 'skills', 'vision'])
 // The shared public space gets the Tachles read-only archive facade. Unlike
 // Hermes' raw session_search, this tool cannot choose a profile/database and
@@ -108,20 +109,17 @@ export const SHARED_TOOLSET = Object.freeze([...GROUP_TOOLSET, COMMUNITY_ARCHIVE
 // open that door. Same fence as an isolated group, for the same fail-closed
 // reason. Named separately so the intent survives any future divergence.
 export const RESIDENT_TOOLSET = GROUP_TOOLSET
-// Management toolset for the DEFAULT profile (admin DMs + host chat): terminal
-// + file are required to run the community CLIs; still no code_execution or
-// delegation. All names are engine "configurable keys" valid for whatsapp
-// (tools_config.py:96-124; only discord toolsets are platform-restricted,
-// tools_config.py:216-228).
-export const ADMIN_TOOLSET = Object.freeze([
-  'terminal',
-  'file',
-  'skills',
-  'web',
-  'clarify',
-  'todo',
-  COMMUNITY_ARCHIVE_TOOL
-])
+// The ADMIN space pins NO toolset (user decision 2026-08-17: the admin
+// channel simplifies Hermes for a non-technical operator — it never narrows
+// it). With `platform_toolsets.whatsapp` absent the engine falls back to its
+// own full native whatsapp default (_HERMES_CORE_TOOLS, toolsets.py:531-533 —
+// memory, cronjob, delegation, code execution, browser, …), and plugin
+// toolsets such as community_archive are default-on (tools_config.py:2453).
+// Narrowing the admin bought nothing anyway: terminal+file already grant full
+// home access, so the old explicit list was capability loss, not a boundary.
+// The simplification lives in the persona and the admin skills, never in the
+// toolset. Sentinel consumed by buildProfileConfig/spaceToolset.
+export const ADMIN_NATIVE_TOOLSET = null
 export const HISTORY_BACKFILL_LIMIT = 50
 export const COMMUNITY_ARCHIVE_PLUGIN = 'community-archive'
 export const COMMUNITY_ARCHIVE_PLUGIN_FILES = Object.freeze([
@@ -315,8 +313,8 @@ export function buildGatewayConfig(contract, existingConfigText, adminLids = {})
   // The ROOT toolset is NOT touched at all: every WhatsApp audience is routed
   // to a space profile (groups → spaces, admin DMs → admin space, any other
   // DM → shared space), so the default profile serves only the owner's own
-  // surfaces and its toolset is the owner's business. ADMIN_TOOLSET lives in
-  // the admin space profile (buildProfileConfig), never at root.
+  // surfaces and its toolset is the owner's business. The admin space profile
+  // pins no toolset either (buildProfileConfig with ADMIN_NATIVE_TOOLSET).
   const memory = asMapping(clone(cfg.memory))
   if (memory.write_approval === undefined) memory.write_approval = true
   cfg.memory = memory
@@ -452,8 +450,16 @@ export function buildProfileConfig(
   else delete cfg.model
 
   const toolsets = asMapping(clone(cfg.platform_toolsets))
-  toolsets.whatsapp = [...toolset]
-  cfg.platform_toolsets = toolsets
+  if (toolset === null) {
+    // The admin space: no pin — the engine's full native default governs.
+    // Deleting (not skipping) evicts a stale pin left by an earlier deploy.
+    delete toolsets.whatsapp
+    if (Object.keys(toolsets).length > 0) cfg.platform_toolsets = toolsets
+    else delete cfg.platform_toolsets
+  } else {
+    toolsets.whatsapp = [...toolset]
+    cfg.platform_toolsets = toolsets
+  }
 
   const memory = asMapping(clone(cfg.memory))
   memory.write_approval = true
@@ -512,11 +518,14 @@ export function buildProfileConfig(
   return cfg
 }
 
-/** The toolset fence a space profile pins (§2.1, §2.2). Every space pins one:
- * an absent profile config would silently fall back to the engine's FULL
- * default whatsapp toolset. */
+/** The toolset fence a space profile pins (§2.1, §2.2). Resident-facing
+ * spaces pin one (an absent pin silently falls back to the engine's FULL
+ * default whatsapp toolset — exactly what the fence exists to prevent for
+ * strangers); the ADMIN space returns null ON PURPOSE to get that native
+ * fallback: full Hermes for the operator, simplification via persona/skills
+ * only. */
 export function spaceToolset(space) {
-  if (space.admin) return ADMIN_TOOLSET
+  if (space.admin) return ADMIN_NATIVE_TOOLSET
   if (space.shared) return SHARED_TOOLSET
   if (space.resident) return RESIDENT_TOOLSET
   return GROUP_TOOLSET
