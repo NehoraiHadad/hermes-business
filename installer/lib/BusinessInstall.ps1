@@ -16,6 +16,10 @@ function Install-BusinessPayload {
 
   $pluginSource = Join-Path $PayloadRoot 'plugin.js'
   $skillSource = Join-Path $PayloadRoot 'business-bootstrap.SKILL.md'
+  # The first conversation after an install. It senses whether the user wants tachles
+  # for a business or for a community and continues into the matching bootstrap, so
+  # it must be installed alongside business-bootstrap, not instead of it.
+  $welcomeSkillSource = Join-Path $PayloadRoot 'tachles-welcome.SKILL.md'
   # The business-partner Skill ships in BOTH the packaged companion and this thin
   # bootstrap, installed to the canonical skills/<category>/<name>/SKILL.md path so
   # it is discoverable by Hermes (GET /api/skills) even without the companion.
@@ -24,6 +28,7 @@ function Install-BusinessPayload {
   $files = @(
     @{ Source = $pluginSource;        Target = (Join-Path $pluginDirectory 'plugin.js') },
     @{ Source = $skillSource;         Target = (Join-Path $HermesHome 'skills\productivity\business-bootstrap\SKILL.md') },
+    @{ Source = $welcomeSkillSource;  Target = (Join-Path $HermesHome 'skills\productivity\tachles-welcome\SKILL.md') },
     @{ Source = $partnerSkillSource;  Target = (Join-Path $HermesHome 'skills\business\business-partner\SKILL.md') }
   )
 
@@ -130,6 +135,7 @@ function Install-BusinessPayload {
   $receiptExtra = [ordered]@{
     pluginSha256              = (Get-Sha256Hash -Path $pluginSource)
     bootstrapSkillSha256      = (Get-Sha256Hash -Path $skillSource)
+    welcomeSkillSha256        = (Get-Sha256Hash -Path $welcomeSkillSource)
     businessPartnerSkillSha256 = (Get-Sha256Hash -Path $partnerSkillSource)
     whatsAppPolicyIncluded    = $policyPresent
     whatsAppPolicyEnabled     = $policyPresent

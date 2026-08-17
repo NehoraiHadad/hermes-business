@@ -33,6 +33,7 @@ describe('stageBusinessBootstrap', () => {
       'bootstrap-companion.ps1',
       'plugin.js',
       'business-bootstrap.SKILL.md',
+      'tachles-welcome.SKILL.md',
       'business-partner.SKILL.md'
     ]) write(payload, name)
     for (const name of ['Logging.ps1', 'BusinessInstall.ps1', 'enable_plugin.py']) {
@@ -49,6 +50,7 @@ describe('stageBusinessBootstrap', () => {
       'bootstrap-companion.ps1',
       'plugin.js',
       'business-bootstrap.SKILL.md',
+      'tachles-welcome.SKILL.md',
       'business-partner.SKILL.md',
       path.join('lib', 'Logging.ps1'),
       path.join('lib', 'BusinessInstall.ps1'),
@@ -63,5 +65,33 @@ describe('stageBusinessBootstrap', () => {
     for (const name of COMMUNITY_REQUIRED_FILES) {
       expect(fs.existsSync(path.join(staged, 'community', name)), name).toBe(true)
     }
+  })
+})
+
+describe('the tachles-welcome first-run Skill ships through every install door', () => {
+  const repoRoot = path.resolve(__dirname, '..')
+
+  it('exists in the source tree the doors point at', () => {
+    expect(
+      fs.existsSync(
+        path.join(repoRoot, 'hermes-plugin', 'business-shell', 'skills', 'tachles-welcome', 'SKILL.md')
+      )
+    ).toBe(true)
+  })
+
+  it('is packaged as an extraResource and installed by the thin bootstrap', () => {
+    const pkg = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'))
+    const resources: Array<{ from: string; to: string }> = pkg.build.extraResources
+    const entry = resources.find(item => item.to === 'business-bootstrap/tachles-welcome.SKILL.md')
+    expect(entry?.from).toBe('hermes-plugin/business-shell/skills/tachles-welcome/SKILL.md')
+
+    const nsi = fs.readFileSync(path.join(repoRoot, 'installer', 'business-bootstrap.nsi'), 'utf8')
+    expect(nsi).toContain('tachles-welcome.SKILL.md')
+
+    const install = fs.readFileSync(path.join(repoRoot, 'installer', 'lib', 'BusinessInstall.ps1'), 'utf8')
+    expect(install).toContain('tachles-welcome.SKILL.md')
+    expect(install).toContain('skills\\productivity\\tachles-welcome\\SKILL.md')
+    // It is installed ALONGSIDE business-bootstrap, which the welcome hands off to.
+    expect(install).toContain('skills\\productivity\\business-bootstrap\\SKILL.md')
   })
 })

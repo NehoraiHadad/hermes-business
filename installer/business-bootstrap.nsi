@@ -34,6 +34,7 @@ Section "Install"
   File /oname=companion-release.json "companion-release.json"
   File /oname=plugin.js "..\hermes-plugin\business-shell\plugin.js"
   File /oname=business-bootstrap.SKILL.md "..\hermes-plugin\business-shell\skills\business-bootstrap\SKILL.md"
+  File /oname=tachles-welcome.SKILL.md "..\hermes-plugin\business-shell\skills\tachles-welcome\SKILL.md"
   File /oname=business-partner.SKILL.md "..\hermes-plugin\business-partner\SKILL.md"
 
   ; Shared PowerShell library — bootstrap.ps1 and bootstrap-companion.ps1 dot-source

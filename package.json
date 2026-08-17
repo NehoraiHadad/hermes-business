@@ -153,6 +153,10 @@
         "to": "business-bootstrap/business-bootstrap.SKILL.md"
       },
       {
+        "from": "hermes-plugin/business-shell/skills/tachles-welcome/SKILL.md",
+        "to": "business-bootstrap/tachles-welcome.SKILL.md"
+      },
+      {
         "from": "hermes-plugin/business-partner/SKILL.md",
         "to": "business-bootstrap/business-partner.SKILL.md"
       },

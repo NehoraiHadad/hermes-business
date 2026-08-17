@@ -32,6 +32,7 @@ function stageBusinessBootstrap(options = {}) {
         companionModule: path.join(sourceRoot, 'bootstrap-companion.ps1'),
         plugin: path.join(sourceRoot, 'plugin.js'),
         skill: path.join(sourceRoot, 'business-bootstrap.SKILL.md'),
+        welcomeSkill: path.join(sourceRoot, 'tachles-welcome.SKILL.md'),
         partnerSkill: path.join(sourceRoot, 'business-partner.SKILL.md')
       }
     : {
@@ -39,6 +40,7 @@ function stageBusinessBootstrap(options = {}) {
         companionModule: companionBootstrapSource(),
         plugin: path.join(sourceRoot, 'hermes-plugin', 'business-shell', 'plugin.js'),
         skill: path.join(sourceRoot, 'hermes-plugin', 'business-shell', 'skills', 'business-bootstrap', 'SKILL.md'),
+        welcomeSkill: path.join(sourceRoot, 'hermes-plugin', 'business-shell', 'skills', 'tachles-welcome', 'SKILL.md'),
         partnerSkill: path.join(sourceRoot, 'hermes-plugin', 'business-partner', 'SKILL.md')
       }
   for (const [name, source] of Object.entries(sources)) {
@@ -49,6 +51,7 @@ function stageBusinessBootstrap(options = {}) {
   fs.copyFileSync(sources.companionModule, path.join(stagingRoot, 'bootstrap-companion.ps1'))
   fs.copyFileSync(sources.plugin, path.join(stagingRoot, 'plugin.js'))
   fs.copyFileSync(sources.skill, path.join(stagingRoot, 'business-bootstrap.SKILL.md'))
+  fs.copyFileSync(sources.welcomeSkill, path.join(stagingRoot, 'tachles-welcome.SKILL.md'))
   fs.copyFileSync(sources.partnerSkill, path.join(stagingRoot, 'business-partner.SKILL.md'))
   stageBootstrapLibrary(sourceRoot, stagingRoot, isPackaged)
   stageWhatsappPolicyPayload(sourceRoot, stagingRoot, isPackaged)
