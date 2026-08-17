@@ -4,6 +4,7 @@ import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { COMMUNITY_REQUIRED_FILES, stageBusinessBootstrap } from './plugin-install.cjs'
 import { DESKTOP_BACKEND_FILES, WHATSAPP_POLICY_PLUGIN_FILES } from './paths.cjs'
+import { writePackagedBootstrapPayload } from './business-bootstrap.fixtures'
 
 const roots: string[] = []
 
@@ -17,31 +18,11 @@ function tempRoot() {
   return root
 }
 
-function write(root: string, relative: string) {
-  const target = path.join(root, relative)
-  fs.mkdirSync(path.dirname(target), { recursive: true })
-  fs.writeFileSync(target, relative)
-}
-
 describe('stageBusinessBootstrap', () => {
   it('copies the complete packaged payload into the bootstrap working directory', () => {
     const resourcesPath = tempRoot()
     const tempPath = tempRoot()
-    const payload = path.join(resourcesPath, 'business-bootstrap')
-    for (const name of [
-      'bootstrap.ps1',
-      'bootstrap-companion.ps1',
-      'plugin.js',
-      'business-bootstrap.SKILL.md',
-      'tachles-welcome.SKILL.md',
-      'business-partner.SKILL.md'
-    ]) write(payload, name)
-    for (const name of ['Logging.ps1', 'BusinessInstall.ps1', 'enable_plugin.py']) {
-      write(payload, path.join('lib', name))
-    }
-    for (const name of DESKTOP_BACKEND_FILES) write(payload, path.join('dashboard', name))
-    for (const name of WHATSAPP_POLICY_PLUGIN_FILES) write(payload, path.join('whatsapp-policy', name))
-    for (const name of COMMUNITY_REQUIRED_FILES) write(payload, path.join('community', name))
+    writePackagedBootstrapPayload(resourcesPath)
 
     const staged = stageBusinessBootstrap({ isPackaged: true, resourcesPath, tempPath })
 

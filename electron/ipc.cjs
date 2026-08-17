@@ -1,6 +1,4 @@
 const { app, ipcMain, dialog, shell } = require('electron')
-const fs = require('node:fs')
-const path = require('node:path')
 const {
   refreshRuntimeInstalled,
   startHermes,
@@ -16,10 +14,8 @@ const {
   getGoogleStatus,
   ensureGatewayBackground
 } = require('./google-setup.cjs')
-const { installDesktopPlugin, stageBusinessBootstrap } = require('./plugin-install.cjs')
-const { installWhatsappPolicyPlugin } = require('./whatsapp-plugin-install.cjs')
+const { performInstall } = require('./business-install.cjs')
 const { findHermes, hermesHome } = require('./paths.cjs')
-const { runCaptured } = require('./process-util.cjs')
 const {
   getMainWindow,
   currentWindowState,
@@ -52,36 +48,6 @@ const {
 // idiom applyOfficialHermesUpdate uses in hermes-update.cjs; the flag is
 // module-level so it survives any re-registration of the channels.
 const runInstallExclusively = createSerialGuard('התקנת Hermes כבר מתבצעת')
-
-async function performInstall() {
-  if (findHermes()) {
-    installDesktopPlugin()
-    installWhatsappPolicyPlugin()
-    await ensureGatewayBackground()
-    return { ok: true, installed: true }
-  }
-  const stagingRoot = stageBusinessBootstrap()
-  try {
-    await runCaptured(
-      'powershell.exe',
-      [
-        '-NoProfile',
-        '-ExecutionPolicy', 'Bypass',
-        '-File', path.join(stagingRoot, 'bootstrap.ps1'),
-        '-PayloadRoot', stagingRoot,
-        '-BootstrapVersion', app.getVersion(),
-        '-HermesHome', hermesHome(),
-        '-SkipCompanionInstall',
-        '-NoLaunch'
-      ],
-      45 * 60_000
-    )
-  } finally {
-    fs.rmSync(stagingRoot, { recursive: true, force: true })
-  }
-  const installed = Boolean(findHermes())
-  return { ok: installed, installed, code: installed ? 0 : 1 }
-}
 
 // Single place that maps every renderer IPC channel to a module function. Keeps
 // the wiring auditable and the feature modules free of Electron IPC concerns.
@@ -147,7 +113,9 @@ function registerIpc() {
   ipcMain.handle('hermes:open-full', async (_event, surface) => {
     return openFullSurface(surface, { command: findHermes(), home: hermesHome(), shell })
   })
-  ipcMain.handle('hermes:install', () => runInstallExclusively(performInstall))
+  ipcMain.handle('hermes:install', () =>
+    runInstallExclusively(() => performInstall({ bootstrapVersion: app.getVersion() }))
+  )
   // תכל'ס (companion) self-update CHECK ONLY (docs/specs/versioning.md §6.4): the
   // renderer's `force` is the sole input, normalized here to a strict boolean
   // (no other renderer-controlled input reaches the request). checkCompanionUpdate

@@ -201,7 +201,7 @@ electron/companion-update.test.ts
   - Timeout: `AbortSignal.timeout(10_000)`.
   - `current = app.getVersion()` (אותו מקור כמו `runtime.cjs:59`).
   - כל חריגה ⇒ `{ status: 'unknown', message: 'לא ניתן לבדוק עדכונים כרגע' }` — אין זריקה אל ה־renderer ממסלול הבדיקה הפסיבית; הבדיקה היזומה מחזירה את אותו אובייקט (לא reject) כדי שה־UI יציג "לא ידוע" ולא toast שגיאה גנרי.
-- Serial guard: `createSerialGuard('בדיקת עדכון כבר מתבצעת')` מ־`ipc-guards.cjs` — אותו idiom של `hermes:install` (`ipc.cjs:52`).
+- Serial guard: `createSerialGuard('בדיקת עדכון כבר מתבצעת')` מ־`ipc-guards.cjs` — אותו idiom של `hermes:install` (`ipc.cjs:50`).
 - Cache בזיכרון: `{ verdict, checkedAt }`; קריאה ללא `force` בתוך 6 שעות מחזירה cache. Throttle פסיבי עמיד: `companion-update-state.json` תחת `app.getPath('userData')`, כתיבה אטומית עם `atomic-write.cjs` הקיים.
 
 ### 6.2 מבנה ה־verdict (החוזה מול ה־renderer)
