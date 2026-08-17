@@ -1,6 +1,6 @@
 {
   "name": "hermes-business",
-  "version": "0.4.0-alpha.5",
+  "version": "0.4.0-alpha.6",
   "private": true,
   "description": "A friendly always-available business assistant powered by Hermes Agent",
   "author": {
@@ -195,27 +195,44 @@
       {
         "from": "scripts/lib/community",
         "to": "business-bootstrap/community/scripts/lib/community",
-        "filter": ["*.mjs", "!*.test.mjs"]
+        "filter": [
+          "*.mjs",
+          "!*.test.mjs"
+        ]
       },
       {
         "from": "assets/community-skills",
         "to": "business-bootstrap/community/assets/community-skills",
-        "filter": ["**/SKILL.md"]
+        "filter": [
+          "**/SKILL.md"
+        ]
       },
       {
         "from": "hermes-plugin/community-archive",
         "to": "business-bootstrap/community/hermes-plugin/community-archive",
-        "filter": ["*.py", "plugin.yaml"]
+        "filter": [
+          "*.py",
+          "plugin.yaml"
+        ]
       },
       {
         "from": "node_modules/js-yaml",
         "to": "business-bootstrap/community/node_modules/js-yaml",
-        "filter": ["index.js", "package.json", "lib/**/*", "dist/**/*"]
+        "filter": [
+          "index.js",
+          "package.json",
+          "lib/**/*",
+          "dist/**/*"
+        ]
       },
       {
         "from": "node_modules/argparse",
         "to": "business-bootstrap/community/node_modules/argparse",
-        "filter": ["argparse.js", "package.json", "lib/**/*"]
+        "filter": [
+          "argparse.js",
+          "package.json",
+          "lib/**/*"
+        ]
       }
     ],
     "directories": {

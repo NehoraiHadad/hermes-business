@@ -24,7 +24,7 @@
 ו־`profile_routes` המקוריים מפרידים בין מרחבי הקבוצות, והכלי הסקופי
 `community_archive` קורא מאותו `state.db`. ה־WhatsApp observer שעדיין ממתין
 למיזוג upstream (‏PR ‏#85490) מוחל כ־overlay זמני: ‏checkout של SHA מאומת
-(‏`community-engine-v0.3.0`) בתוך אותו checkout רשמי (התקנה editable —
+(‏`community-engine-v0.3.1`) בתוך אותו checkout רשמי (התקנה editable —
 נכנס לתוקף ללא התקנה מחדש), וה־updater מסרב לעדכן install נעוץ. לאחר
 המיזוג ה־overlay נמחק ו־`git checkout main` מחזיר למהדורה הרשמית.
 

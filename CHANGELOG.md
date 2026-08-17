@@ -10,6 +10,42 @@
 
 ---
 
+## [0.4.0-alpha.6] - 2026-08-17
+
+### מה חדש (למשתמש)
+
+- **שיחת פתיחה שמבינה אתכם.** בהפעלה הראשונה העוזר פותח בשיחה קצרה כדי להבין
+  מה הייעוד — ניהול עסק, ליווי קהילה או שילוב — ומכוון את ההקמה בהתאם. שאלה
+  אחת בכל פעם, בלי טפסים.
+- **יכולת הקהילה מגיעה מוכנה בהתקנה.** מי שצריך ניהול קהילת וואטסאפ מקבל את
+  כל הכלים כבר מההתקנה הרגילה — אותה הורדה אחת לכולם, והעוזר פותח את מה
+  שצריך לפי הצורך.
+- **התקנה אמינה יותר.** מסלול ההתקנה אוחד כך שכל דרכי ההתקנה עוברות את אותה
+  בדיקת שלמות מלאה.
+- **חיבור וואטסאפ עמיד יותר לתקלות רשת.** עדכון מנוע: החיבור ממשיך לעבוד גם
+  כשגורם חיצוני (כמו תקלה אצל ספק שירות) אינו זמין זמנית.
+
+### Technical
+
+- **Role-aware first conversation (74762a0, 8d23da5):** new routable
+  `tachles-welcome` skill (role sensing: business / community / both) dispatched
+  by onboarding instead of `business-bootstrap` directly; shipped through all
+  four install doors with a four-door drift test; the plugin fallback
+  questionnaire deliberately keeps `business-bootstrap` (role already known
+  there).
+- **Community runtime fingerprinted (ee7803b):** shipped community sources
+  (generator + provision CLIs, `scripts/lib/community`, community skills) added
+  to `PACKAGED_INPUTS` + `THIN_INSTALLER_INPUTS` as `COMMUNITY_RUNTIME`,
+  contract-anchored to `build.extraResources`.
+- **Single install door (bcc580c):** `electron/business-install.cjs` runs the
+  same bootstrap transaction (`bootstrap.ps1` with detection of an existing
+  engine) for both fresh and existing-Hermes installs; the JS-side branch is
+  gone.
+- **Community engine pin → v0.3.1 (f44d02d5):** WhatsApp bridge survives
+  version-endpoint outages via an on-disk `wa-version-cache.json`
+  (fetch → memory → disk → library-default tiers); upstreamed as
+  NousResearch/hermes-agent PR #88466.
+
 ## [0.4.0-alpha.5] - 2026-08-17
 
 ### מה חדש (למשתמש)
