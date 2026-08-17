@@ -35,6 +35,11 @@ export function fakeRoot({ version = '9.9.9', productName = 'Widget', electron =
   put(root, 'hermes-plugin/business-shell/plugin.js', 'module.exports={}\n')
   put(root, 'installer/bootstrap.ps1', 'Write-Host hi\n')
   put(root, 'installer/bootstrap-companion.ps1', 'Write-Host hi\n')
+  // Community runtime payload (extraResources + the NSIS community\ payload).
+  put(root, 'scripts/community-generate.mjs', 'export {}\n')
+  put(root, 'scripts/community-provision.mjs', 'export {}\n')
+  put(root, 'scripts/lib/community/generate.mjs', 'export const gen=1\n')
+  put(root, 'assets/community-skills/community-bootstrap/SKILL.md', '# bootstrap\n')
   put(root, 'build/icon.png', 'PNG-fake')
   put(root, 'build/icon.ico', 'ICO-fake')
   // Build-pipeline transforms that deterministically shape/sign/attest the bytes

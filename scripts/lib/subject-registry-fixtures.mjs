@@ -22,6 +22,11 @@ export const FILES = {
   'hermes-plugin/business-shell/plugin.js': 'module.exports={}\n',
   'installer/bootstrap.ps1': 'Write-Host hi\n',
   'installer/bootstrap-companion.ps1': 'Write-Host hi\n',
+  // APP_RUNTIME_INPUTS — community runtime payload (extraResources + NSIS)
+  'scripts/community-generate.mjs': 'export {}\n',
+  'scripts/community-provision.mjs': 'export {}\n',
+  'scripts/lib/community/generate.mjs': 'export const gen=1\n',
+  'assets/community-skills/community-bootstrap/SKILL.md': '# bootstrap\n',
   'build/icon.png': 'PNG\n',
   'build/icon.ico': 'ICO\n',
   'package.json': '{"name":"x"}\n',

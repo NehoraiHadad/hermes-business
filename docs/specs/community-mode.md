@@ -162,7 +162,7 @@ true` — כדי שאמירות של תושבים לא יהפכו בשקט ל"י
 | **M1 — אספקת מנוע ובית** | התקנה מוצרית של מנוע נעוץ (תג מהפורק; סטוק ביום המיזוג), יצירת HERMES_HOME קהילתי, תלויות הגשר, רישום ה־gateway כשירות (`hermes gateway install` קיים ב־CLI) | תבנית `backend-install` + חוזה ה־release |
 | **M2 — הקמה וניהול סוכניים** | **הממשק הוא הסוכן, לא טופס** (הכרעה 2026-08-14, ר' 6.1): ‏skill הקמה שמנחה את הרמס לראיין את המפעיל ולכתוב את החוזה בעצמו; ‏skill ניהול ב־DM מנהלים; ‏UI רק למה שסוכן לא יכול — צימוד QR (הגשר פולט `pair events` עם ה־QR הגולמי → תמונה סריקה) והתחברות ספק | תבנית `/business-bootstrap`, חוזה ה־onboarding |
 | **M3 — תפעול** | מסך קהילה: רשימת קבוצות, עורך ידע (markdown), תיבת אישורי למידה (`skills.write_approval`), זרימת שדרוג מנוע | דשבורד קיים |
-| **M4 — ‏release** | מהדורת קהילה נכנסת לחוזה ה־release הקיים (אריזה, ראיות, verifier) | `scripts/lib/release/**` |
+| **M4 — ‏release** (מומש 2026-08-17 — ר' להלן) | מהדורת קהילה נכנסת לחוזה ה־release הקיים (אריזה, ראיות, verifier) | `scripts/lib/release/**` |
 
 **מימוש M1 (2026-08-14):** ‏`scripts/lib/community/provision.mjs` (ליבה טהורה: descriptor ‏→ תוכנית צעדים עם `check()` פר־צעד, executor מוזרק, ‏`applyPlan` ‏fail-closed אידמפוטנטי, ‏`verifyDeployment`) + ‏CLI ‏`scripts/community-provision.mjs` ‏(`plan|apply|verify`). התוכנית: clone+checkout של התג הנעוץ (`community-engine-v0.1.0`) ‏→ ‏venv ‏→ ‏`pip install -e .` ‏→ ‏`npm ci` בגשר ‏→ הגנרטור (סעיף 3, בשימוש חוזר דרך ה־CLI הקיים) ‏→ ‏`hermes gateway install --no-start-now --start-on-login` עם ‏`HERMES_HOME` בסביבת התהליך (המנוע אופה אותו לתוך משגרי ה־Scheduled Task). בטיחות: סירוב לכל נתיב שנוגע ב־HOME החי, בקלון הייחוס או בפיילוט; אף gateway לא מותנע. **גבולות תחולה:** אימות ספק (OAuth אינטראקטיבי) וצימוד QR הם עניין האשף (M2) — ה־provisioning רק מאמת ומדווח (auth.json/creds.json, צעדי report בלבד).
 
@@ -177,6 +177,19 @@ true` — כדי שאמירות של תושבים לא יהפכו בשקט ל"י
 toolset פר־קבוצה; מרחב המנהל בלי הצמדה — הרמס מלא), ו־DM־למנהלים. ‏verify
 משווה קונפיגים (שורש ופרופיל) לפי מפתחות אפקטיביים, ‏`.env` לפי מפתחות
 בבעלות בלבד, וכל השאר לפי checksum.
+
+**מימוש M4 (2026-08-17):** מטען הריצה הקהילתי כבר נארז (‏`build.extraResources`
+‏+ מטען ה־NSIS תחת `$INSTDIR\community`), אך לא היה **מוטבע בטביעת האצבע** של
+ה־release — שינוי בגנרטור לא היה פוסל artifact מוכן. נוסף לרישום הנושאים
+(‏`scripts/lib/subject-registry.mjs`) קבוצת ‏`COMMUNITY_RUNTIME`: שני ה־CLIים
+(‏`scripts/community-generate.mjs`, ‏`scripts/community-provision.mjs`),
+‏`scripts/lib/community/*.mjs` (בלי `*.test.mjs`) ו־`assets/community-skills/**/SKILL.md`
+בלבד — בדיוק מה שהמשגרים מסננים. הקבוצה נכנסת ל־`APP_RUNTIME_INPUTS`
+(‏→ `PACKAGED_INPUTS` ‏→ ראיית `packaged-e2e`) ול־`THIN_INSTALLER_INPUTS`
+(‏→ ראיית `thin-installer`), ומשם נגזרת ל־`RELEASE_DIRTY_INPUTS` — קובץ קהילתי
+לא־מקומט חוסם release. בייטי ה־vendor (‏js-yaml/argparse) אינם מוטבעים ישירות
+(‏`node_modules` מחוץ לכל קבוצה) אלא מכוסים ב־`package-lock.json` ‏+ lock-attest.
+‏`SUBJECT_SCHEME` לא שונה — המשמעות לא השתנתה, רק התחולה תוקנה.
 
 ### 6.1 עקרון הממשק: הרמס מקנפג את עצמו, ה־skill מנחה (נהוראי, 2026-08-14; עודכן במימוש M2)
 

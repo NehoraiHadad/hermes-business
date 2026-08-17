@@ -133,6 +133,16 @@ unavailable` / `version-reuse` and `lock-integrity-unattested` fail closed for
 BOTH public and pilot — see `scripts/lib/release/channel-policy.mjs`
 (`requiresFullRigor`).
 
+## Fingerprinted inputs
+
+Declared once in `scripts/lib/subject-registry.mjs` — including the **community
+runtime payload** shipped by `build.extraResources` and the NSIS `community\`
+payload (`COMMUNITY_RUNTIME`: the generator/provisioner CLIs, `scripts/lib/community/*.mjs`
+minus tests, `assets/community-skills/**/SKILL.md`), so a community-generator edit
+invalidates a prepared artifact instead of passing unnoticed; the vendored
+js-yaml/argparse bytes shipped beside it are covered by `package-lock.json` plus
+the `npm ci` lock-attest, not fingerprinted directly.
+
 ## Inputs supplied out-of-band (absent ⇒ public/pilot fails closed)
 
 - `release-ledger.json` — durable signed / GitHub-asset prior-release ledger

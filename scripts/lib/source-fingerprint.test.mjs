@@ -39,7 +39,9 @@ describe('computeSourceFingerprint', () => {
       ['installer/bootstrap.ps1', 'Write-Host bye\n'], // extraResource installer script
       ['build/icon.png', 'PNG-changed'], // packaged asset
       ['scripts/after-pack.cjs', 'exports.default=async()=>2\n'], // rcedit build transform
-      ['scripts/build-plugin.mjs', 'export const v=2\n'] // plugin bundler transform
+      ['scripts/build-plugin.mjs', 'export const v=2\n'], // plugin bundler transform
+      ['scripts/lib/community/generate.mjs', 'export const gen=2\n'], // community runtime payload
+      ['assets/community-skills/community-bootstrap/SKILL.md', '# bootstrap v2\n'] // shipped skill body
     ]) {
       const { root, put } = fakeRoot()
       const before = computeSourceFingerprint(root).fingerprint

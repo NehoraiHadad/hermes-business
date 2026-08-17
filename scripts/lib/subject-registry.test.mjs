@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
@@ -91,6 +91,90 @@ describe('packaged input set — resolved over the real repo', () => {
       expect(/\.test\.(cjs|mjs|js|jsx|ts|tsx|py)$/.test(f), f).toBe(false)
       expect(f.includes('__pycache__'), f).toBe(false)
     }
+  })
+})
+
+// Minimal electron-builder `filter` matcher: `*` inside a segment, `**` at any
+// depth, leading `!` negates. Enough for the community extraResources filters and
+// deliberately derived from package.json rather than restated here.
+const globRe = g =>
+  new RegExp(
+    `^${g
+      .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+      .replace(/\*\*\//g, '(?:.*/)?')
+      .replace(/\*\*/g, '.*')
+      .replace(/\*/g, '[^/]*')}$`
+  )
+
+/** Does electron-builder ship `rel` (relative to the entry's `from`)? */
+const shipsUnderFilter = (rel, filters = []) => {
+  let ok = !filters.some(f => !f.startsWith('!'))
+  for (const f of filters) {
+    const negated = f.startsWith('!')
+    if (globRe(negated ? f.slice(1) : f).test(rel)) ok = !negated
+  }
+  return ok
+}
+
+const filesUnder = abs =>
+  readdirSync(abs, { recursive: true })
+    .map(p => String(p).split(path.sep).join('/'))
+    .filter(rel => statSync(path.join(abs, rel)).isFile())
+
+// The community runtime (generator/provisioner CLIs, the pure community library,
+// the product skill bodies) is shipped by package.json `build.extraResources` and
+// by the NSIS `community\` payload. If it were not fingerprinted, a change to the
+// generator would leave a prepared artifact "valid" — dishonest coverage. This
+// suite anchors the registry on the SHIPPER (package.json), never on a restated list.
+describe('community runtime payload is fingerprinted', () => {
+  const root = repoRoot()
+  const packaged = resolveSubjects(root, PACKAGED_INPUTS)
+  const extraResources = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8')).build
+    .extraResources
+  // Every non-vendored source shipped under business-bootstrap/community/. The
+  // vendored js-yaml/argparse bytes are excluded on purpose: node_modules is out
+  // of every set, covered instead by package-lock.json + the npm ci lock-attest.
+  const community = extraResources.filter(
+    e => e.to.startsWith('business-bootstrap/community/') && !e.from.startsWith('node_modules/')
+  )
+
+  it('the shipper really declares a community payload (anchor is live)', () => {
+    expect(community.length).toBeGreaterThan(0)
+    const from = community.map(e => e.from)
+    expect(from).toContain('scripts/community-generate.mjs')
+    expect(from).toContain('scripts/community-provision.mjs')
+    expect(from).toContain('scripts/lib/community')
+    expect(from).toContain('assets/community-skills')
+  })
+
+  it('every community source the artifact ships is inside the packaged fingerprint set', () => {
+    for (const entry of community) {
+      const abs = path.join(root, entry.from)
+      if (statSync(abs).isFile()) {
+        expect(packaged, entry.from).toContain(entry.from)
+        continue
+      }
+      const shipped = filesUnder(abs).filter(rel => shipsUnderFilter(rel, entry.filter))
+      expect(shipped.length, `${entry.from} ships nothing`).toBeGreaterThan(0)
+      for (const rel of shipped) expect(packaged, `${entry.from}/${rel}`).toContain(`${entry.from}/${rel}`)
+    }
+  })
+
+  it('excludes what never ships: community tests and non-SKILL markdown', () => {
+    const lib = packaged.filter(f => f.startsWith('scripts/lib/community/'))
+    expect(lib.length).toBeGreaterThan(0)
+    for (const f of lib) expect(f.endsWith('.test.mjs'), f).toBe(false)
+    const skills = packaged.filter(f => f.startsWith('assets/community-skills/'))
+    expect(skills.length).toBeGreaterThan(0)
+    for (const f of skills) expect(f.endsWith('/SKILL.md'), f).toBe(true)
+  })
+
+  it('the thin-installer subject carries it too — the NSIS script writes that payload', () => {
+    const t = resolveSubjects(root, THIN_INSTALLER_INPUTS)
+    expect(t).toContain('scripts/community-generate.mjs')
+    expect(t).toContain('scripts/community-provision.mjs')
+    expect(t.some(f => f.startsWith('scripts/lib/community/'))).toBe(true)
+    expect(t.some(f => f.startsWith('assets/community-skills/'))).toBe(true)
   })
 })
 

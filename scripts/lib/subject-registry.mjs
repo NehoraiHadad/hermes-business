@@ -4,7 +4,8 @@
 // one gate and ignored by another. Sets are split BY PURPOSE, not by directory:
 //   * APP_RUNTIME_INPUTS   — the sources that actually ship inside the artifact
 //     (main-process runtime, renderer sources vite compiles, the hermes-plugin
-//     tree, the extraResources bootstrap scripts, packaged assets, package.json).
+//     tree, the extraResources bootstrap scripts, the community runtime payload,
+//     packaged assets, package.json).
 //   * BUILD_PIPELINE_INPUTS — the scripts/config that DETERMINISTICALLY transform,
 //     sign or attest that runtime (plugin bundler, icon/version rcedit pass,
 //     build-attestation generator + its lib). A change here can alter the shipped
@@ -59,6 +60,29 @@ const SHIPPED_INSTALLER = [
   { file: 'installer/bootstrap-companion.ps1' }
 ]
 
+// The self-contained community runtime payload, shipped verbatim by BOTH
+// build.extraResources (`business-bootstrap/community/**`) and the NSIS
+// `$INSTDIR\community` payload: the generator/provisioner CLIs, the pure
+// community library and the two product skill bodies. The selectors mirror what
+// those two shippers actually filter — `*.mjs` minus `*.test.mjs` (NON_SHIPPED
+// covers the tests), and `**/SKILL.md` only. The community-archive plugin tree
+// also shipped under that payload is already covered by HERMES_PLUGIN.
+//
+// The vendored js-yaml/argparse bytes that ship alongside are deliberately NOT
+// fingerprinted here — node_modules is out of every set by design. Their
+// integrity is carried by package-lock.json (RELEASE_DIRTY_INPUTS via
+// BUILD_CONFIG_INPUTS) plus the `npm ci` lock-attest, not by this registry.
+const COMMUNITY_RUNTIME = [
+  { file: 'scripts/community-generate.mjs' },
+  { file: 'scripts/community-provision.mjs' },
+  { dir: 'scripts/lib/community', exclude: NON_SHIPPED, exts: ['.mjs'] },
+  // Only SKILL.md bodies ship, so a sibling note must never churn the
+  // fingerprint. `exclude` is tested against directories as well as files, so it
+  // is anchored on `.md` (never matching a skill FOLDER) and drops any markdown
+  // whose basename is not exactly SKILL.md; `exts` drops everything non-markdown.
+  { dir: 'assets/community-skills', exclude: /(^|\/)(?!SKILL\.md$)[^/]*\.md$/, exts: ['.md'] }
+]
+
 // Packaged icons/assets and the manifest that carries version + build config.
 const ASSETS = [{ file: 'build/icon.png' }, { file: 'build/icon.ico' }]
 const PACKAGING_CONFIG = [{ file: 'package.json' }]
@@ -69,6 +93,7 @@ export const APP_RUNTIME_INPUTS = [
   ...RENDERER_SOURCES,
   ...HERMES_PLUGIN,
   ...SHIPPED_INSTALLER,
+  ...COMMUNITY_RUNTIME,
   ...ASSETS,
   ...PACKAGING_CONFIG
 ]
@@ -136,9 +161,11 @@ const RELEASE_SECURITY_DIRTY_ONLY = [
 //     the dot-sourced focused test suites (their test code IS the proof).
 // hermes-compat.json is included because verify-bootstrap + installer/lib decide
 // release compatibility against it; package.json carries the productName/version
-// the bootstrap + NSIS embed.
+// the bootstrap + NSIS embed. COMMUNITY_RUNTIME is here too because the NSIS
+// script writes that payload — the thin-installer evidence attests those bytes.
 export const THIN_INSTALLER_INPUTS = [
   ...SHIPPED_INSTALLER,
+  ...COMMUNITY_RUNTIME,
   { file: 'installer/business-bootstrap.nsi' },
   { dir: 'installer/lib', exclude: NON_SHIPPED },
   { file: 'scripts/build-bootstrap.ps1' },

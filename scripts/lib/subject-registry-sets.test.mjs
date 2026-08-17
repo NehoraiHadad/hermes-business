@@ -29,7 +29,13 @@ const CASES = [
   // HIGH 4 — the transitive release-security pipeline is attested: a containment /
   // signing / verdict change invalidates a prepared artifact but leaves THIN alone.
   { rel: 'scripts/lib/release/preflight.mjs', body: 'export const v=2\n', changes: [PACKAGED_INPUTS], stable: [THIN] },
-  { rel: 'scripts/finalize-release.mjs', body: 'export const v=2\n', changes: [PACKAGED_INPUTS], stable: [THIN] }
+  { rel: 'scripts/finalize-release.mjs', body: 'export const v=2\n', changes: [PACKAGED_INPUTS], stable: [THIN] },
+  // The community runtime payload ships through BOTH shippers (extraResources
+  // into the app and the NSIS `community\` payload), so it legitimately moves
+  // both fingerprints — no `stable` set exists for it.
+  { rel: 'scripts/community-generate.mjs', body: 'export const v=2\n', changes: [PACKAGED_INPUTS, THIN], stable: [] },
+  { rel: 'scripts/lib/community/generate.mjs', body: 'export const gen=2\n', changes: [PACKAGED_INPUTS, THIN], stable: [] },
+  { rel: 'assets/community-skills/community-bootstrap/SKILL.md', body: '# bootstrap v2\n', changes: [PACKAGED_INPUTS, THIN], stable: [] }
 ]
 
 describe('purpose-split fingerprints — an edit moves only the sets that own it', () => {
@@ -50,6 +56,10 @@ describe('non-shipped / evidence / cache drift never invalidates', () => {
     'hermes-plugin/business-whatsapp-policy/tests/test_x.py': 'assert True\n',
     'hermes-plugin/business-shell/__pycache__/x.pyc': 'bytecode',
     'scripts/lib/e2e-thin-installer-lib.test.mjs': 'test only\n',
+    // neither ships: the extraResources/NSIS filters drop community tests, and
+    // only `**/SKILL.md` bodies leave assets/community-skills.
+    'scripts/lib/community/generate.test.mjs': 'test only\n',
+    'assets/community-skills/community-bootstrap/NOTES.md': 'not shipped\n',
     'dist/assets/index-abc.js': 'generated\n'
   }
   for (const [name, set] of [['packaged', PACKAGED_INPUTS], ['thin-installer', THIN]]) {
