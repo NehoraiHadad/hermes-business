@@ -10,6 +10,49 @@
 
 ---
 
+## [0.4.0-alpha.7] - 2026-08-17
+
+### מה חדש (למשתמש)
+
+- **תיקון חשוב לעברית בהתקנה.** בהתקנות קודמות שני כישורי הקהילה נכתבו בקידוד
+  שגוי והעברית בהם הפכה לג'יבריש — מה שמנע מהעוזר לזהות מתי להשתמש בהם. הבעיה
+  תוקנה מהשורש: כל קובץ שההתקנה כותבת נכתב עכשיו בקידוד נכון, ובדיקה אוטומטית
+  שומרת שזה לא יחזור.
+- **עותק אחד לכל כישור.** הקמת קהילה אחרי התקנה השאירה בעבר שני עותקים של אותם
+  כישורים (אחד תקין ואחד פגום). מעכשיו יש מקום אחד ועותק אחד, וההתקנה מנקה
+  שאריות ישנות בשדרוג.
+- **בדיקות התקנה מקיפות יותר.** מסלול ההתקנה הנקייה נבדק עכשיו עם כל רכיבי
+  ההתקנה האמיתיים, כך שחוסר עקביות בין דרכי ההתקנה נתפס לפני שהוא מגיע אליכם.
+
+### Technical
+
+- **PS 5.1 encoding root cause fixed (W1):** both install doors run Windows
+  PowerShell 5.1, whose `Get-Content -Raw` default (Windows-1252) mangled the
+  UTF-8-no-BOM community skill templates during placeholder rendering — the
+  installed Hebrew was mojibake AND the inflated descriptions (82/77 chars)
+  blew the 60-char routing budget, so the skills never routed. New
+  framework-direct `Read-Utf8File`/`Write-Utf8File` in `FileOps.ps1`; full
+  encoding sweep of `installer/lib` (template render, SDK read, rollback +
+  completion receipts previously written WITH a BOM under PS 5.1,
+  manifest reads). New 7-test `business-install.tests.ps1` suite runs under
+  real PS 5.1 with a mojibake canary (122/122 lib assertions).
+- **One canonical community-skill path (W2):** the installer now renders
+  `community-bootstrap`/`community-admin` to the generator-owned canonical
+  `skills/<name>/SKILL.md` with exact byte-parity to `renderAdminSkill`
+  (LF-normalized, same placeholder set), and prunes the legacy
+  `skills/community/<name>/` copies on upgrade. Parity proven in production:
+  contract apply reports the door-rendered skills `unchanged`.
+- **Payload manifest as single source of truth (W3):**
+  `scripts/payload-manifest.mjs` + a 33-test contract
+  (`payload-manifest-contract.test.ts`) statically parse all four install
+  doors (NSIS / Electron / BusinessInstall / clean-install E2E) and fail on
+  any drift; section-internal file lists stay single-sourced in
+  `electron/paths.cjs` / `plugin-install.cjs`.
+- **Clean-install E2E repaired:** `e2e-bootstrap-clean.ps1` now stages the
+  full payload (`tachles-welcome`, `business-partner`), asserts their
+  installed files + receipt hashes, and derives the version assertion from
+  `hermes-compat.json` instead of a hard-coded `0.19.x` regex.
+
 ## [0.4.0-alpha.6] - 2026-08-17
 
 ### מה חדש (למשתמש)
