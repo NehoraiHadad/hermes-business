@@ -10,6 +10,50 @@
 
 ---
 
+## [0.4.0-alpha.5] - 2026-08-17
+
+### מה חדש (למשתמש)
+
+- **שיחה יציבה יותר.** חלון האישור ("לאשר פעולה?") נענה פעם אחת בדיוק — בלי
+  כפילויות; תיבת הכתיבה נשארת זמינה גם בזמן שהעוזר עובד; והחיווי "העוזר
+  סיים" מופיע רק כשהתשובה באמת הסתיימה.
+- **מסך הבית מציג את העסק האמיתי.** במקום הודעת פתיחה כללית, המסך הריק
+  משקף את המצב בפועל — מה מחובר, מה מוגדר ומה כדאי לעשות עכשיו.
+- **קריא ונגיש יותר.** ניגודיות הטקסט הועלתה לתקן נגישות (AA), נקבע גודל
+  טקסט מינימלי, וסרגל הצד נגלל כמו שצריך גם בזום גבוה.
+- **שעה בפורמט 24 שעות — תמיד.** שדה השעה בתזמונים כבר לא מושפע מהגדרות
+  האזור של המחשב.
+- **דיוק במסכים.** כל שיחה בסרגל הצד מציגה את הזמן האמיתי שלה; מסך החיבורים
+  כבר לא מציג כפתור "ניתוק" שלא באמת ניתק; וכותרת מסך המשימות תואמת את מה
+  שרואים בו.
+- **מצב ההדגמה משתפר.** התשובות בהדגמה מתייחסות למה שנשאל בפועל, במקום
+  תשובה קבועה אחת.
+
+### Technical
+
+- **Product-design audit P0/P1 fixes (merge c4ab0eb):** approval gate answered
+  exactly once (37a2420), composer usability + turn-state announcement
+  (a99eae3, 7ee33a0), grounded home empty state (719bf27), AA contrast +
+  type-size floor (3770972), sidebar scroll under zoom (a8634d3), locale-proof
+  24h time field (43d22ff), real per-conversation timestamps (b7dc167),
+  removed the no-op disconnect affordance (4e7c5ae), tasks heading + native
+  confirm removal (52d5301), demo transport answers the actual question
+  (9ad407a).
+- **WhatsApp egress gate: contract-authorized community sources (f7e59c6):**
+  `business-whatsapp-policy` now honors a generator-owned `community_sources`
+  list in `business/whatsapp-policy.json` — community-contract groups and
+  admin DMs are authorized regardless of owner mode; the owner surface is
+  preserved verbatim; an unparseable policy file is refused (fail-closed).
+  Unrelated installs (no `community_sources` key) behave exactly as before.
+- **Community capability (983886c, 506c378, dba25b3):** the repo now carries a
+  community mode — contract-driven provisioning (`community.yaml` →
+  profiles/skills/egress grants) and a scoped `community-archive` read-only
+  plugin. The plugin ships in the installer payload (under `hermes-plugin/`)
+  but is inert unless a community contract provisions it; the desktop product
+  behavior is unchanged.
+
+---
+
 ## [0.4.0-alpha.4] - 2026-08-04
 
 ### מה חדש (למשתמש)

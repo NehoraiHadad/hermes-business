@@ -7,8 +7,8 @@
   "versionSource": "hermes_cli/__init__.py:__version__",
   "communityEngine": {
     "repository": "NehoraiHadad/hermes-agent",
-    "tag": "community-engine-v0.2.2",
-    "sha": "af04eb8bb85e0a5b6333cd0104921b7e49bcf1f9",
+    "tag": "community-engine-v0.3.0",
+    "sha": "bb2591ab492d577ed597af8f66f6942040858690",
     "officialBaseTag": "v2026.8.13",
     "officialBaseVersion": "0.20.1",
     "note": "Temporary immutable community runtime while the WhatsApp observer and related fixes are reviewed upstream. The installer verifies the exact SHA and the desktop updater refuses to mutate pinned/fork installs."

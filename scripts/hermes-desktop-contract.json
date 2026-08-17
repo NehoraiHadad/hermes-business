@@ -59,7 +59,7 @@
     },
     "apps/desktop/src/sdk/runtime.ts": {
       "key": "sdkRuntime",
-      "sha256": "f7d5e8c63f05de4884329b17e185da93f9f55837058fdca582d7b93ddd2ce1dc"
+      "sha256": "6d38dfb12d567cf3f10474afdc9cd6798b2b05b4b23e7f2f4a383f8a265b0c07"
     },
     "apps/desktop/src/contrib/runtime-loader.ts": {
       "key": "runtimeLoader",
