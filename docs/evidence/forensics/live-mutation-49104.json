@@ -1,0 +1,49 @@
+{
+  "kind": "live-profile-mutation",
+  "detected_at_run_pid": 49104,
+  "approval_requested": true,
+  "note": "Redacted, hash/inventory-only. No config contents, credentials or paths.",
+  "auto_restore_performed": false,
+  "auto_restore_withheld_reason": "before-snapshot is a sha256 marker (not exact bytes); mutation not conclusively isolatable from concurrent live-gateway writes",
+  "config_changed": false,
+  "config_hash_before": "e933331c4fd978f61ee35b68d90f76041ec795605965f3357c53cdd741f6b279",
+  "config_hash_after": "e933331c4fd978f61ee35b68d90f76041ec795605965f3357c53cdd741f6b279",
+  "stable_marker_before": "6e22b53ffda3e3f54eaac42ddade2954cecde62950c77b75b992217db8eb509d",
+  "stable_marker_after": "6aac17d6d630688c459e7a04251f2b18f26a9047f0246d5e36f4b10f22a58496",
+  "stable_marker_equal": false,
+  "profile_defining_unchanged": false,
+  "structural_added_removed": {
+    "cron": {
+      "added": 1,
+      "removed": 0
+    }
+  },
+  "stable_structural_changed": {},
+  "stable_content_changed": {},
+  "stable_unsafe_entries": 0,
+  "volatile_runtime_changes": {
+    "cron": 1
+  },
+  "inventory_before": {
+    "skills": 14,
+    "plugins": 3,
+    "desktop-plugins": 1,
+    "business": 3,
+    "agents": 0,
+    "workflows": 0,
+    "hooks": 0,
+    "sessions": 3,
+    "cron": 7
+  },
+  "inventory_after": {
+    "skills": 14,
+    "plugins": 3,
+    "desktop-plugins": 1,
+    "business": 3,
+    "agents": 0,
+    "workflows": 0,
+    "hooks": 0,
+    "sessions": 3,
+    "cron": 8
+  }
+}
