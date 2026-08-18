@@ -65,6 +65,27 @@ function Invoke-CompanionContractTests {
     Assert-True ($next.version -eq $nextVersion) 'next prerelease was not accepted'
     Assert-True ($stable.version -eq $stableVersion) 'stable release was not accepted'
   }
+  Test-Case 'double-digit prerelease identifiers compare NUMERICALLY, not lexically' {
+    # Regression guard for a bug that was invisible for nine releases and would
+    # have blocked the tenth: Compare-BusinessSemVer's numeric branch was dead
+    # code (PowerShell binds `,` tighter than `-match`, so the two-in-one
+    # assignment never produced $true), and comparison fell through to
+    # CompareOrdinal — which sorts '10' BELOW '9'. Every prerelease so far was
+    # single-digit, where ordinal and numeric order happen to agree, so nothing
+    # caught it. Fixed versions are asserted here directly rather than only via
+    # the derived-range case above, so the guard survives a bump past alpha.10.
+    $pairs = @(
+      @('0.4.0-alpha.10', '0.4.0-alpha.9',   1),
+      @('0.4.0-alpha.9',  '0.4.0-alpha.10', -1),
+      @('0.4.0-alpha.2',  '0.4.0-alpha.10', -1),
+      @('0.4.0-alpha.100','0.4.0-alpha.99',  1),
+      @('0.4.0',          '0.4.0-alpha.10',  1)
+    )
+    foreach ($pair in $pairs) {
+      $order = [Math]::Sign((Compare-BusinessSemVer (ConvertTo-BusinessSemVer $pair[0]) (ConvertTo-BusinessSemVer $pair[1])))
+      Assert-True ($order -eq $pair[2]) "$($pair[0]) vs $($pair[1]) compared $order, expected $($pair[2])"
+    }
+  }
   Test-Case 'older and malformed prereleases fail closed' {
     foreach ($bad in @('0.4.0-alpha.0', '0.4', '0.4.0-01')) {
       $threw = $false

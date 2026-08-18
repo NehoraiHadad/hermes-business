@@ -29,7 +29,18 @@ function Compare-BusinessSemVer {
     if ($index -ge $leftPre.Count) { return -1 }
     if ($index -ge $rightPre.Count) { return 1 }
     $leftPart, $rightPart = $leftPre[$index], $rightPre[$index]
-    $leftNumeric, $rightNumeric = $leftPart -match '^\d+$', $rightPart -match '^\d+$'
+    # Assigned on SEPARATE lines on purpose. The one-line multiple-assignment form
+    # (`$a, $b = $x -match '...', $y -match '...'`) LOOKS equivalent but is not:
+    # PowerShell binds the comma tighter than `-match`, so the right-hand side
+    # parses as `$x -match @('...', $y) -match '...'` and yielded $leftNumeric=$false
+    # with $rightNumeric unset. Both identifiers were therefore never seen as
+    # numeric, the BigInteger branch below was dead code, and comparison silently
+    # fell through to CompareOrdinal — making '10' sort BELOW '9'. That is invisible
+    # while every prerelease is single-digit and becomes a release-blocking bug the
+    # moment one is not (alpha.10 read as older than alpha.9, so the installer
+    # rejected it as "outside the tested range").
+    $leftNumeric = $leftPart -match '^\d+$'
+    $rightNumeric = $rightPart -match '^\d+$'
     if ($leftNumeric -and $rightNumeric) {
       $order = [System.Numerics.BigInteger]::Parse($leftPart).CompareTo([System.Numerics.BigInteger]::Parse($rightPart))
     } elseif ($leftNumeric) { $order = -1
