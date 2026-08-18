@@ -123,7 +123,7 @@ $validSha = 'A' * 64
 try {
   Invoke-HttpIntegrityTests -WorkRoot $workRoot
   Invoke-PayloadTransactionTests -WorkRoot $workRoot
-  Invoke-VersionGateTests -Root $root
+  Invoke-VersionGateTests -Root $root -WorkRoot $workRoot
   Invoke-CompanionContractTests -WorkRoot $workRoot -ValidSha $validSha
   Invoke-SafeZipEntrypointTests -WorkRoot $workRoot -ValidSha $validSha
   Invoke-CompanionInstallTests -WorkRoot $workRoot -RepoRoot $root

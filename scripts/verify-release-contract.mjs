@@ -10,8 +10,15 @@
 // no signing, no evidence writes, no live Hermes state. Exits non-zero unless the
 // release is fully contract-clean for the chosen channel.
 //
-// This is the gate `package:win` runs BEFORE electron-builder, and the tool an
-// operator runs by hand to see exactly what stands between HEAD and a release.
+// `package:win` does NOT run this script. Its stage 1 is `npm run verify:release`
+// (tests + plugin/bootstrap verifiers); the contract gate itself — the same
+// `preflightRelease` — runs in stage 12, `scripts/finalize-release.mjs`, the LAST
+// of the 12 stages (scripts/package-win.mjs), over the STAGED sidecars it is about
+// to promote. So this is the tool an operator runs BY HAND, at any point, to see
+// exactly what stands between HEAD and a release without paying for a full build
+// to be told. (package-win.mjs does read ONE of those inputs early — an
+// uncommitted release input aborts a public/pilot run before stage 1 — but that
+// is a cheap pre-read, not this gate.)
 
 import { repoRoot } from './lib/source-fingerprint.mjs'
 import { gatherReleaseState } from './lib/release/gather.mjs'

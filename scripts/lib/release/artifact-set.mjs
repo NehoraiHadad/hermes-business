@@ -36,7 +36,7 @@ export const { expectedInstallerName } = artifactName
  * one, a name that is not the expected versioned name, or a name we cannot parse a
  * semver out of (unparseable → rejected, never silently accepted).
  */
-export function verifyArtifactSet({ productName, version, installers = [] } = {}) {
+export function verifyArtifactSet({ productName, version, installers = [], selectionErrors = [] } = {}) {
   const errors = []
   const expected = expectedInstallerName(productName, version)
   if (!version) {
@@ -44,7 +44,13 @@ export function verifyArtifactSet({ productName, version, installers = [] } = {}
     return { ok: false, errors, expected }
   }
   if (installers.length === 0) {
-    errors.push('no installer .exe present under release/')
+    // An empty set has two very different causes — nothing was packaged, or the
+    // substring selection matched several leftovers and refused to guess. Report
+    // the selector's own reason when the caller supplies it, so a stale file in
+    // release/ never presents itself as a missing build.
+    errors.push(selectionErrors.length
+      ? `no installer .exe selected under release/: ${selectionErrors.join('; ')}`
+      : 'no installer .exe present under release/')
     return { ok: false, errors, expected }
   }
   const names = installers.map(i => i.name)

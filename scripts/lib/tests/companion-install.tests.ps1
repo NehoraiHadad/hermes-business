@@ -118,6 +118,59 @@ function Invoke-CompanionInstallTests {
     Assert-True (Test-Path -LiteralPath $exe -PathType Leaf) "exe not resolved under a Hebrew/space path: $exe"
     Assert-True ($exe.StartsWith([System.IO.Path]::GetFullPath($root))) "exe escaped the Hebrew/space root: $exe"
   }
+  Test-Case 'the zip install action still resolves its lib helpers from a CHILD scope' {
+    # REGRESSION: the zip install action is a GetNewClosure()
+    # scriptblock. A closure is rebound to a fresh module session state, and
+    # command lookup from there falls back to GLOBAL only — so a bare
+    # `Expand-ArchiveSafely` inside it resolves only while installer/lib happens to
+    # sit in the global scope. `powershell.exe -File x.ps1` puts it there;
+    # `-Command "& .\x.ps1"` does not (the call operator pushes a child scope), and
+    # the run died with "Expand-ArchiveSafely : The term ... is not recognized".
+    # The whole suite runs under -File, so the trap is INVISIBLE in-process: this
+    # case must spawn a child entered the other way to see it at all.
+    $caseRoot = Join-Path $WorkRoot 'txn-child-scope'
+    $payloadRoot = Join-Path $caseRoot 'payload'
+    New-Item -ItemType Directory -Force -Path $payloadRoot | Out-Null
+    # New-TestZip comes from safezip-entrypoint.tests.ps1 — every suite is
+    # dot-sourced into the runner's one scope, same as Test-Case/Assert-True.
+    $zip = Join-Path $caseRoot 'companion.zip'
+    New-TestZip -Destination $zip -Entries @(@{ Name = $ep; Bytes = [byte[]](0..255) })
+    Set-Content -LiteralPath (Join-Path $payloadRoot 'companion-release.json') -Encoding ascii -Value (
+      [pscustomobject]@{ version = $BootstrapVersion; url = 'https://example.test/companion.zip'
+        sha256 = ('a' * 64); format = 'zip'; entrypoint = $ep } | ConvertTo-Json)
+    # The probe runs the REAL Install-BusinessCompanion. Only the network hop is
+    # replaced, and via the loader's OWN seam: bootstrap-companion.ps1 skips any
+    # lib module whose probe command already exists, so pre-defining Save-HttpFile
+    # keeps HttpDownload.ps1 out and leaves everything else genuine.
+    $probeScript = Join-Path $caseRoot 'child-scope-probe.ps1'
+    Set-Content -LiteralPath $probeScript -Encoding ascii -Value @'
+param([string]$RepoRoot, [string]$PayloadRoot, [string]$InstallRoot, [string]$ZipPath)
+$ErrorActionPreference = 'Stop'
+$BootstrapVersion = [string](Get-Content -Raw -LiteralPath (Join-Path $RepoRoot 'package.json') | ConvertFrom-Json).version
+function Save-HttpFile {
+  param($Uri, $Destination, $Headers, $ExpectedSha256, $MinBytes, $MaxBytes, $Description)
+  Copy-Item -LiteralPath $ZipPath -Destination $Destination -Force
+}
+. (Join-Path $RepoRoot 'installer\bootstrap-companion.ps1')
+$exe = Install-BusinessCompanion -PayloadRoot $PayloadRoot -InstallRoot $InstallRoot
+if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) { throw "the probe produced no executable: $exe" }
+Write-Output 'PROBE-OK'
+'@
+    $installRoot = Join-Path $caseRoot 'install'
+    $stdout = Join-Path $caseRoot 'probe.out'
+    $stderr = Join-Path $caseRoot 'probe.err'
+    # -Command, NOT -File: that is the entry form under test. Redirected to files
+    # rather than piped, so the child's stderr can never trip the parent's
+    # ErrorActionPreference='Stop' and mask the result we are asserting on.
+    $child = Start-Process -FilePath $powershell -Wait -PassThru -WindowStyle Hidden -RedirectStandardOutput $stdout -RedirectStandardError $stderr -ArgumentList @(
+      '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command',
+      ('& "{0}" -RepoRoot "{1}" -PayloadRoot "{2}" -InstallRoot "{3}" -ZipPath "{4}"' -f $probeScript, $RepoRoot, $payloadRoot, $installRoot, $zip))
+    $output = ((Get-Content -Raw -LiteralPath $stdout) + (Get-Content -Raw -LiteralPath $stderr))
+    Assert-True ($output -notmatch 'is not recognized') "the install action lost a dot-sourced lib helper in a child scope: $output"
+    Assert-True ($child.ExitCode -eq 0) "the -Command entry failed with exit $($child.ExitCode): $output"
+    Assert-True ($output -match 'PROBE-OK') "the probe did not complete the install: $output"
+    Assert-True (Test-Path -LiteralPath (Join-Path $installRoot $ep) -PathType Leaf) 'the child-scope install produced no entrypoint'
+  }
   Test-Case 'no leftover backup sibling after a successful install' {
     $root = Join-Path $WorkRoot 'txn-clean'
     New-PriorCompanion -Root $root | Out-Null

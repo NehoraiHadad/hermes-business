@@ -13,7 +13,7 @@ import { subjectFingerprint } from '../evidence-subject.mjs'
 import { sha256, versionFromInstallerName } from './checksums.mjs'
 import { inspectAsar } from './asar-index.mjs'
 import { probeSignature } from './signtool.mjs'
-import { dirtyReleaseInputs } from './porcelain.mjs'
+import { releaseDirtyInputs } from './dirty-tree.mjs'
 import { createHash, verify as cryptoVerify } from 'node:crypto'
 import { proveContainmentBound } from './nsis-payload.mjs'
 import { classifyShippedPes, isPe } from './pe-inventory.mjs'
@@ -74,27 +74,30 @@ function git(args, root, encoding = 'utf8') {
   return execFileSync('git', args, { cwd: root, stdio: ['ignore', 'pipe', 'ignore'] }).toString(encoding)
 }
 
-/** Uncommitted release-blocking inputs via the robust -z parser + registry. */
-export function dirtyInputs(root) {
-  let buf
-  try {
-    buf = execFileSync('git', ['status', '--porcelain=v1', '-z', '--untracked-files=all'], { cwd: root, stdio: ['ignore', 'pipe', 'ignore'] })
-  } catch {
-    return ['<git unavailable — cannot prove a clean tree>']
-  }
-  return dirtyReleaseInputs(buf.toString('utf8'))
-}
-
 function headSubject(root) {
   try { return git(['log', '-1', '--format=%s'], root).trim() } catch { return '' }
 }
 
-/** Installer .exe files in release/ (excludes blockmaps). */
+/** WHICH .exe under release/ is the installer for the current version — and, when
+ * that question has no single answer, WHY. `release/` is never cleaned by the
+ * pipeline, and selection is a substring match that must hit exactly one file, so
+ * the common failure is an older installer whose name CONTAINS the new version
+ * (`0.4.0-alpha.1` inside a leftover `0.4.0-alpha.10`). Every caller used to see
+ * only the empty array and print "No installer .exe under release/" — which reads
+ * as "you forgot to package" and sends the operator to rebuild, when the fix is to
+ * delete one stale file. The reason is carried here instead of discarded. */
+export function selectInstaller(root) {
+  const dir = path.join(root, 'release')
+  if (!existsSync(dir)) return { ok: false, name: null, errors: ['no release/ directory (package first)'] }
+  const version = readJson(path.join(root, 'package.json'))?.version || ''
+  return selectVersionedInstaller(readdirSync(dir), version)
+}
+
+/** Installer .exe files in release/ (excludes blockmaps). Empty on any selection
+ * failure — call `selectInstaller` for the reason. */
 export function measureInstallers(root) {
   const dir = path.join(root, 'release')
-  if (!existsSync(dir)) return []
-  const version = readJson(path.join(root, 'package.json'))?.version || ''
-  const selected = selectVersionedInstaller(readdirSync(dir), version)
+  const selected = selectInstaller(root)
   if (!selected.ok) return []
   return [selected.name]
     .map(name => {
@@ -142,6 +145,7 @@ export function gatherReleaseState({ root = repoRoot(), channel = 'public', prob
   const pkg = readJson(path.join(root, 'package.json')) || {}
   const dir = unpackedDir(root)
   const attestation = readAttestation(dir)
+  const installerSelection = selectInstaller(root)
   const installers = measureInstallers(root)
   const asarPath = path.join(dir, 'resources', 'app.asar')
   const asar = inspectAsar(asarPath)
@@ -223,9 +227,10 @@ export function gatherReleaseState({ root = repoRoot(), channel = 'public', prob
     attestationProvenance,
     currentFingerprint: computeSourceFingerprint(root).fingerprint,
     headSubject: headSubject(root),
-    dirtyInputs: dirtyInputs(root),
+    dirtyInputs: releaseDirtyInputs(root),
     attestation,
     installers,
+    installerSelection,
     checksums: checksumsOverride || readJson(path.join(root, 'release', 'checksums.json')),
     asar,
     signatures,

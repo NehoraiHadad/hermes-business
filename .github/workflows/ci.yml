@@ -90,6 +90,15 @@ jobs:
         run: npm ci --ignore-scripts
       - name: verify-bootstrap (lib suite + isolation, PS 5.1 inside)
         shell: powershell
+        # The live probe resolves one release list plus one source read per
+        # candidate tag against api.github.com. Anonymous that shares a 60/hr
+        # budget with every other job on this runner's IP; the built-in token
+        # (read-only, per the job's `permissions: contents: read`) makes it
+        # 1000/hr and is why the external gate stops tripping on rate limits.
+        # Get-GitHubApiHeaders picks this up on its own - absent it, the probe
+        # still runs exactly as before.
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/verify-bootstrap.ps1
 
   # The Hermes-plugin Python suites (WhatsApp policy guard, companion dashboard

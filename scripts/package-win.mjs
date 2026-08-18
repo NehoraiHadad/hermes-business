@@ -35,6 +35,8 @@ import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { parseChannel, CHANNELS } from './lib/parse-channel.mjs'
+import { requiresFullRigor } from './lib/release/channel-policy.mjs'
+import { releaseDirtyInputs } from './lib/release/dirty-tree.mjs'
 
 const repoRoot = path.resolve(fileURLToPath(new URL('..', import.meta.url)))
 
@@ -79,6 +81,42 @@ export function packagingStages(channel) {
     // ...and promotion is the LAST action: no fallible verifier may follow it.
     nodeStage('scripts/finalize-release.mjs', ['--channel', channel])
   ]
+}
+
+/**
+ * Verdict on an uncommitted release input, BEFORE anything is built. Pure.
+ *
+ * The authoritative `dirty-inputs` gate is and stays stage 12 — inputs can change
+ * while the pipeline runs, so an early answer can never be the final one. What it
+ * can do is stop the operator from paying for the whole pipeline (build, two
+ * electron-builder passes, the exact-artifact E2E) only to be told at the very end
+ * that `package.json` was never committed. That has cost a full run before, which
+ * is why RELEASING step 2 exists.
+ *
+ * Blocking only where the outcome is already certain: public and pilot cut a real
+ * distributable and stage 12 WILL refuse a dirty tree, so failing now costs
+ * nothing and saves everything. `qa` must stay non-blocking — recapturing the
+ * packaged evidence for changes that are still in the working tree is the
+ * documented way to use that channel, and turning it into an error would make the
+ * repo's own recapture flow impossible.
+ */
+export function assessDirtyTree(channel, dirty = []) {
+  if (!dirty.length) return { blocking: false, message: null }
+  const shown = dirty.slice(0, 12)
+  const listing = shown.map(p => `  - ${p}`).join('\n') +
+    (dirty.length > shown.length ? `\n  …and ${dirty.length - shown.length} more` : '')
+  const header = `${dirty.length} release input${dirty.length === 1 ? ' is' : 's are'} uncommitted:`
+  return requiresFullRigor(channel)
+    ? {
+        blocking: true,
+        message: `[package:win ${channel}] ${header}\n${listing}\n` +
+          'Stage 12 rejects a dirty tree, so this run cannot end in a release. Commit them first (see docs/RELEASING.md step 2) — nothing was built.'
+      }
+    : {
+        blocking: false,
+        message: `[package:win ${channel}] WARNING — ${header}\n${listing}\n` +
+          'Continuing: qa is the channel for recapturing evidence over working-tree changes. A public or pilot run would stop here.'
+      }
 }
 
 /** Resolve one stage to the concrete command line that runs it. */
@@ -134,6 +172,12 @@ function main(argv) {
     console.error(`electron-builder is not installed (${builderCli} missing). Run npm install first.`)
     return 1
   }
+
+  // Cheap, honest early read of the same registry stage 12 decides over — one git
+  // call and a pure function, paid before the first byte is built.
+  const dirty = assessDirtyTree(channel, releaseDirtyInputs(repoRoot))
+  if (dirty.message) console[dirty.blocking ? 'error' : 'warn'](`\n${dirty.message}\n`)
+  if (dirty.blocking) return 1
 
   for (const [index, stage] of stages.entries()) {
     const { command, args, shell } = stageCommand(stage)

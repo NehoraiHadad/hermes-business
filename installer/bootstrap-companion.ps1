@@ -72,15 +72,29 @@ function Install-BusinessCompanion {
     if ($isZip) {
       # Host-agnostic portable payload: fail-closed per-entry validation + atomic
       # promotion into the install root. Never touches the shared Hermes state.
+      #
+      # The extractor is resolved HERE and carried in as a VARIABLE, because
+      # GetNewClosure() captures variables but rebinds the scriptblock to a fresh
+      # module session state, and command lookup from there falls back to GLOBAL
+      # only. A bare `Expand-ArchiveSafely` therefore resolves only when this file
+      # was dot-sourced into the global scope — true under `powershell.exe -File
+      # x.ps1`, FALSE under `-Command "& .\x.ps1"` (the call operator pushes a
+      # child scope), where it died with "The term ... is not recognized". A
+      # command object is data, so it travels with the closure under either entry.
+      $expandArchiveSafely = Get-Command -Name 'Expand-ArchiveSafely' -CommandType Function
       $installAction = {
         param($root)
-        Expand-ArchiveSafely -ArchivePath $artifact -Destination $root | Out-Null
+        & $expandArchiveSafely -ArchivePath $artifact -Destination $root | Out-Null
       }.GetNewClosure()
     }
     else {
       # Trusted NSIS installer, directed INTO the isolated root. NSIS consumes the
       # whole tail after '/D=' verbatim (unquoted, last arg), so a single argument
       # string is the only form that survives spaces/Hebrew in $root.
+      #
+      # This branch needs no command capture: Start-Process is a built-in cmdlet,
+      # which the closure's global fallback always finds. Only $artifact has to
+      # travel, and that is exactly what GetNewClosure() carries.
       $installAction = {
         param($root)
         $process = Start-Process -FilePath $artifact -Wait -PassThru -WindowStyle Hidden `

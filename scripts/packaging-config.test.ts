@@ -6,7 +6,7 @@ import {
   isUpdateMetadataFile,
   findUpdateMetadata
 } from './verify-no-update-metadata.mjs'
-import { packagingStages } from './package-win.mjs'
+import { packagingStages, assessDirtyTree } from './package-win.mjs'
 
 // Locks the electron-builder packaging contract so it cannot silently regress:
 //  1. `build` validates against electron-builder's OWN schema — an unknown
@@ -254,5 +254,38 @@ describe('no self-update feed is advertised', () => {
     for (const sub of ['electron', 'scripts', 'src', 'build']) {
       expect(findUpdateMetadata(`${repoRoot}/${sub}`)).toEqual([])
     }
+  })
+})
+
+describe('early dirty-tree read (stage 12 stays authoritative)', () => {
+  const DIRTY = ['package.json', 'electron/main.cjs']
+
+  it('says nothing when no release input is uncommitted', () => {
+    for (const channel of ['public', 'pilot', 'qa'] as const) {
+      expect(assessDirtyTree(channel, [])).toEqual({ blocking: false, message: null })
+    }
+  })
+
+  it('BLOCKS the distributable channels before a single stage runs', () => {
+    for (const channel of ['public', 'pilot'] as const) {
+      const verdict = assessDirtyTree(channel, DIRTY)
+      expect(verdict.blocking).toBe(true)
+      // The message has to name the files and say nothing was built, or the
+      // operator cannot tell this from a genuine build failure.
+      expect(verdict.message).toContain('package.json')
+      expect(verdict.message).toContain('nothing was built')
+    }
+  })
+
+  it('only WARNS on qa — recapturing evidence over working-tree changes is the point of that channel', () => {
+    const verdict = assessDirtyTree('qa', DIRTY)
+    expect(verdict.blocking).toBe(false)
+    expect(verdict.message).toContain('WARNING')
+    expect(verdict.message).toContain('electron/main.cjs')
+  })
+
+  it('truncates a long listing instead of burying the verdict', () => {
+    const many = Array.from({ length: 20 }, (_, i) => `electron/f${i}.cjs`)
+    expect(assessDirtyTree('qa', many).message).toContain('and 8 more')
   })
 })

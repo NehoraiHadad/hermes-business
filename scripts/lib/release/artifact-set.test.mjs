@@ -20,6 +20,23 @@ describe('verifyArtifactSet — exact expected set (finding 9)', () => {
     expect(verifyArtifactSet({ productName: PROD, version: V, installers: [] }).ok).toBe(false)
   })
 
+  // An empty set means "nothing was packaged" OR "selection matched several
+  // leftovers and refused to guess". Reporting only the first sends the operator
+  // to rebuild when the fix is to delete one stale file from release/.
+  it('reports the SELECTION reason when the empty set came from a collision', () => {
+    const r = verifyArtifactSet({
+      productName: PROD, version: V, installers: [],
+      selectionErrors: [`expected exactly one companion installer for ${V}; found 2`]
+    })
+    expect(r.ok).toBe(false)
+    expect(r.errors.join(' ')).toMatch(/found 2/)
+  })
+
+  it('falls back to the plain message when no selection reason is supplied', () => {
+    const r = verifyArtifactSet({ productName: PROD, version: V, installers: [] })
+    expect(r.errors.join(' ')).toMatch(/no installer \.exe present under release\//)
+  })
+
   it('rejects an EXTRA installer alongside the expected one', () => {
     const r = verifyArtifactSet({ productName: PROD, version: V, installers: [
       { name: EXPECTED }, { name: 'random-tool.exe' }

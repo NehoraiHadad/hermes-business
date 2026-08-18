@@ -201,6 +201,23 @@ describe('recapture hints match the real capture contract', () => {
     expect(RECAPTURE.approval).not.toMatch(/capture-evidence\.mjs approval/)
   })
 
+  // `npm run package:thin-installer:qa > <raw>` shares stdout with npm's banner,
+  // build:plugin and the harness's own progress lines, so the redirect writes a
+  // mixed log rather than JSON. (`-Command` entry used to die inside the
+  // extraction closure too; that is fixed, so -File is now merely what the npm
+  // script uses.) docs/evidence/README.md "Regenerate" carries the whole command;
+  // the hint must steer there instead of at the redirect.
+  it('thin-installer names the -File + report-tail constraint and points at the documented command', () => {
+    const hint = RECAPTURE['thin-installer']
+    expect(hint).toMatch(/docs\/evidence\/README\.md/)
+    expect(hint).toMatch(/-File/)
+    expect(hint).not.toMatch(/^npm run package:thin-installer:qa then/)
+
+    const readme = readFileSync(path.join(repoRoot(), 'docs', 'evidence', 'README.md'), 'utf8')
+    expect(readme).toMatch(/^## Regenerate$/m)
+    expect(readme).toMatch(/-File scripts\/e2e-thin-network-installer\.ps1 -EmitQaArtifact/)
+  })
+
   it('the referenced pipeline script and stage actually exist and are wired', () => {
     const pkg = JSON.parse(readFileSync(path.join(repoRoot(), 'package.json'), 'utf8'))
     expect(pkg.scripts['package:win:qa']).toContain('package-win.mjs')

@@ -93,7 +93,12 @@ of `pilot` everywhere below, plus a code-signing certificate
       - [dirty-inputs] 2 input(s) uncommitted: package-lock.json, package.json
      ```
 
-     You have then burned a full build and must re-run from scratch.
+     You no longer have to reach stage 12 to learn this: `package-win.mjs` reads
+     the same registry once before stage 1 and, on `public` or `pilot`, refuses
+     immediately with the same file list and `nothing was built`. `qa` only
+     warns — recapturing evidence over working-tree changes is what that channel
+     is for. The early read is a courtesy, not the gate: inputs can change while
+     the pipeline runs, so stage 12 stays the authority.
    - **The build identity chain binds the commit.** Stage 3
      (`scripts/gen-build-attestation.mjs`) records `source_head` — the HEAD it
      built from — and `computeReleaseBinding`
@@ -234,10 +239,8 @@ of `pilot` everywhere below, plus a code-signing certificate
    under `release/`.
 
 6. **Commit the evidence.** The freshly captured/machine-written envelopes
-   under `docs/evidence/*.json` (and `build/lock-attest.json` →
-   `release/lock-attest.json` if not already tracked as expected) are
-   evidence-only changes and do not themselves invalidate anything further —
-   commit them:
+   under `docs/evidence/*.json` are evidence-only changes and do not themselves
+   invalidate anything further — commit them:
 
    ```powershell
    git add docs/evidence/ CHANGELOG.md

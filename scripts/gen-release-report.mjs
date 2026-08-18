@@ -16,7 +16,7 @@ import { readFileSync, readdirSync, writeFileSync, existsSync, mkdirSync } from 
 import path from 'node:path'
 import { repoRoot } from './lib/source-fingerprint.mjs'
 import { unpackedDir } from './lib/build-attestation.mjs'
-import { measureInstallers } from './lib/release/gather.mjs'
+import { measureInstallers, selectInstaller } from './lib/release/gather.mjs'
 import { buildReleaseReport } from './lib/release/manifest.mjs'
 import { proveContainmentBound } from './lib/release/nsis-payload.mjs'
 import { resolveReleaseTools } from './lib/release/tool-discovery.mjs'
@@ -35,7 +35,9 @@ const embeddedJson = readFileSync(embeddedPath, 'utf8')
 const manifest = JSON.parse(embeddedJson)
 const installers = measureInstallers(root).map(i => ({ name: i.name, bytes: i.bytes, sha256: i.sha256 }))
 if (!installers.length) {
-  console.error('No installer .exe under release/; package first.')
+  // The reason matters: release/ is not cleaned, so "none selected" is usually a
+  // leftover installer whose name contains this version, not a missing build.
+  console.error(`No installer .exe under release/: ${selectInstaller(root).errors.join('; ')}`)
   process.exit(1)
 }
 

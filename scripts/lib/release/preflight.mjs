@@ -57,7 +57,7 @@ export function preflightRelease(state) {
 
   // 3. EXACT expected artifact set + versioned names (finding 9).
   const installers = state.installers || []
-  for (const e of verifyArtifactSet({ productName: state.productName, version: state.packageVersion, installers }).errors) add('artifact-set', e)
+  for (const e of verifyArtifactSet({ productName: state.productName, version: state.packageVersion, installers, selectionErrors: state.installerSelection?.errors || [] }).errors) add('artifact-set', e)
 
   // 4. Checksum manifest describes the bytes on disk.
   const ck = verifyChecksums(state.checksums, installers.map(b => ({ name: b.name, bytes: b.bytes, sha256: b.sha256 })))

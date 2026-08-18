@@ -103,11 +103,14 @@ node scripts/capture-evidence.mjs shared-state raw-shared.json
 # breaks the instant anything prints AFTER the report, and that no other tool
 # (jq, ConvertFrom-Json, JSON.parse) performs. `npm run --silent` does not fix it
 # either: it drops npm's banner only, not the child processes' output.
-# So capture the report itself, and keep -File — the harness must be entered the
-# way the npm script enters it (`-Command "& .\scripts\...ps1"` runs it in a child
-# scope, where the zip install action's GetNewClosure() scriptblock loses the
-# dot-sourced installer/lib helpers and the run dies on `Expand-ArchiveSafely :
-# The term ... is not recognized`).
+# So capture the report itself. -File below is simply what the npm script uses;
+# `-Command "& .\scripts\...ps1"` now works too. It used to be a hard requirement:
+# -Command runs the harness in a child scope, and the zip install action's
+# GetNewClosure() scriptblock resolved commands through its own module scope ->
+# GLOBAL only, so it lost the dot-sourced installer/lib helpers and died on
+# `Expand-ArchiveSafely : The term ... is not recognized`. The action now carries
+# that helper in as a captured command object (installer/bootstrap-companion.ps1),
+# so either entry form completes.
 npm run build:plugin
 $thin = powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/e2e-thin-network-installer.ps1 -EmitQaArtifact
 $report = $thin[[array]::LastIndexOf([object[]]$thin, '{')..($thin.Count - 1)]

@@ -94,12 +94,36 @@ function Select-CompatibleRelease {
 }
 
 function Get-GitHubApiHeaders {
+  # Anonymous api.github.com allows 60 requests/hour PER IP, shared by everyone
+  # behind it; a token raises that to 1000/hour for the token itself. That gap
+  # is what matters to Resolve-LatestCompatibleRelease, which is a 1+N caller:
+  # one release list, then one source read per candidate tag (up to 100 with
+  # per_page=100). On a shared CI runner a single resolve can therefore exhaust
+  # the anonymous budget on its own.
+  #
+  # Authorization is OPT-IN from the environment and nothing else: CI passes
+  # github.token, an end user has none and gets exactly the two headers this
+  # function has always returned, so the customer install path is unchanged.
+  # The token value is never logged - no caller prints this hashtable, and no
+  # error path echoes it - and that must stay true.
   [CmdletBinding()]
   param([Parameter(Mandatory)][string]$UserAgent)
-  return @{
+  $headers = @{
     'User-Agent' = $UserAgent
     'Accept'     = 'application/vnd.github+json'
   }
+  # GITHUB_TOKEN first (what Actions injects), GH_TOKEN second (what the gh CLI
+  # exports locally). Whitespace-only is treated as ABSENT: an empty `env:` entry
+  # in a workflow would otherwise send a bare `Bearer `, turning a working
+  # anonymous request into a hard 401 - failing worse than not opting in at all.
+  $token = $env:GITHUB_TOKEN
+  if ([string]::IsNullOrWhiteSpace($token)) { $token = $env:GH_TOKEN }
+  if (-not [string]::IsNullOrWhiteSpace($token)) {
+    # Trimmed because a token read from a file keeps its trailing newline, and a
+    # header value with a line break is rejected before it ever reaches GitHub.
+    $headers['Authorization'] = "Bearer $($token.Trim())"
+  }
+  return $headers
 }
 
 function Resolve-LatestCompatibleRelease {
@@ -123,9 +147,16 @@ function Resolve-LatestCompatibleRelease {
     -Headers $Headers `
     -Description 'GitHub release list'
 
+  # Captured as a VARIABLE for the same reason bootstrap-companion.ps1's zip
+  # install action is: GetNewClosure() carries variables, but binds the block to a
+  # fresh module session state whose command lookup falls back to GLOBAL only. A
+  # bare `Get-ReleaseSourceVersion` would resolve only when installer/lib was
+  # dot-sourced globally (`-File`), and not when it landed in a child scope
+  # (`-Command "& .\x.ps1"`). A command object is data, so it travels either way.
+  $sourceVersionReader = Get-Command -Name 'Get-ReleaseSourceVersion' -CommandType Function
   $resolver = {
     param($Release)
-    Get-ReleaseSourceVersion `
+    & $sourceVersionReader `
       -Repository $Repository `
       -Tag ([string]$Release.tag_name) `
       -Headers $Headers `

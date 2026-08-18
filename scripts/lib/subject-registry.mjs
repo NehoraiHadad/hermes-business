@@ -234,7 +234,7 @@ export const RECAPTURE = {
   'packaged-e2e': 'recapture via the package pipeline (HERMES_BUSINESS_E2E_APPROVAL=1 npm run package:win:qa) — its exact-artifact stage (scripts/e2e-exact-artifact.mjs) machine-writes the bound envelope; a plain e2e-installed-isolated pipe lacks build_nonce/release_binding_digest/installer_sha256 and requirePassProof rejects it',
   approval: 'recapture via the same package pipeline run (HERMES_BUSINESS_E2E_APPROVAL=1 npm run package:win:qa) — the exact-artifact stage machine-writes approval alongside packaged-e2e from the isolated denial probe',
   'shared-state': 'node scripts/e2e-hermes-shared-state.mjs then node scripts/capture-evidence.mjs shared-state <raw>',
-  'thin-installer': 'npm run package:thin-installer:qa then node scripts/capture-evidence.mjs thin-installer <raw>'
+  'thin-installer': 'recapture per docs/evidence/README.md "Regenerate" — run the harness (-File, as the npm script does) and write only its report TAIL to <raw> before node scripts/capture-evidence.mjs thin-installer <raw>; a plain `npm run package:thin-installer:qa > <raw>` redirect writes a mixed log, not JSON'
 }
 
 export const CATEGORIES = Object.keys(EVIDENCE_SUBJECTS)

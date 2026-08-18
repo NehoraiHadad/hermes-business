@@ -17,7 +17,7 @@ import { createHash } from 'node:crypto'
 import { readFileSync, existsSync } from 'node:fs'
 import path from 'node:path'
 import { repoRoot } from './lib/source-fingerprint.mjs'
-import { gatherReleaseState, measureInstallers } from './lib/release/gather.mjs'
+import { gatherReleaseState, measureInstallers, selectInstaller } from './lib/release/gather.mjs'
 import { preflightRelease } from './lib/release/preflight.mjs'
 import { computeReleaseBinding } from './lib/release/binding.mjs'
 import { makeStaging, stageSidecar, fingerprintCandidate, finalizeSidecars, recoverRelease } from './lib/release/staging.mjs'
@@ -39,7 +39,12 @@ if (recovered.recovered) {
 }
 
 const installers = measureInstallers(root)
-if (!installers.length) { console.error('No installer .exe under release/.'); process.exit(1) }
+if (!installers.length) {
+  // Never just "no installer" — release/ is not cleaned between runs, so the usual
+  // cause is an OLD installer whose name contains the new version string.
+  console.error(`No installer .exe under release/: ${selectInstaller(root).errors.join('; ')}`)
+  process.exit(1)
+}
 
 // Checksums content (the manifest the contract verifies) + human table.
 const entries = installers.map(e => ({ name: e.name, bytes: e.bytes, sha256: e.sha256 }))
