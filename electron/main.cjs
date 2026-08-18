@@ -12,11 +12,13 @@ const { recoverGuardActivation } = require('./whatsapp-guard-recovery.cjs')
 const { officialGatewayState } = require('./gateway-status.cjs')
 const { ensureGatewayBackground } = require('./google-setup.cjs')
 const { recoverIncompleteUpdate } = require('./hermes-update-recovery.cjs')
+const { recoverIncompleteCompanionUpdate } = require('./companion-apply.cjs')
 const { reconcilePartnerCheckinsOnStartup } = require('./business-partner.cjs')
 const { registerIpc } = require('./ipc.cjs')
 const { getRuntimeMode } = require('./runtime-mode.cjs')
 const { recordQaNamespaceApplied } = require('./qa-diagnostics.cjs')
 const { checkCompanionUpdate, isPassiveUpdateCheckDisabled, getLastCheckedAt } = require('./companion-update.cjs')
+const { decidePassiveCheck } = require('./companion-update-schedule.cjs')
 
 // Application entry point. Owns only process lifecycle; every feature lives in a
 // dedicated module (runtime, windows, ipc, google-setup, plugin-install,
@@ -95,30 +97,121 @@ if (runtimeFailClosed || !singleInstance) {
   })
 }
 
-// Passive companion self-update check timing (docs/specs/versioning.md §6.5): a
-// 60s post-ready delay and a 24h durable throttle. Named constants rather than
-// inline literals so the intent reads at the call site below.
-const PASSIVE_COMPANION_UPDATE_DELAY_MS = 60_000
-const PASSIVE_COMPANION_UPDATE_INTERVAL_MS = 24 * 60 * 60 * 1000
+// ── Passive companion self-update scheduling (docs/specs/versioning.md §6.5) ──
+// The DECISION — may a check run now, when should we wake again — is pure and
+// lives in companion-update-schedule.cjs (60s post-ready delay, 24h durable
+// throttle, clock-skew and corrupt-state handling, all unit-tested). Everything
+// below is the impure half only: a real timer, a real window, a real IPC push.
+//
+// The timer RE-ARMS itself after every run instead of being a single one-shot
+// (which is what shipped before: on a tray-resident app that never quits, a
+// machine left on for a fortnight performed exactly ONE check, at launch) and
+// instead of a single setInterval (Windows suspends timers across
+// sleep/hibernate; a 24h interval can fire once immediately on resume and then
+// drift). Waking early or late is harmless: the durable lastCheckedAt gate, not
+// the timer, decides whether a network call actually happens.
+let passiveUpdateTimer = null
+let passiveUpdateReadyAt = null
+let passiveUpdateInFlight = null
 
-// Runs the passive companion self-update check: skips entirely when disabled
-// (QA runtime override / TACHLES_DISABLE_UPDATE_CHECK — keeps the isolated
-// packaged E2E hermetic, R7) or when the durable last-check timestamp is still
-// fresh, then delegates to the SAME checkCompanionUpdate the explicit button
-// uses (fail-closed contract: never rejects). On `update-available` only, pushes
-// a ONE-SHOT event to the renderer so the support screen can show it without a
+function currentPassiveUpdateDecision() {
+  const disabled = isPassiveUpdateCheckDisabled(process.env)
+  return decidePassiveCheck({
+    now: Date.now(),
+    readyAt: passiveUpdateReadyAt,
+    disabled,
+    // A small local JSON read, skipped entirely when the check is disabled so an
+    // isolated/packaged E2E run touches no companion-update state at all (R7).
+    lastCheckedAt: disabled ? null : getLastCheckedAt()
+  })
+}
+
+// Runs the passive companion self-update check when the pure decision allows it,
+// then delegates to the SAME checkCompanionUpdate the explicit support-screen
+// button uses (fail-closed contract: never rejects). On `update-available` only,
+// pushes an event to the renderer so the support screen can show it without a
 // boot-time GitHub round trip; every other verdict is silently absorbed — the
-// passive path never surfaces "unknown"/"up-to-date" unprompted.
+// passive path never surfaces "unknown"/"up-to-date" unprompted. The renderer
+// side is already idempotent per target version (dismissedVersion +
+// announcedVersionRef in FullAppShell.tsx), so a repeated push cannot re-nag.
 async function runPassiveCompanionUpdateCheck() {
-  if (isPassiveUpdateCheckDisabled(process.env)) return
-  const lastCheckedAt = getLastCheckedAt()
-  if (typeof lastCheckedAt === 'number' && Date.now() - lastCheckedAt < PASSIVE_COMPANION_UPDATE_INTERVAL_MS) return
+  const decision = currentPassiveUpdateDecision()
+  if (!decision.check) return decision
   const verdict = await checkCompanionUpdate({ force: false })
-  if (verdict.status !== 'update-available') return
+  if (verdict.status !== 'update-available') return decision
   const mainWindow = getMainWindow()
   if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.webContents.isDestroyed()) {
     mainWindow.webContents.send('hermes:companion-update-available', verdict)
   }
+  return decision
+}
+
+// Single funnel for every trigger (timer tick, window show/restore/focus). The
+// in-flight promise collapses the burst a single restore emits — show + restore
+// + focus can all land within a few ms — into ONE check instead of three that
+// would race into companion-update's serial guard and resolve as `unknown`.
+// Never rejects: any failure is logged, never surfaced as a startup failure.
+function triggerPassiveCompanionUpdateCheck() {
+  if (passiveUpdateInFlight) return passiveUpdateInFlight
+  passiveUpdateInFlight = runPassiveCompanionUpdateCheck()
+    .catch(error => {
+      rememberLog(`Passive companion update check failed: ${error.message || error}`)
+    })
+    .finally(() => {
+      passiveUpdateInFlight = null
+    })
+  return passiveUpdateInFlight
+}
+
+function clearPassiveCompanionUpdateTimer() {
+  if (!passiveUpdateTimer) return
+  clearTimeout(passiveUpdateTimer)
+  passiveUpdateTimer = null
+}
+
+// Arms (or re-arms) the single passive timer. `null` — the disabled branch —
+// deliberately arms NOTHING, so a hermetic QA run leaves no timer behind.
+function armPassiveCompanionUpdateTimer(delayMs) {
+  clearPassiveCompanionUpdateTimer()
+  if (typeof delayMs !== 'number' || !Number.isFinite(delayMs)) return
+  passiveUpdateTimer = setTimeout(() => {
+    passiveUpdateTimer = null
+    void triggerPassiveCompanionUpdateCheck().then(() => {
+      // Re-decide from FRESH durable state: after a check ran, lastCheckedAt has
+      // moved, so the next wake naturally lands a full throttle out; after a skip
+      // it lands exactly when the current throttle expires. This is the
+      // self-healing property — the schedule is derived, never accumulated.
+      if (lifecycle.quitting) return
+      armPassiveCompanionUpdateTimer(currentPassiveUpdateDecision().nextWakeInMs)
+    })
+  }, delayMs)
+  // Belt and braces with the before-quit clear below: an unref'd timer can never
+  // hold the process open against a quit. Electron's main process is driven by
+  // the platform message loop, not by a non-empty libuv handle set, so unref'ing
+  // does not shorten the app's life.
+  if (typeof passiveUpdateTimer.unref === 'function') passiveUpdateTimer.unref()
+}
+
+// "The user came back after days" — the case a pure timer cannot cover well on a
+// tray-resident app. Registered at module load so it also covers a window the
+// tray recreates after the previous one was destroyed; it stays inert until the
+// scheduler starts (the decision returns `not-started` while readyAt is null)
+// and through the 60s post-ready quiet period, which is what absorbs the boot's
+// own show/focus. All three events are observed because none alone is reliable
+// here: hideAssistant() parks the window OFF-SCREEN rather than hiding it (so
+// `show` may not fire on the way back), `restore` only follows a real minimize,
+// and `focus` can be refused by Windows. The burst they can form is collapsed by
+// triggerPassiveCompanionUpdateCheck, and the durable throttle governs the rest —
+// this is never a forced check.
+if (!runtimeFailClosed && singleInstance) {
+  app.on('browser-window-created', (_event, window) => {
+    const onUserReturned = () => {
+      void triggerPassiveCompanionUpdateCheck()
+    }
+    window.on('show', onUserReturned)
+    window.on('restore', onUserReturned)
+    window.on('focus', onUserReturned)
+  })
 }
 
 app.whenReady().then(async () => {
@@ -199,6 +292,26 @@ app.whenReady().then(async () => {
   } catch (error) {
     rememberLog(`Update recovery on launch failed: ${error.message || error}`)
   }
+  // Same discipline, second surface: reconcile a תכל'ס (companion) self-update that
+  // was launched but never confirmed. The NSIS installer runs silently, kills this
+  // very process, and reports nothing back (`/SD IDCANCEL` on its retry dialogs,
+  // `ShowInstDetails nevershow`), so a launched update is UNOBSERVABLE from the
+  // process that started it — the only honest place to learn the outcome is here,
+  // at the next launch, by comparing the running app.getVersion() to the journal's
+  // targetVersion. Contractually non-throwing; the try/catch is belt-and-braces.
+  try {
+    const companionRecovery = await recoverIncompleteCompanionUpdate()
+    if (companionRecovery.outcome !== 'none') {
+      rememberLog(`Companion update recovery on launch: ${companionRecovery.outcome}`)
+      // `resumable` is not a failure — a verified installer is simply waiting for
+      // the owner's consent, so it must never be surfaced as a runtime error.
+      if (companionRecovery.detail && companionRecovery.outcome !== 'resumable') {
+        patchRuntimeState({ error: companionRecovery.detail })
+      }
+    }
+  } catch (error) {
+    rememberLog(`Companion update recovery failed: ${error.message || error}`)
+  }
   // Make the official cron store agree with the persisted partner check-in intent
   // on every launch (durable + idempotent, no parallel scheduler). Non-fatal.
   try {
@@ -209,17 +322,14 @@ app.whenReady().then(async () => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
-  // Passive תכל'ס (companion) self-update check (docs/specs/versioning.md §6.5):
-  // fired 60s after ready so it never competes with the Hermes startup sequence
-  // above, and only when the durable throttle (companion-update-state.json) shows
-  // the last successful check is more than 24h old — a plain local read, no
-  // network call just to decide whether to check. Never blocks/awaited here;
+  // Start the passive תכל'ס (companion) self-update schedule (§6.5). Recording
+  // `ready` is all that happens here: the first wake (60s out, so it never
+  // competes with the Hermes startup sequence above) comes from the same pure
+  // decision every later wake does, and each run re-arms the next one for as long
+  // as the app lives — which, tray-resident, can be weeks. Never blocked/awaited;
   // any failure is caught and logged, never surfaced as a startup failure.
-  setTimeout(() => {
-    runPassiveCompanionUpdateCheck().catch(error => {
-      rememberLog(`Passive companion update check failed: ${error.message || error}`)
-    })
-  }, PASSIVE_COMPANION_UPDATE_DELAY_MS)
+  passiveUpdateReadyAt = Date.now()
+  armPassiveCompanionUpdateTimer(currentPassiveUpdateDecision().nextWakeInMs)
 }).catch(error => {
   // A rejection here previously died as a silent unhandled rejection with no
   // window. Record it durably and surface it to any UI that does come up.
@@ -237,6 +347,10 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', event => {
+  // Drop the passive update timer first, unconditionally: a quit that is deferred
+  // below (while Hermes stops) must not let a wake land mid-teardown and re-arm
+  // itself behind the quit.
+  clearPassiveCompanionUpdateTimer()
   if (lifecycle.quitting) return
   lifecycle.quitting = true
   if (hasRunningProcess()) {

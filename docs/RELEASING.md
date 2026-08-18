@@ -52,7 +52,7 @@ of `pilot` everywhere below, plus a code-signing certificate
   Authentication is per-entry and bidirectional (`scripts/lib/release/
   provenance.mjs`): every ledger entry must match its committed trust-root
   digest AND every trust-root version must still be present in the ledger, so
-  these two files move in lockstep from here on (step 9). Both are release
+  these two files move in lockstep from here on (step 10). Both are release
   dirty-inputs — they must be COMMITTED, not just written, before the pipeline
   will accept them.
 
@@ -133,7 +133,53 @@ of `pilot` everywhere below, plus a code-signing certificate
    node scripts/verify-version-tag.mjs v<version>
    ```
 
-8. **Create the GitHub Release — as a PRERELEASE.** Never publish before the
+8. **Sign the update manifest (עוגן האמון של העדכון מתוך האפליקציה).** The
+   installer is UNSIGNED and always will be (no code-signing certificate), so
+   the ONLY thing that lets an installed app tell "the installer we published"
+   from "an .exe someone handed it" is a detached Ed25519 signature over the
+   installer's SHA-256. `release/update-manifest.json` is that statement, and
+   it is per-release on purpose: `build/trust-roots.json` is RETROSPECTIVE (it
+   can only pin versions that already shipped), so an installed v0.4.0-alpha.7
+   can never contain anything about the alpha.8 it is being offered.
+
+   `npm run package:win:pilot` already produced and staged it in step 5 —
+   atomically, in the same all-or-nothing transaction as `checksums.json` /
+   `SHA256SUMS.txt` / `ACCEPTANCE.md` — IF a signing key was present on the
+   build machine. Check:
+
+   ```powershell
+   Get-Content release\update-manifest.json
+   ```
+
+   If it is missing (finalize prints a loud `WARNING: no signed
+   update-manifest.json`, and `release/ACCEPTANCE.md` records it as **Signed
+   update manifest: ABSENT**), sign it now:
+
+   ```powershell
+   node scripts/sign-update-manifest.mjs --channel pilot
+   ```
+
+   - המפתח הפרטי יושב מחוץ למאגר, בנתיב
+     `%USERPROFILE%\.tachles-release\update-signing-key.pem` (override: `--key`
+     או `TACHLES_UPDATE_SIGNING_KEY`).
+     It is generated once by `node scripts/gen-update-key.mjs`, it is
+     **בלתי ניתן לשחזור** if lost, and it must never be committed — only its
+     public half ships, inside `electron/update-trust.cjs` (a multi-key map, so
+     a future rotation is not a flag day).
+   - The signer verifies its OWN output against that shipped public key before
+     writing anything: a manifest the app cannot verify is worse than none.
+   - `installer.sha256` must equal `release/checksums.json` (and the ledger
+     entry, once step 10 records it). A disagreement is a hard failure, never a
+     warning — three independent records of one file that disagree mean the
+     release tree is not the one we think we cut.
+   - The manifest is **absent or signed — never present-and-unsigned.** An
+     unsigned placeholder would teach the updater to accept unsigned
+     statements, which is the entire attack.
+   - Upload it as a release asset alongside `SHA256SUMS.txt` in the next step;
+     an app that cannot fetch it must refuse to auto-install and fall back to
+     the manual download.
+
+9. **Create the GitHub Release — as a PRERELEASE.** Never publish before the
    pipeline in step 5 succeeded (draft first if you're not 100% sure, then
    publish once you've re-checked the assets):
 
@@ -141,6 +187,7 @@ of `pilot` everywhere below, plus a code-signing certificate
    gh release create v<version> `
      "release/Tachles-Setup-<version>.exe" `
      "release/SHA256SUMS.txt" `
+     "release/update-manifest.json" `
      --title "Tachles <version> (Alpha — Pilot)" `
      --prerelease `
      --notes-file <path-to-a-temp-file-containing>
@@ -164,45 +211,45 @@ of `pilot` everywhere below, plus a code-signing certificate
      > מומלץ לאמת את ה־SHA-256 של הקובץ מול `SHA256SUMS.txt` המצורף לאותה
      > הוצאה.
 
-9. **Populate the version-immutability ledger — BOTH files.** After the
-   Release is published (asset bytes are now public and immutable), record its
-   SHA-256 — already computed for you in `release/SHA256SUMS.txt` /
-   `release/checksums.json` — in BOTH halves of the ledger pair (the
-   authentication in `scripts/lib/release/provenance.mjs` is per-entry and
-   bidirectional; a ledger entry without its matching committed trust root, or
-   vice versa, fails the WHOLE ledger closed):
+10. **Populate the version-immutability ledger — BOTH files.** After the
+    Release is published (asset bytes are now public and immutable), record its
+    SHA-256 — already computed for you in `release/SHA256SUMS.txt` /
+    `release/checksums.json` — in BOTH halves of the ledger pair (the
+    authentication in `scripts/lib/release/provenance.mjs` is per-entry and
+    bidirectional; a ledger entry without its matching committed trust root, or
+    vice versa, fails the WHOLE ledger closed):
 
-   `release-ledger.json` (repo root) — add the entry, never drop prior ones
-   (the ledger is never-shrinking):
+    `release-ledger.json` (repo root) — add the entry, never drop prior ones
+    (the ledger is never-shrinking):
 
-   ```json
-   {
+    ```json
+    {
      "source": "github-asset",
      "entries": {
        "<version>": { "sha256": "<sha256 from SHA256SUMS.txt>", "released_at": "<ISO date>" }
      }
-   }
-   ```
+    }
+    ```
 
-   `build/trust-roots.json` — the committed known-good digest for the same
-   version:
+    `build/trust-roots.json` — the committed known-good digest for the same
+    version:
 
-   ```json
-   {
+    ```json
+    {
      "github_asset_sha256": {
        "<version>": "<same sha256>"
      }
-   }
-   ```
+    }
+    ```
 
-   Commit them together:
+    Commit them together:
 
-   ```powershell
-   git add release-ledger.json build/trust-roots.json
-   git commit -m "chore(release): record v<version> pilot asset in the release ledger"
-   ```
+    ```powershell
+    git add release-ledger.json build/trust-roots.json
+    git commit -m "chore(release): record v<version> pilot asset in the release ledger"
+    ```
 
-10. **Verify closure.**
+11. **Verify closure.**
 
     ```powershell
     node scripts/verify-release-contract.mjs --channel pilot

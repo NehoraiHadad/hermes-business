@@ -104,8 +104,10 @@ export function FullAppShell({
   }, [feed, feedSeenAt])
 
   // Passive companion-update surface (B1 fix, docs/specs/versioning.md §7.2): before
-  // this, the ONLY subscriber to the main process's one-shot passive push
-  // (hermes:companion-update-available, fired at most once ~60s after boot) was
+  // this, the ONLY subscriber to the main process's passive push
+  // (hermes:companion-update-available — first possible ~60s after boot, then
+  // whenever the main process's re-arming 24h schedule or a return from the tray
+  // clears the durable throttle) was
   // useCompanionUpdate(), mounted exclusively inside SupportUpdatePanel — i.e. only
   // while the owner already had the support screen open. A push that arrived while
   // they were anywhere else in the app was silently dropped: no toast, no nav
@@ -147,6 +149,16 @@ export function FullAppShell({
 
   const updateIndicatorVisible = pushedVersion !== null && pushedVersion !== dismissedVersion
 
+  // "Not now" from the banner below: the SAME seen-marker the support screen
+  // writes (one key, one meaning), so a version put aside here never
+  // re-announces from anywhere — exactly the one-time-per-version contract
+  // announcedVersionRef enforces for the toast.
+  const dismissPushedVersion = () => {
+    if (pushedVersion === null) return
+    writeDismissedVersion(pushedVersion)
+    setDismissedVersionState(pushedVersion)
+  }
+
   return (
     <div className="app-shell">
       <Sidebar
@@ -169,6 +181,30 @@ export function FullAppShell({
           onMini={onMini}
           hasUpdateIndicator={updateIndicatorVisible}
         />
+        {/* The toast says an update exists and then fades; the gear dot says it
+            quietly and forever. Neither one takes the owner anywhere, so the
+            announcement used to end in "פרטים במסך תמיכה" and leave them to find
+            it. This strip is the CTA for that: same visibility rule as the gear
+            dot (so it disappears the moment the version is marked seen — on
+            entering the support screen or on "לא עכשיו"), never a blocking
+            modal, and it navigates rather than starting anything by itself:
+            downloading and installing stay behind their own explicit consent in
+            the support panel. */}
+        {updateIndicatorVisible ? (
+          <div className="update-banner" role="status">
+            <span className="update-banner__text">
+              יש גרסה חדשה של תכל'ס{pushedVersion ? <> (<bdi dir="ltr">{pushedVersion}</bdi>)</> : null}
+            </span>
+            <div className="update-banner__actions">
+              <button className="primary-button primary-button--small" onClick={() => setScreen('support')}>
+                מעבר לעדכון
+              </button>
+              <button className="ghost-button" onClick={dismissPushedVersion}>
+                לא עכשיו
+              </button>
+            </div>
+          </div>
+        ) : null}
         {/* `chatScreen` is wrapped in FeedUnseenContext below: the home screen's
             "מצב העסק" strip reads the unseen count from there — the same
             `feedUnseenCount` the Sidebar badge above renders, PUBLISHED rather

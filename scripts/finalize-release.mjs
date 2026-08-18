@@ -23,6 +23,7 @@ import { computeReleaseBinding } from './lib/release/binding.mjs'
 import { makeStaging, stageSidecar, fingerprintCandidate, finalizeSidecars, recoverRelease } from './lib/release/staging.mjs'
 import { parseChannel } from './lib/parse-channel.mjs'
 import { requiresFullRigor } from './lib/release/channel-policy.mjs'
+import { prepareUpdateManifest, UPDATE_MANIFEST_FILE } from './lib/release/update-signing.mjs'
 
 const root = repoRoot()
 const channel = parseChannel()
@@ -67,6 +68,44 @@ const SIGNING_NONBLOCKING = new Set(['unsigned-public', 'untrusted-timestamp-pub
 const blocking = channel !== 'public' ? verdict.failures.filter(f => !SIGNING_NONBLOCKING.has(f.code)) : verdict.failures
 const gatePassed = blocking.length === 0
 
+// ---- Runtime update trust anchor (update-manifest.json) ---------------------
+// The in-app one-click updater cannot lean on the build-time ledger:
+// build/trust-roots.json is RETROSPECTIVE (it can only pin versions that already
+// shipped), so an installed v0.4.0-alpha.7 has no way to know anything about the
+// v0.4.0-alpha.8 it is being offered. The trust anchor for the RUNTIME is instead
+// a stable public key compiled into the app plus this per-release signed
+// statement over the installer's digest.
+//
+// POLICY (deliberate, and deliberately loud):
+//   * a missing manifest does NOT hard-block the release. There is no signing key
+//     in CI yet and pilot must keep shipping; blocking would only tempt someone to
+//     disable the check. What it must never be is SILENT — the omission is printed
+//     as a warning here AND recorded in the acceptance appendix, so "this release
+//     has no runtime update trust anchor" is a stated fact, not an absence nobody
+//     notices.
+//   * it is never present-and-unsigned. A placeholder would train the updater (and
+//     us) to accept an unsigned statement, which is the entire attack.
+//   * a manifest that exists but does not verify, or whose installer digest
+//     disagrees with checksums.json / release-ledger.json, is a HARD failure:
+//     nothing is promoted. Three independent records of one file that disagree
+//     mean the release tree is not the one we think we cut.
+const updateManifest = prepareUpdateManifest({ root, version: state.packageVersion, channel, checksums, ledger: state.rawLedger })
+if (updateManifest.status === 'invalid') {
+  console.error(`Refusing to finalize: update manifest is invalid [${updateManifest.code}] ${updateManifest.detail}\n` +
+    `Nothing was promoted. Fix or delete release/${UPDATE_MANIFEST_FILE} and re-run.`)
+  process.exit(1)
+}
+if (updateManifest.status === 'absent') {
+  console.warn(`WARNING: no signed ${UPDATE_MANIFEST_FILE} for this release (${updateManifest.detail}).\n` +
+    '  The in-app updater will have NO cryptographic trust anchor for this version and must refuse to auto-install it.\n' +
+    '  Generate a key with `node scripts/gen-update-key.mjs`, paste its public key into electron/update-trust.cjs, rebuild, and re-run.')
+} else {
+  console.log(`Update manifest ${updateManifest.status}: ${updateManifest.detail}`)
+}
+const updateAnchorLine = updateManifest.status === 'absent'
+  ? `ABSENT — no runtime update trust anchor (${updateManifest.detail}); the in-app updater must refuse this version`
+  : `PRESENT (${updateManifest.status}) — signed by \`${updateManifest.keyId}\`, ${updateManifest.detail}`
+
 // Acceptance report body (canonical doc + artifact-bound appendix).
 const binding = state.releaseReport?.release_binding_digest
   ? { digest: state.releaseReport.release_binding_digest }
@@ -77,7 +116,8 @@ const acceptance = `${canonicalDoc}\n\n\n---\n\n## Appendix A — Build artifact
   `- **Release binding digest:** \`${binding.digest}\`\n` +
   `- **App version:** \`${state.packageVersion}\`  •  **Channel:** \`${channel}\`  •  **Distributable:** \`${verdict.distributable}\`\n` +
   `- **Version immutability:** ${verdict.immutability?.label || 'n/a'}\n` +
-  `- **Installer↔payload binding:** ${state.releaseReport?.payload_binding?.proven ? 'PROVEN' : `NOT proven (${state.releaseReport?.payload_binding?.reason || 'no report'})`}\n\n` +
+  `- **Installer↔payload binding:** ${state.releaseReport?.payload_binding?.proven ? 'PROVEN' : `NOT proven (${state.releaseReport?.payload_binding?.reason || 'no report'})`}\n` +
+  `- **Signed update manifest:** ${updateAnchorLine}\n\n` +
   `| Installer | Bytes | SHA-256 |\n|---|---|---|\n${digestRows}\n`
 
 // Stage, then promote all-or-nothing.
@@ -89,6 +129,11 @@ const staged = [
 ]
 // Promote the staged release report in the SAME transaction (no direct overwrite).
 if (stagedReportJson) staged.push(stageSidecar(stagingDir, 'release-report.json', stagedReportJson))
+// The update manifest is the FOURTH official sidecar: it is promoted, or not
+// promoted, atomically WITH checksums/SHA256SUMS/ACCEPTANCE. A manifest that
+// survived a failed gate would describe a build we refused to bless — and it is
+// the one file a user's app would trust blindly.
+if (updateManifest.json) staged.push(stageSidecar(stagingDir, UPDATE_MANIFEST_FILE, updateManifest.json))
 const candidates = installers.map(i => fingerprintCandidate(path.join(releaseDir, i.name)))
 const result = finalizeSidecars({ stagingDir, targetDir: releaseDir, staged, candidates, gatePassed })
 

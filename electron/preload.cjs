@@ -101,5 +101,22 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
     const listener = (_event, status) => callback(status)
     ipcRenderer.on('hermes:companion-update-available', listener)
     return () => ipcRenderer.removeListener('hermes:companion-update-available', listener)
+  },
+  // The two CONSENTED update actions (§7). Note the deliberate absence of any
+  // argument: unlike checkCompanionUpdate's `force`, these pass NOTHING. Main
+  // derives every operand — release, asset URLs, installer path — from artifacts
+  // it produced itself (the verdict and the durable journal), so a compromised
+  // renderer cannot redirect a download or name a file to execute. See
+  // electron/ipc-companion-update.cjs.
+  downloadCompanionUpdate: () => invoke('hermes:companion-download'),
+  cancelCompanionDownload: () => invoke('hermes:companion-download-cancel'),
+  // Resolves only if the apply is REFUSED; on success the app is quitting and
+  // this promise never settles.
+  applyCompanionUpdate: () => invoke('hermes:companion-apply'),
+  companionUpdateState: () => invoke('hermes:companion-update-state'),
+  onCompanionDownloadProgress: callback => {
+    const listener = (_event, progress) => callback(progress)
+    ipcRenderer.on('hermes:companion-download-progress', listener)
+    return () => ipcRenderer.removeListener('hermes:companion-download-progress', listener)
   }
 })

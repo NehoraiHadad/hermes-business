@@ -12,16 +12,19 @@
 // closed rather than measuring whatever happens to be present.
 
 import { versionFromInstallerName } from './checksums.mjs'
+import artifactName from '../../../electron/update-artifact-name.cjs'
 
 /**
  * The single installer basename electron-builder is expected to emit. Fixed
- * ASCII template — does NOT depend on productName (see D3). The parameter is
- * kept for call-site compatibility / signature stability but is intentionally
- * unused.
+ * ASCII template — does NOT depend on productName (see D3).
+ *
+ * RE-EXPORTED from electron/update-artifact-name.cjs, not implemented here: the
+ * in-app updater must pick the release ASSET by this exact name at RUNTIME, and
+ * `scripts/**` is not packaged into app.asar (build.files ships `electron/**`).
+ * One template, one place — the release gate and the updater can never drift
+ * apart about which file is "the installer".
  */
-export function expectedInstallerName(_productName, version) {
-  return `Tachles-Setup-${version}.exe`
-}
+export const { expectedInstallerName } = artifactName
 
 /**
  * Verify the measured installer set against the expected one.

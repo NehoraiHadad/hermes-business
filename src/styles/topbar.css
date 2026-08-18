@@ -167,3 +167,25 @@
   margin-inline-start: auto;
   color: var(--muted);
 }
+
+/* Passive companion-update CTA strip (docs/specs/versioning.md §7.2). Sits under
+   the topbar, inside the RTL flow, and never overlays content — it is an offer,
+   not a modal. Same visibility rule as the topbar's update dot. */
+.update-banner {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 34px 10px 30px;
+  color: var(--amber-ink);
+  background: #fbf4e8;
+  border-bottom: 1px solid var(--line);
+  font-size: 12.5px;
+}
+
+.update-banner__actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}

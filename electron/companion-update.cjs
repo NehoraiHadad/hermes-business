@@ -5,11 +5,13 @@ const { createSerialGuard } = require('./ipc-guards.cjs')
 const { rememberLog } = require('./logs.cjs')
 const { getQaRuntimeOverride } = require('./qa-runtime.cjs')
 const {
-  selectEligibleRelease,
+  scanReleases,
   decideVerdict,
+  linkHeaderHasNextPage,
   sanitizeReleaseNotes,
   sanitizeDownloadUrl
 } = require('./companion-update-core.cjs')
+const { selectUpdateAssets } = require('./companion-download-core.cjs')
 
 // Impure wiring for the תכל'ס (companion) self-update CHECK — the ONLY module
 // that talks to the network for this feature. Decisions (semver, verdict,
@@ -17,8 +19,12 @@ const {
 // fetch, the serial guard, the in-memory + durable throttle, and the exact
 // GitHub request shape (docs/specs/versioning.md §6.1).
 //
-// This is a self-update CHECK ONLY (see D4/§10): it never downloads or installs
-// a binary. The renderer never talks to api.github.com directly (D5) — this
+// This is the self-update CHECK (see D4/§10): it never downloads or installs a
+// binary. It does now RESOLVE the release's asset URLs (installer + signed
+// manifest) into the verdict, so the separate managed-download engine
+// (companion-download.cjs) has an allow-listed target to fetch — resolving a URL
+// is still not fetching one, and the manual `downloadUrl` fallback is untouched.
+// The renderer never talks to api.github.com directly (D5) — this
 // module is main-process-only and, once wired in stage 3, is the sole thing
 // `hermes:companion-update` (IPC) calls into.
 
@@ -114,6 +120,34 @@ function getLastCheckedAt(deps = {}) {
   return state && typeof state.lastCheckedAt === 'number' ? state.lastCheckedAt : null
 }
 
+/**
+ * Read the `Link` response header WITHOUT deciding anything about it. Kept
+ * separate (and returning `readable` alongside the value) because "no Link
+ * header on a readable response" and "could not read headers at all" are two
+ * different facts that must not collapse into the same `null`: the first proves
+ * there is no next page, the second proves nothing.
+ */
+function readPaginationLink(response) {
+  const headers = response ? response.headers : null
+  if (!headers || typeof headers.get !== 'function') return { readable: false, value: null }
+  try {
+    return { readable: true, value: headers.get('link') }
+  } catch {
+    return { readable: false, value: null }
+  }
+}
+
+/**
+ * One GET, no pagination following (§6.1 keeps this to a single request). The
+ * result therefore reports BOTH the payload and whether it was the whole story:
+ * `{ releases, truncated }`.
+ *
+ * `truncated` is the completeness signal the pure decision layer needs. It is
+ * `false` ONLY on positive proof: the response's headers were readable AND
+ * carried no `rel="next"` link, i.e. GitHub itself says these 20 are all there
+ * are. An unreadable/absent headers object fails CLOSED to `truncated: true` —
+ * we could not look, so we cannot claim we saw everything.
+ */
 async function fetchReleases(fetchImpl) {
   const response = await fetchImpl(RELEASES_URL, {
     headers: {
@@ -127,9 +161,10 @@ async function fetchReleases(fetchImpl) {
     const status = response ? response.status : 'no-response'
     throw new Error(`GitHub releases request failed: HTTP ${status}`)
   }
+  const link = readPaginationLink(response)
   const payload = await response.json()
   if (!Array.isArray(payload)) throw new Error('GitHub releases payload is not an array')
-  return payload
+  return { releases: payload, truncated: !link.readable || linkHeaderHasNextPage(link.value) }
 }
 
 // Build the scalar verdict from a proven decision + the winning raw release.
@@ -146,9 +181,31 @@ function buildAvailableVerdict(current, checkedAt, release) {
   if (typeof release.name === 'string') verdict.releaseName = release.name.slice(0, 200)
   const notes = sanitizeReleaseNotes(release.body)
   if (notes) verdict.notes = notes
+  // The MANUAL fallback link (the release page) — unchanged, and never removed:
+  // it is what the user gets whenever the managed path is unavailable, and the
+  // only link `hermes:open-external` ever opens.
   const downloadUrl = sanitizeDownloadUrl(release.html_url)
   if (downloadUrl) verdict.downloadUrl = downloadUrl
   if (typeof release.published_at === 'string') verdict.publishedAt = release.published_at
+
+  // The MANAGED path needs the actual ASSETS, not the release page: the pinned
+  // installer (`Tachles-Setup-<version>.exe`) and the signed manifest that
+  // authenticates it. Both URLs are allow-listed by the pure layer against
+  // `.../releases/download/` before they ever reach the verdict.
+  //
+  // A release that lacks either asset is NOT an error — it is an older release,
+  // or one published without a manifest, and the honest reading is "managed
+  // update unavailable here, use the manual link". So the verdict SAYS that
+  // (`managedUpdate:false` + a reason code) instead of silently omitting the
+  // fields, which would be indistinguishable from a bug in this function.
+  const assets = selectUpdateAssets({ assets: release.assets, version: verdict.latest })
+  verdict.managedUpdate = assets.ok
+  if (assets.ok) {
+    verdict.installerUrl = assets.installerUrl
+    verdict.manifestUrl = assets.manifestUrl
+  } else {
+    verdict.managedUpdateReason = assets.code
+  }
   return verdict
 }
 
@@ -168,10 +225,14 @@ let memoryCache = null
  * live network.
  *
  * Fail-closed contract (docs/specs/versioning.md §8): this function NEVER
- * rejects. Any failure — offline/timeout, non-200, malformed JSON, no
- * parseable release tag, an empty release list, or a concurrent in-flight
- * check — resolves to `{ status: 'unknown', ... }`. `up-to-date` is returned
- * ONLY on a complete positive proof (see companion-update-core.decideVerdict).
+ * rejects. Any failure — offline/timeout, non-200, malformed JSON, an
+ * unparseable running version, an INCOMPLETE scan that found no candidate, or a
+ * concurrent in-flight check — resolves to `{ status: 'unknown', ... }`.
+ * `up-to-date` is returned ONLY on a complete positive proof: either the
+ * running version equals the winning release, or a provably COMPLETE scan of a
+ * NON-EMPTY census (untruncated listing, every published in-channel tag
+ * orderable) found nothing newer at all. An empty listing is content-free and
+ * stays `unknown` (see companion-update-core.decideVerdict).
  */
 async function checkCompanionUpdate({ force = false } = {}, deps = {}) {
   const {
@@ -189,19 +250,26 @@ async function checkCompanionUpdate({ force = false } = {}, deps = {}) {
         return memoryCache.verdict
       }
 
-      let releases
+      let scanned
       try {
-        releases = await fetchReleases(fetchImpl)
+        scanned = await fetchReleases(fetchImpl)
       } catch (error) {
         rememberLog(`Companion update check failed (network/parse): ${error.message || error}`)
         return unknownVerdict(current, now())
       }
 
-      let eligible
       let decision
       try {
-        eligible = selectEligibleRelease(releases, current)
-        decision = decideVerdict(current, eligible)
+        // The impure layer only supplies FACTS — the listing, how many entries
+        // it could not order, and whether the listing was truncated. Whether
+        // those facts add up to a complete census (and therefore to a provable
+        // `up-to-date` with no candidate) is decided entirely in the pure core.
+        const scan = scanReleases(scanned.releases, current)
+        decision = decideVerdict(current, scan.eligible, {
+          truncated: scanned.truncated,
+          examined: scan.examined,
+          undecided: scan.undecided
+        })
       } catch (error) {
         rememberLog(`Companion update check failed (decision): ${error.message || error}`)
         return unknownVerdict(current, now())
@@ -212,10 +280,14 @@ async function checkCompanionUpdate({ force = false } = {}, deps = {}) {
       if (decision.status === 'update-available') {
         verdict = buildAvailableVerdict(current, checkedAt, decision.release)
       } else if (decision.status === 'unknown') {
-        // No eligible release found (empty/all-filtered list) or an unparseable
-        // current version — a fetch that succeeded but proved nothing still
-        // carries the same user-facing "can't check right now" copy as a
-        // network/parse failure (§7.1, §8).
+        // A fetch that SUCCEEDED but proved nothing — an unparseable current
+        // version, an INCOMPLETE scan (truncated listing / entries whose tags
+        // could not be ordered) that found no candidate, or an EMPTY census. It carries the same
+        // user-facing "can't check right now" copy as a network failure (§7.1,
+        // §8) because the honest state is identical: no answer was established.
+        // Note what is NOT here any more: a COMPLETE scan with no candidate is
+        // an answer ("nothing newer is published for you") and takes the
+        // `up-to-date` branch below.
         verdict = unknownVerdict(current, checkedAt)
       } else {
         verdict = { status: decision.status, current, checkedAt }
