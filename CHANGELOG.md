@@ -10,6 +10,55 @@
 
 ---
 
+## [0.4.0-alpha.8] - 2026-08-18
+
+### מה חדש (למשתמש)
+
+- **עדכון בלחיצה אחת.** עד היום, גרסה חדשה של תכל'ס דרשה הורדה ידנית מהדפדפן
+  והתקנה עצמאית. מעכשיו האפליקציה מורידה את העדכון בעצמה, מוודאת שהוא באמת
+  הגיע מאיתנו ולא נפגם בדרך, ומתקינה — ואז עולה מחדש. הכול בלחיצה, בלי דפדפן.
+- **אתם מחליטים מתי.** שום דבר לא מתעדכן מאחורי הגב: לחיצה אחת מורידה ובודקת,
+  ורק לחיצה שנייה מתקינה — עם הסבר מראש מה עומד לקרות וכמה זמן זה ייקח. עדכון
+  שהורד ומחכה לא יתקין את עצמו, גם לא בהפעלה הבאה.
+- **התראה שבאמת מגיעה.** עד היום, מי שמשאיר את תכל'ס פתוח ברקע לאורך זמן כמעט
+  לא קיבל הודעה על גרסה חדשה — הבדיקה רצה רק ברגע ההפעלה. עכשיו הבדיקה חוזרת
+  מעצמה, וגם כשחוזרים לחלון אחרי כמה ימים.
+- **פחות "לא ידוע" מיותר.** מסך התמיכה הציג לפעמים "לא ניתן לבדוק עדכונים"
+  גם כשהבדיקה עברה בהצלחה והכול היה מעודכן. עכשיו הוא אומר "מעודכן" כשזה מה
+  שקרה — ושומר את "לא ידוע" למקרים שבהם באמת לא הצלחנו לבדוק.
+
+### Technical
+
+- **Certless runtime trust anchor.** Authenticode is unavailable, so each release
+  now ships `update-manifest.json` — an Ed25519-signed statement over the
+  installer's SHA-256 — staged atomically with the other sidecars. The public key
+  ships in `electron/update-trust.cjs`; the private half lives outside the repo.
+  `build/trust-roots.json` could not serve this role: it is retrospective and can
+  only pin versions that already shipped.
+- **Two-step verification, order-dependent.** The signed manifest is authenticated
+  first (signature + expected-version match, blocking replay/downgrade of a
+  genuinely-signed older manifest), and only then are the streamed bytes hashed
+  against it. A ~104 MB installer is hashed chunk by chunk, written to a temp path,
+  fsynced, and renamed into place only after the digest verifies.
+- **Silent apply, journal-reconciled.** `/S --updated --force-run /currentuser`;
+  all four flags load-bearing (`--updated` alone preserves the Hebrew shortcuts and
+  suppresses the app-running dialog, `--force-run` is the only silent-relaunch path
+  for an assisted installer, `/currentuser` avoids a UAC prompt for per-machine
+  installs). The installer kills its own parent, so the outcome is unobservable in
+  process and is instead reconciled at the next launch against the durable journal,
+  gated on both foreground and gateway deep health.
+- **No renderer input on either action.** The download and apply IPC handlers take
+  no arguments; every operand is derived in main from the verdict and the journal.
+- **Check-surface fixes.** The passive check was a one-shot `setTimeout` on a
+  tray-resident app (one check per launch, forever); it now re-arms and also fires
+  on return from the tray. `decideVerdict` distinguishes a complete non-empty
+  census (`up-to-date`) from a truncated, undecidable or empty one (`unknown`).
+- **Guards repaired.** `preload.test.ts`'s "every bridged method" check excluded
+  subscribers by a hardcoded list; `hermes-bridge.ts`'s exhaustiveness guard was
+  unconditionally `never` and caught nothing. Both now fail as intended.
+
+---
+
 ## [0.4.0-alpha.7] - 2026-08-17
 
 ### מה חדש (למשתמש)
