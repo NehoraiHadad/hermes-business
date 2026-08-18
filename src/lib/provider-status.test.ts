@@ -21,6 +21,70 @@ describe('provider status (honest readiness)', () => {
     expect(status).toMatchObject({ provider_ready: true, provider_state: 'usable', provider_label: 'OpenAI Codex' })
   })
 
+  it('never leaks the engine catalog\'s English status doctrine into the label', () => {
+    // The engine's claude-code entry is literally named with a usage-credits
+    // warning (hermes_cli/web_server.py catalog) — the user-facing label must
+    // be the short brand name, never that sentence.
+    const status = resolveProviderStatus({
+      runtime: RUNNING,
+      oauthProviders: [
+        {
+          id: 'claude-code',
+          name: 'Anthropic OAuth: Required Extra Usage Credits to Use Subscription',
+          status: { logged_in: true }
+        }
+      ],
+      env: {}
+    })
+    expect(status.provider_label).toBe('Claude')
+    expect(status.provider_label).not.toMatch(/Required Extra Usage Credits/)
+  })
+
+  it('a Hermes-store login outranks ambient machine-scoped credential spillover', () => {
+    // Live repro (2026-08-18): an OpenAI-subscription machine (auth.json
+    // openai-codex, auth_mode=chatgpt) ALSO carries Claude Code's
+    // ~/.claude/.credentials.json, which the engine surfaces as a logged-in
+    // claude-code row. The card must name the provider the user connected
+    // through Hermes, not the ambient spillover — regardless of catalog order.
+    const status = resolveProviderStatus({
+      runtime: RUNNING,
+      oauthProviders: [
+        { id: 'claude-code', name: 'Anthropic OAuth: Required Extra Usage Credits to Use Subscription', status: { logged_in: true } },
+        { id: 'openai-codex', name: 'OpenAI Codex (ChatGPT subscription)', status: { logged_in: true } }
+      ],
+      env: {}
+    })
+    expect(status.provider_label).toBe('Codex')
+  })
+
+  it('ambient spillover alone still proves a usable connection, with a short label', () => {
+    const status = resolveProviderStatus({
+      runtime: RUNNING,
+      oauthProviders: [
+        { id: 'claude-code', name: 'Anthropic OAuth: Required Extra Usage Credits to Use Subscription', status: { logged_in: true } }
+      ],
+      env: {}
+    })
+    expect(status).toMatchObject({ provider_ready: true, provider_state: 'usable', provider_label: 'Claude' })
+  })
+
+  it('an unknown verbose catalog name degrades to a bounded brand prefix or the generic label', () => {
+    const prefix = resolveProviderStatus({
+      runtime: RUNNING,
+      oauthProviders: [{ id: 'future-x', name: 'FutureAI: does many things (beta)', status: { logged_in: true } }],
+      env: {}
+    })
+    expect(prefix.provider_label).toBe('FutureAI')
+    const generic = resolveProviderStatus({
+      runtime: RUNNING,
+      oauthProviders: [
+        { id: 'future-y', name: 'An extremely long provider description without any separator at all', status: { logged_in: true } }
+      ],
+      env: {}
+    })
+    expect(generic.provider_label).toBe('ספק AI')
+  })
+
   it('recognizes each supported API-key readiness source from redacted env', () => {
     for (const [key, label] of [
       ['OPENROUTER_API_KEY', 'OpenRouter'],

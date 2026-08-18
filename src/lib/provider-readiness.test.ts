@@ -8,7 +8,8 @@ describe('provider readiness', () => {
         [{ id: 'openai-codex', name: 'OpenAI Codex', flow: 'device_code', status: { logged_in: true } }],
         {}
       )
-    ).toEqual({ connected: true, label: 'OpenAI Codex' })
+    // Display label is the short mapped brand name, never the raw catalog string.
+    ).toEqual({ connected: true, label: 'Codex' })
   })
 
   it('recognizes API keys only from Hermes redacted metadata', () => {

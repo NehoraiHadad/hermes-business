@@ -23,7 +23,11 @@ export interface ModelReadiness {
 }
 
 export const DISCONNECTED_LABEL: string
+export const GENERIC_PROVIDER_LABEL: string
+export const OAUTH_DISPLAY_LABELS: Record<string, string>
 export const API_KEY_PROVIDERS: Array<[string, string]>
+
+export function sanitizeProviderLabel(provider: { id?: string; name?: string } | null | undefined): string
 
 export function resolveProviderReadiness(
   oauthProviders: Array<{ name: string; status?: { logged_in?: boolean }; [key: string]: unknown }> | null | undefined,

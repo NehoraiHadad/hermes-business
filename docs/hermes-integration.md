@@ -280,6 +280,21 @@ OpenAI Codex (`/api/providers/oauth`) ומאמתת שה־UI תואם ל־`logged
 על מחשב הבדיקה, ואינם משוחזרים על ידי בדיקה אוטומטית עצמאית (ה־E2E החי של
 `e2e-hermes` רץ provider-free כברירת מחדל).
 
+### היקף אחסון ה־OAuth של המנוע (ממצא מאומת 2026-08-18)
+
+רוב ה־providers נשמרים ב־`auth.json` בתוך `HERMES_HOME` (למשל `openai-codex`
+ב־`auth_mode: chatgpt` ו־`nous`) — כלומר per-home. אבל שתי רשומות קטלוג הן
+**אמביינטיות ברמת המכונה**: `claude-code` קורא את
+`~/.claude/.credentials.json` של Claude Code CLI
+(`hermes_cli/web_server.py:9896` → `_claude_code_only_status` :9773 →
+`agent/anthropic_adapter.py:1070`), ו־`copilot-acp` את ה־login של Copilot.
+לכן HERMES_HOME נקי לגמרי עדיין מדווח provider מחובר כשהקבצים האלה קיימים
+במכונה — התנהגות מנוע מכוונת, לא באג של ה־companion. בצד שלנו:
+`shared/provider-readiness.js` מדרג רשומות login של Hermes עצמו מעל spillover
+אמביינטי (כדי שלא ייוחס החיבור לספק הלא-פעיל) ומקצר כל שם קטלוג לתווית
+מותג קצרה — שם ה־claude-code הקטלוגי מכיל משפט אזהרה באנגלית שאסור
+שיגיע למשתמש.
+
 ### Google Workspace
 
 ה־POC מאתר את `google-workspace` דרך Skills API, ומפעיל את
