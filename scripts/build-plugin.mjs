@@ -56,6 +56,12 @@ async function buildSource() {
   let code = chunk.code
   code = code.replace(/(from '(?:react|@hermes\/plugin-sdk)')\s*;/g, '$1')
   code = normalizeDefaultExport(code)
+  // Byte determinism must not depend on how the CHECKOUT smudged the src files:
+  // rollup carries source line endings into its output, so a CRLF checkout
+  // (e.g. GitHub's Windows runners, core.autocrlf=true) would emit different
+  // bytes than the committed LF artifact and --check would report it stale.
+  // Normalize the final text to LF — the artifact's one canonical form.
+  code = code.replace(/\r\n/g, '\n')
   return `${HEADER}${code.replace(/^﻿/, '')}`
 }
 
