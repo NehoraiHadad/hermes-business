@@ -52,14 +52,21 @@ jobs:
       - run: npm ci
       - name: Typecheck
         run: npx tsc -b
-      # TEMP DIAGNOSTIC (2026-08-18): packaging-config.test.ts failed suite
-      # collection on run 1 with a bare stackless SyntaxError that does not
-      # reproduce locally (same commit, LF checkout, same node major). Running
-      # it solo with a verbose reporter first isolates whether the failure is
-      # per-file or an interaction of the full parallel run. Remove once solved.
+      # TEMP DIAGNOSTIC (2026-08-18): packaging-config.test.ts fails suite
+      # collection HERE with a stackless "SyntaxError: Invalid or unexpected
+      # token" that does not reproduce locally under the same commit, an LF
+      # checkout, and the runner's exact node version (22.23.2). Run 2 proved it
+      # fails solo too. These probes execute the import chain OUTSIDE vitest —
+      # plain node prints the offending file+line for a module compile error,
+      # which vitest swallows. Remove once solved.
       - name: Diagnose packaging-config collection (temporary)
         run: |
           node -v
+          node -p "require.resolve('ajv')"
+          node -e "try { const A = require('ajv'); console.log('ajv cjs ok:', typeof A) } catch (e) { console.error('ajv cjs FAIL'); console.error(e.stack || e); exit(1) }"
+          node -e "import('./scripts/package-win.mjs').then(m => console.log('package-win ok:', typeof m.packagingStages), e => { console.error('package-win FAIL'); console.error(e.stack || e); process.exit(1) })"
+          node -e "import('./scripts/verify-no-update-metadata.mjs').then(m => console.log('verify-no-update ok'), e => { console.error(e.stack || e); process.exit(1) })"
+          npx vite-node scripts/packaging-config.test.ts
           npx vitest run --reporter=verbose scripts/packaging-config.test.ts
       - name: Unit suite
         run: npm run test:unit
@@ -87,6 +94,16 @@ jobs:
       # the same guarantee for the suite's backend-enable cases.
       - name: Provide PyYAML (production parity with the Hermes venv)
         run: pip install pyyaml
+      # The business-install cases stage the community payload, which ships
+      # js-yaml/argparse from the repo's node_modules — a real dev-machine
+      # prerequisite, so the suite needs the packages installed. --ignore-scripts
+      # skips the heavy electron binary postinstall this job never uses.
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install node deps (payload staging inputs)
+        run: npm ci --ignore-scripts
       - name: verify-bootstrap (lib suite + isolation, PS 5.1 inside)
         shell: powershell
         run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/verify-bootstrap.ps1
