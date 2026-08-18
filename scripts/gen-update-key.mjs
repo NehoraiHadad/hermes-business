@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 // Generate the Ed25519 keypair that anchors the in-app one-click updater.
 //
 //   node scripts/gen-update-key.mjs [--out <path>] [--force]

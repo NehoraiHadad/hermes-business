@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 // Sign the per-release update manifest — the runtime trust anchor the in-app
 // one-click updater checks BEFORE it runs a downloaded installer.
 //
