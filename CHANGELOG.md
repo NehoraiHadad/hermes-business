@@ -10,6 +10,101 @@
 
 ---
 
+## [0.4.0-alpha.11] - 2026-08-18
+
+### מה חדש (למשתמש)
+
+- **עדכון מוצלח כבר לא מדווח ככישלון.** עד עכשיו, אחרי כל עדכון תכל'ס הודיע
+  שהעדכון נחת אבל בדיקות התקינות נכשלות — גם כשהכול עבד מצוין. הסיבה: הוא בדק
+  את המערכת לפני שהיא הספיקה לעלות. עכשיו הוא ממתין.
+- **עדכון תקין כבר לא מבוטל מעצמו.** אותה בדיקה מוקדמת מדי יכלה לגרום למערכת
+  לבטל עדכון מוצלח של Hermes ולחזור לגרסה הקודמת, ולהודיע שהעדכון נכשל.
+- **חזרה לגרסה קודמת מוודאת את הגרסה הנכונה.** כשמבטלים עדכון, המערכת מוודאת
+  שמה שרץ בפועל הוא באמת הגרסה שחזרנו אליה — ולא זו שביטלנו.
+- **כפתורי ההורדה באתר מורידים את הקובץ.** שניים מתוך שלושה הפנו לרשימת הגרסאות
+  ב-GitHub במקום להוריד. עכשיו כולם מורידים — גם כשאין אינטרנט ל-GitHub וגם עם
+  JavaScript מכובה.
+- **הודעה ברורה כשאין חיבור.** אם GitHub חוסם זמנית בגלל יותר מדי בקשות,
+  ההתקנה אומרת את זה ומתי אפשר לנסות שוב, במקום שגיאה סתומה.
+
+### Technical
+
+**Three instances of one race, all measured live, not inferred.**
+`ensureGatewayBackground()` returns when the gateway PROCESS is up, not when it
+is ready; the gateway needs ~15-16 s to reach `state='running'` (Telegram alone
+10.7 s including DNS-over-HTTPS fallback). Every health gate sampled once,
+immediately, and missed by 4.9-6.1 s on consecutive real runs.
+
+- `companion-apply.cjs` (120 s): every successful update reported
+  `applied-unhealthy`. Journal never cleared, so the consumed 104 MB installer
+  was never deleted, and no `applied` history entry was ever written — meaning
+  the rollback feature's history anchor could never materialise in practice.
+- `hermes-update-recovery.cjs` (180 s): DESTRUCTIVE — spurious `git reset` of a
+  healthy agent update. Samples earliest of the three.
+- `update-runtime.cjs` (180 s): worst odds — `stopOfficialSurfaces` has just run,
+  so a fresh gateway is CERTAIN to be settling.
+
+Fix is a bounded, advisory wait on the read-only deep probe, then the unchanged
+single `fullHealth`. NOT a retry of `fullHealth`, which calls
+`ensureGatewayBackground` and would restart the gateway being waited for.
+Bounded twice (elapsed deadline + clock-independent attempt cap). Shared helper
+in `hermes-health.cjs`, which both callers already depend on — no new dependency
+edge, none inverted.
+
+**Rollback verified against reverted code.** `rollbackAfterFailedUpdate` only
+`git reset`s; it stops nothing, so `ensureGatewayBackground` and `startHermes`
+were no-ops and the health proof covered processes still running the removed
+code. Sharpest case: the version re-gate reverted, re-verified against the
+still-running unsupported version, and reported the system restored and working.
+Now `stopOfficialSurfaces` runs before the post-rollback recovery, and
+`officialGatewayState()` must positively report `stopped` (`unknown` fails
+closed) because that helper swallows a failed `gateway stop --all` by design.
+
+**GitHub rate limits.** The primary unauthenticated limit is a **403**, absent
+from `RetryableHttpStatus`, and no header was ever inspected. Now three distinct
+cases: bare 403 (not retryable), primary limit (fail fast, naming the local reset
+time), `Retry-After` (retried on the server's clock, clamped at 30 s).
+
+**The CI external gate was non-functional.** `$ErrorActionPreference = 'Stop'`
+plus `2>&1` on a native command raises a terminating `NativeCommandError` AT the
+redirect, so the exit-code check never ran and the catch saw only the first
+console-WRAPPED stderr line — the distinguishing keyword sat in the next
+fragment. New `scripts/lib/external-gate.ps1` drives `System.Diagnostics.Process`
+with async stream draining, and the swallow boundary is now structural
+(`EXTERNAL-GATE-CONDITION:` marker) rather than regex-dependent, so widening the
+classifier's input cannot widen what it swallows.
+
+**One reader for the running app version** (`electron/app-version.cjs`). Three
+had drifted; two threw, one returned null. Null compares as "cannot order"
+everywhere downstream. Two mutation-tested guards in module-hygiene.
+
+**`scripts/verify-published-release.mjs`** checks a published release against
+docs/RELEASING.md step 9, with the expectations PARSED OUT OF that document so no
+second copy can drift. Written because alpha.10 was published with a Hebrew
+title, `checksums.json` instead of `SHA256SUMS.txt`, and a Hebrew-only body, and
+nothing caught it.
+
+**GitHub's release feed order is unspecified** — alpha.10 came back third,
+despite being newest by created_at, published_at and id, and it is not lexical
+either. `releases[0]` would offer alpha.9 while alpha.10 exists. Pinned by a
+mutation-tested guard.
+
+**Site**: all three download buttons now carry the direct asset URL statically,
+so a click downloads the installer with JS disabled, offline or rate-limited;
+previously only one of three was upgraded and the fallback was a release list.
+Pinned to the newest `release-ledger.json` entry, so forgetting the site on a
+release fails CI.
+
+**Also**: `docs/RELEASING.md` gained three ordering traps that each cost a failed
+run (commit the bump BEFORE packaging; `release/` is never cleaned; the
+thin-installer capture command does not emit clean JSON), and
+`scripts/e2e-companion-update.mjs` no longer writes into the operator's live
+profile.
+
+2502 -> 2680 tests.
+
+---
+
 ## [0.4.0-alpha.10] - 2026-08-18
 
 ### מה חדש (למשתמש)
