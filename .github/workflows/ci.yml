@@ -61,15 +61,7 @@ jobs:
       # which vitest swallows. Remove once solved.
       - name: Diagnose packaging-config collection (temporary)
         continue-on-error: true
-        run: |
-          node -v
-          Write-Host '--- pool=threads (different worker serialization boundary)'
-          npx vitest run --pool=threads scripts/packaging-config.test.ts
-          Write-Host '--- no-isolate (error surfaces in the main context, unserialized)'
-          npx vitest run --no-isolate scripts/packaging-config.test.ts
-          Write-Host '--- json reporter (serializes the full error object incl. stack)'
-          npx vitest run --reporter=json --outputFile=vitest-diag.json scripts/packaging-config.test.ts
-          node -e "const fs=require('fs'); const r=JSON.parse(fs.readFileSync('vitest-diag.json','utf8')); console.log(JSON.stringify(r.testResults, null, 2).slice(0, 6000))"
+        run: node scripts/ci-diag-collect.mjs
       - name: Unit suite
         run: npm run test:unit
       - name: Plugin SDK contract (committed snapshot)
