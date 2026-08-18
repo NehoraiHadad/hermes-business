@@ -227,6 +227,84 @@ describe('scanReleases — separates DECISIVE exclusions from UNDECIDABLE ones',
   })
 })
 
+// The EXACT order `https://api.github.com/repos/NehoraiHadad/hermes-business/
+// releases?per_page=20` returned on 2026-08-18, copied verbatim from the live
+// response. Note where `v0.4.0-alpha.10` sits: THIRD, between alpha.8 and
+// alpha.7 — even though it was, by every timestamp the API reports
+// (created_at 14:32Z, published_at 14:34Z) and by release id (the highest of
+// the nine), the newest release in the repo.
+const LIVE_FEED_ORDER = [
+  'v0.4.0-alpha.9',
+  'v0.4.0-alpha.8',
+  'v0.4.0-alpha.10',
+  'v0.4.0-alpha.7',
+  'v0.4.0-alpha.6',
+  'v0.4.0-alpha.5',
+  'v0.4.0-alpha.4',
+  'v0.4.0-alpha.3',
+  'v0.4.0-alpha.2'
+]
+
+const feed = (tags: string[]) => tags.map(tag_name => release({ tag_name, prerelease: true }))
+
+describe('release-feed ORDER is not a signal — `releases[0]` is never the answer', () => {
+  // WHY THIS EXISTS. Observed live on 2026-08-18 (see LIVE_FEED_ORDER above):
+  // the GitHub releases feed does NOT come back newest-first. It is not ordered
+  // by `published_at`, not by `created_at`, and not by release id — the three
+  // fields a reader would reach for — and it is certainly not ordered by SemVer
+  // precedence. `v0.4.0-alpha.10` came back in position 3, so a consumer that
+  // trusted feed order and took `releases[0]` would have offered alpha.9 while
+  // alpha.10 was already published.
+  //
+  // That failure is the dangerous kind: alpha.9 is a real, published, legally
+  // named release of this product, so the app would show a plausible version
+  // number, download a genuine signed installer, and pass every trust check —
+  // it would simply be the WRONG version, forever, and nobody would notice.
+  //
+  // `scanReleases` is immune because it orders by SemVer precedence rather than
+  // by position (see compareSemver). Nothing pinned that immunity on the app
+  // side until now; `site/download-link.test.mjs` covers the site's own
+  // `pickLatest`. Permutations below are FIXED, never shuffled at random —
+  // a regression that only reproduces on some runs is a regression nobody fixes.
+  it('picks alpha.10 out of the REAL feed order, where releases[0] is alpha.9', () => {
+    const releases = feed(LIVE_FEED_ORDER)
+    expect(releases[0].tag_name).toBe('v0.4.0-alpha.9') // the trap, stated out loud
+    expect(selectEligibleRelease(releases, '0.4.0-alpha.8').tag_name).toBe('v0.4.0-alpha.10')
+  })
+
+  it('scanReleases reports the same winner, with a complete (zero-undecided) census', () => {
+    const scan = scanReleases(feed(LIVE_FEED_ORDER), '0.4.0-alpha.8')
+    expect(scan.eligible.tag_name).toBe('v0.4.0-alpha.10')
+    expect(scan.examined).toBe(LIVE_FEED_ORDER.length)
+    expect(scan.undecided).toBe(0)
+  })
+
+  it('the winner is invariant under every fixed permutation of the same nine releases', () => {
+    const permutations: Record<string, string[]> = {
+      'live order': LIVE_FEED_ORDER,
+      reversed: [...LIVE_FEED_ORDER].reverse(),
+      // alpha.10 first — the position that would mask an order-dependent bug.
+      'winner first': ['v0.4.0-alpha.10', ...LIVE_FEED_ORDER.filter(t => t !== 'v0.4.0-alpha.10')],
+      // alpha.10 last — the position that would expose one.
+      'winner last': [...LIVE_FEED_ORDER.filter(t => t !== 'v0.4.0-alpha.10'), 'v0.4.0-alpha.10'],
+      // Sorted ascending and descending as PLAIN STRINGS: exactly the two orders
+      // a naive lexical sort would produce, and neither puts alpha.10 on top.
+      'lexical ascending': [...LIVE_FEED_ORDER].sort(),
+      'lexical descending': [...LIVE_FEED_ORDER].sort().reverse()
+    }
+    for (const [label, tags] of Object.entries(permutations)) {
+      expect(tags.slice().sort()).toEqual(LIVE_FEED_ORDER.slice().sort()) // same nine, only reordered
+      expect(selectEligibleRelease(feed(tags), '0.4.0-alpha.8').tag_name, label).toBe('v0.4.0-alpha.10')
+    }
+  })
+
+  it('a lexical sort really would get it wrong — the trap is not hypothetical', () => {
+    // Guards the guard: if `10` ever started sorting after `9` as a string, the
+    // permutation test above would stop proving anything.
+    expect([...LIVE_FEED_ORDER].sort().reverse()[0]).toBe('v0.4.0-alpha.9')
+  })
+})
+
 describe('linkHeaderHasNextPage — the ONLY truncation signal (single request, no pagination)', () => {
   it('detects a quoted rel="next"', () => {
     const header =
