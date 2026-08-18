@@ -1,0 +1,31 @@
+# Release-tag guard: fires on every `v*` tag push and proves the public anchor
+# is coherent — the tag name equals package.json's version on the exact commit
+# the tag points at (scripts/verify-version-tag.mjs, read-only). This is the
+# automated half of docs/RELEASING.md step 7; the build/publish itself stays a
+# deliberate local action (see .github/workflows/ci.yml header + docs/ci.md).
+name: Release tag guard
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  verify-tag:
+    name: Tag ↔ package.json coherence
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The verifier resolves the tag object itself; make sure tags exist
+          # in the clone rather than relying on the push ref alone.
+          fetch-depth: 0
+          fetch-tags: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # Node stdlib + in-repo modules only — no npm ci needed.
+      - run: node scripts/verify-version-tag.mjs "$GITHUB_REF_NAME"

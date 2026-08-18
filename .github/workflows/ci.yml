@@ -1,0 +1,95 @@
+# CI: clean-machine verification of every push/PR. (Mechanism overview,
+# what deliberately stays local, and the cost guards: docs/ci.md.) This is the repo's proof that
+# the codebase is self-contained — no dependence on an already-provisioned dev
+# machine (installed Hermes, PSModulePath, encodings, uncommitted files).
+#
+# Deliberately NOT here: the release pipeline (package:win:*). Its exact-artifact
+# stage runs the packaged app against a real installed Hermes engine and mints
+# machine-captured evidence — that contract is machine-bound by design and runs
+# locally per docs/RELEASING.md. CI verifies; it never releases.
+name: CI
+
+on:
+  push:
+    branches: [master]
+    paths-ignore:
+      - "docs/**"
+      - "site/**"
+      - "promo-video/**"
+      - "**.md"
+  pull_request:
+    branches: [master]
+    paths-ignore:
+      - "docs/**"
+      - "site/**"
+      - "promo-video/**"
+      - "**.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Superseded runs are wasted Windows minutes (2x billing multiplier) — cancel them.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Vitest unit suite (the same `npm run test:unit` the release checklist relies
+  # on), TypeScript build check, and the plugin SDK contract check (which uses
+  # the committed hermes-desktop-contract.json snapshot on a machine with no
+  # installed Hermes — that clean-machine path is exactly what this job proves).
+  unit:
+    name: Unit + contract (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npx tsc -b
+      - name: Unit suite
+        run: npm run test:unit
+      - name: Plugin SDK contract (committed snapshot)
+        run: npm run verify:plugin
+
+  # The installer library suite under REAL Windows PowerShell 5.1 — the engine
+  # both install doors (NSIS + Electron) actually invoke. This is where the
+  # UTF-8/mojibake canary and the payload/transaction/hashing gates live.
+  # verify-bootstrap.ps1 wraps the suite plus the offline isolation gate; its
+  # live-GitHub release probe reports as an EXTERNAL gate (exit 0) on network
+  # trouble, so this job only fails on our own bugs.
+  installer:
+    name: Installer lib (PowerShell 5.1)
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: verify-bootstrap (lib suite + isolation, PS 5.1 inside)
+        shell: powershell
+        run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/verify-bootstrap.ps1
+
+  # The Hermes-plugin Python suites (WhatsApp policy guard, companion dashboard
+  # backend, community archive). Stdlib-only; the live installed-Hermes probes
+  # self-skip when no engine is present (unittest.skipIf), so a clean runner
+  # exercises every deterministic gate. Windows runner on purpose: the plugin
+  # ships to Windows Hermes installs.
+  plugins:
+    name: Plugin suites (Python)
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: WhatsApp policy suite
+        run: python -m unittest discover -s hermes-plugin/business-whatsapp-policy/tests -p "test_*.py" -v
+      - name: Companion dashboard backend suite
+        run: python -m unittest discover -s hermes-plugin/business-shell/dashboard -p "test_*.py" -v
+      - name: Community archive suite
+        run: python -B -m unittest discover -s hermes-plugin/community-archive/tests -p "test_*.py" -v
