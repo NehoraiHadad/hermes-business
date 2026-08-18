@@ -60,14 +60,16 @@ jobs:
       # plain node prints the offending file+line for a module compile error,
       # which vitest swallows. Remove once solved.
       - name: Diagnose packaging-config collection (temporary)
+        continue-on-error: true
         run: |
           node -v
-          node -p "require.resolve('ajv')"
-          node -e "try { const A = require('ajv'); console.log('ajv cjs ok:', typeof A) } catch (e) { console.error('ajv cjs FAIL'); console.error(e.stack || e); exit(1) }"
-          node -e "import('./scripts/package-win.mjs').then(m => console.log('package-win ok:', typeof m.packagingStages), e => { console.error('package-win FAIL'); console.error(e.stack || e); process.exit(1) })"
-          node -e "import('./scripts/verify-no-update-metadata.mjs').then(m => console.log('verify-no-update ok'), e => { console.error(e.stack || e); process.exit(1) })"
-          npx vite-node scripts/packaging-config.test.ts
-          npx vitest run --reporter=verbose scripts/packaging-config.test.ts
+          Write-Host '--- pool=threads (different worker serialization boundary)'
+          npx vitest run --pool=threads scripts/packaging-config.test.ts
+          Write-Host '--- no-isolate (error surfaces in the main context, unserialized)'
+          npx vitest run --no-isolate scripts/packaging-config.test.ts
+          Write-Host '--- json reporter (serializes the full error object incl. stack)'
+          npx vitest run --reporter=json --outputFile=vitest-diag.json scripts/packaging-config.test.ts
+          node -e "const fs=require('fs'); const r=JSON.parse(fs.readFileSync('vitest-diag.json','utf8')); console.log(JSON.stringify(r.testResults, null, 2).slice(0, 6000))"
       - name: Unit suite
         run: npm run test:unit
       - name: Plugin SDK contract (committed snapshot)
