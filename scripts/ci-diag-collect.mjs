@@ -24,6 +24,18 @@ const variants = {
     source.replaceAll('new URL(', '__diagUrl(')
 }
 
+// Raw-error pass first: the custom reporter prints each suite error's FULL
+// stack string, which for a module-compile SyntaxError names the offending
+// file/line/token that every built-in reporter drops.
+{
+  const r = spawnSync('npx', ['vitest', 'run', '--reporter=./scripts/ci-diag-reporter.mjs', 'scripts/packaging-config.test.ts'], {
+    cwd: root, shell: true, encoding: 'utf8', timeout: 120_000
+  })
+  console.log('===== raw-error reporter pass =====')
+  console.log(r.stdout || '')
+  console.error(r.stderr || '')
+}
+
 let summary = []
 for (const [name, content] of Object.entries(variants)) {
   const file = path.join(root, 'scripts', name)
