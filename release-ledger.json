@@ -32,6 +32,10 @@
     "0.4.0-alpha.9": {
       "sha256": "fae853e7955f43953bf000cac615c9072f7dbf2e886608258d64ab46a3ecb4d4",
       "released_at": "2026-08-18"
+    },
+    "0.4.0-alpha.10": {
+      "sha256": "4f50529746b285ac85e29b8e60695b811962d7532966ad3deb0e5d63e0d1daac",
+      "released_at": "2026-08-18"
     }
   }
 }
