@@ -8,6 +8,7 @@
 // silently over-writing evidence for a different artifact.
 
 import { createHash } from 'node:crypto'
+import canonicalJsonModule from '../../../electron/canonical-json.cjs'
 
 /** Stable fingerprint of a commit: its full SHA folded with its subject line, so
  * a re-worded/amended commit at the same tree no longer matches an old binding. */
@@ -17,20 +18,20 @@ export function commitFingerprint(head, subject) {
     .digest('hex')
 }
 
-/** Canonical, key-sorted JSON so the digest is independent of property order. */
-export function canonicalJson(value) {
-  return canonical(value)
-}
-function canonical(value) {
-  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`
-  if (value && typeof value === 'object') {
-    return `{${Object.keys(value)
-      .sort()
-      .map(k => `${JSON.stringify(k)}:${canonical(value[k])}`)
-      .join(',')}}`
-  }
-  return JSON.stringify(value === undefined ? null : value)
-}
+/**
+ * Canonical, key-sorted JSON so the digest is independent of property order.
+ *
+ * RE-EXPORTED, not implemented here: the very same bytes are what an Ed25519
+ * signature covers on BOTH sides of the trust story — the build-time release
+ * ledger (gather.mjs `authenticateLedger`) and the runtime update manifest
+ * (electron/update-manifest-verify.cjs `manifestSigningBody`). The runtime half
+ * cannot import scripts/ (build.files ships `electron/**`, never `scripts/**`),
+ * so the single implementation lives in electron/canonical-json.cjs and both
+ * sides use that exact function. Byte-identity is thereby a fact of the module
+ * graph rather than a property two copies must be tested into agreeing on.
+ */
+export const { canonicalJson } = canonicalJsonModule
+const canonical = canonicalJson
 
 /**
  * Compute the release binding.

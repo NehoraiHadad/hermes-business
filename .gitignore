@@ -19,3 +19,11 @@ build/pe-extract/
 __pycache__/
 .pytest_cache/
 *.pyc
+
+# Update-manifest signing key (in-app updater trust anchor). The PRIVATE half
+# lives OUTSIDE the repository (%USERPROFILE%\.tachles-release\), which is the
+# real control; these patterns are belt-and-braces in case someone ever runs
+# `node scripts/gen-update-key.mjs --out <somewhere inside the tree>`. Leaking it
+# would let an attacker sign an installer every installed app accepts as genuine.
+.tachles-release/
+*update-signing-key*.pem
