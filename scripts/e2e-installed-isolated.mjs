@@ -32,6 +32,7 @@ import { resolveAttestedArtifact } from './lib/isolated-e2e/attestation-gate.mjs
 import { runApprovalCase } from './lib/isolated-e2e/approval-case.mjs'
 import { captureOwnedRecords, readOwnedGatewayPid } from './lib/isolated-e2e/gateway-process.mjs'
 import { assessAndGateIsolation, computeRunVerdict } from './lib/isolated-e2e/isolation-run.mjs'
+import { snapshotLoginItem } from './lib/isolated-e2e/login-item-guard.mjs'
 import { finalizeTeardown } from './lib/isolated-e2e/teardown.mjs'
 import { reapProcessTree } from '../electron/process-util.cjs'
 
@@ -44,6 +45,10 @@ const injectedStagedNonce = process.env.HERMES_EXACT_STAGED_ARTIFACT || null
 const liveHome = liveHermesHome()
 // Snapshot the live profile-defining marker BEFORE anything runs.
 const liveMarkerBefore = hermesHomeMarker(liveHome)
+// Snapshot the USER-LEVEL gateway login item BEFORE anything runs: a QA-armed
+// app that reaches `gateway install` would repoint logon recovery at the temp
+// home (login-item-guard.mjs). Verified + restored in finalizeTeardown.
+const loginItemBefore = snapshotLoginItem()
 
 const tempHome = createTempHermesHome()
 const isolatedPort = await chooseIsolatedPort()
@@ -190,7 +195,8 @@ try {
     probePath,
     forensicDir: path.join(root, 'docs', 'evidence', 'forensics'),
     runApproval,
-    ownedProcs
+    ownedProcs,
+    loginItemBefore
   })
 }
 

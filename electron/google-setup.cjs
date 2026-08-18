@@ -73,29 +73,9 @@ async function readContract(python, script) {
   }
 }
 
-async function ensureGatewayBackground(command = findHermes()) {
-  if (!command) return { ok: false, installed: false, startedFresh: false }
-  let probe
-  try {
-    probe = await runCaptured(command, ['gateway', 'status'], 45_000)
-  } catch (error) {
-    rememberLog(`Gateway status check failed: ${error.message || error}`)
-    probe = { stdout: '', stderr: '' }
-  }
-  const output = `${probe.stdout || ''}\n${probe.stderr || ''}`
-  const running = /gateway (?:process )?running|gateway is running/i.test(output)
-  const startsOnLogin = /login item installed|scheduled task (?:installed|registered)/i.test(output)
-  // Already up and auto-starting → do NOT restart it; report startedFresh: false so the guard
-  // activation knows it may still be running the OLD plugin code (→ may need an official restart).
-  if (running && startsOnLogin) {
-    return { ok: true, installed: true, running: true, startedFresh: false }
-  }
-
-  // We are (re)starting the gateway here — the process launched below loads the just-installed
-  // plugin, so activation can skip a redundant restart but must still require a fresh heartbeat.
-  await runCaptured(command, ['gateway', 'install', '--start-now', '--start-on-login'], 180_000)
-  return { ok: true, installed: true, running: true, startedFresh: true }
-}
+// Moved to gateway-ensure.cjs (electron-free, unit-testable QA suppression);
+// re-exported below so every existing consumer keeps importing it from here.
+const { ensureGatewayBackground } = require('./gateway-ensure.cjs')
 
 async function startGoogleSetup(clientSecretPath) {
   const { python, script } = await googleSetupPaths()

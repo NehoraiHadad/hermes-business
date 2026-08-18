@@ -9,6 +9,7 @@ import { isPortFree, removeTempHome } from '../isolated-runtime.mjs'
 import { hermesHomeMarker, markerDelta } from '../isolated-marker.mjs'
 import { reapOwned } from '../probes/hermes/real-loader-procs.mjs'
 import { reapOwnedGateway } from './gateway-process.mjs'
+import { verifyAndRestoreLoginItem } from './login-item-guard.mjs'
 
 /** Reap any hermes process bound to the isolated port (belt-and-suspenders). */
 export function killIsolatedPortProcess(isolatedPort) {
@@ -141,7 +142,9 @@ export async function finalizeTeardown({
   probePath,
   forensicDir,
   runApproval,
-  ownedProcs = null
+  ownedProcs = null,
+  loginItemBefore = null,
+  verifyLoginItem = verifyAndRestoreLoginItem
 }) {
   // Hermes' Windows venv launcher can detach/reparent away from Electron. Its
   // profile-owned PID record is therefore the authoritative second teardown
@@ -163,7 +166,16 @@ export async function finalizeTeardown({
   // runtime files) is disclosed separately and never blocks a pass; a config, job-set
   // or tree mutation fails both, and unknown drift fails closed via the stable digest.
   const liveUntouched = delta.profile_defining_unchanged
+  // USER-LEVEL login-item guard: the one file outside HERMES_HOME the engine's
+  // `gateway install` writes. Restored from the exact pre-launch bytes when
+  // mutated (attributable + byte-exact, unlike the live-home marker), but the
+  // run still FAILS — a QA-armed app must never perform user-level registration.
+  const loginItem = verifyLoginItem(loginItemBefore)
   report.teardown = {
+    login_item_applicable: loginItem.applicable,
+    login_item_untouched: loginItem.unchanged,
+    login_item_restored: loginItem.restored,
+    ...(loginItem.restore_error ? { login_item_restore_error: loginItem.restore_error } : {}),
     isolated_gateway_pid_found: gateway.pid !== null,
     isolated_gateway_reaped: gateway.reaped,
     owned_tracking_applicable: containment.applicable,
@@ -198,6 +210,9 @@ export async function finalizeTeardown({
       // On Windows the owned tree must be POSITIVELY verified dead — a failed
       // snapshot or a surviving identity fails the run even with the home gone.
       (containment.applicable ? containment.treeDead === true : true) &&
+      // The user-level login item must be byte-identical to its pre-launch
+      // snapshot; a mutation fails the run even after a successful restore.
+      (loginItem.applicable ? loginItem.unchanged === true : true) &&
       report.teardown.probe_file_absent
   )
   Object.assign(
