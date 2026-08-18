@@ -1,5 +1,9 @@
-#!/usr/bin/env node
 // Post-build guard for the "no companion self-update feed" claim.
+// NOTE: no shebang — this module is BOTH a `node <script>` CLI and a library
+// import (packaging-config.test.ts). A shebang in an ssr-inlined module lands
+// mid-line after vitest hoists imports and kills collection with a stackless
+// "SyntaxError: Invalid or unexpected token" (reproduced on CI runners; see
+// scripts/lib/module-hygiene.test.mjs).
 //
 // This app ships no electron-updater consumer, so it must never emit auto-update
 // metadata that would misrepresent a self-update capability. `build.publish` is

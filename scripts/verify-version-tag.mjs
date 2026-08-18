@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 // Read-only: asserts a git tag name (v<version>) really names the version the
 // checked-out HEAD's package.json carries, AND that the tag points at HEAD.
 // One step of the release checklist (docs/RELEASING.md, spec §5.4 step 10 /
