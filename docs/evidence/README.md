@@ -94,7 +94,27 @@ the plugin. Two real anchors cover that instead:
 $env:HERMES_E2E_NO_LLM = '1'; node scripts/e2e-hermes-shared-state.mjs > raw-shared.json
 node scripts/capture-evidence.mjs shared-state raw-shared.json
 
-npm run package:thin-installer:qa > raw-thin.json   # emits JSON on stdout
+# thin-installer. `npm run package:thin-installer:qa > raw-thin.json` does NOT
+# emit JSON: npm's banner, build:plugin's own line and the harness's
+# `== Case N: ... ==` progress (Write-Host, which lands on stdout once stdout is
+# redirected) all share that stream, so the file is a mixed log with the report
+# at the END. capture-evidence survives it only because scripts/lib/json-input.mjs
+# strips a BOM and rescans backwards for the final JSON object — a rescue that
+# breaks the instant anything prints AFTER the report, and that no other tool
+# (jq, ConvertFrom-Json, JSON.parse) performs. `npm run --silent` does not fix it
+# either: it drops npm's banner only, not the child processes' output.
+# So capture the report itself, and keep -File — the harness must be entered the
+# way the npm script enters it (`-Command "& .\scripts\...ps1"` runs it in a child
+# scope, where the zip install action's GetNewClosure() scriptblock loses the
+# dot-sourced installer/lib helpers and the run dies on `Expand-ArchiveSafely :
+# The term ... is not recognized`).
+npm run build:plugin
+$thin = powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/e2e-thin-network-installer.ps1 -EmitQaArtifact
+$report = $thin[[array]::LastIndexOf([object[]]$thin, '{')..($thin.Count - 1)]
+# WriteAllLines, not Set-Content/Out-File -Encoding utf8: PowerShell 5.1 prepends
+# a UTF-8 BOM, which strict parsers reject. The report is the tail starting at the
+# only unindented `{`.
+[System.IO.File]::WriteAllLines("$PWD\raw-thin.json", [string[]]$report)
 node scripts/capture-evidence.mjs thin-installer raw-thin.json
 
 # packaged-e2e + approval: BOTH are machine-written ONLY by the exact-artifact

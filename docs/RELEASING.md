@@ -64,11 +64,53 @@ of `pilot` everywhere below, plus a code-signing certificate
    English `### Technical` block. Keep releases infrequent/batched — every bump
    is expensive (see above), so don't bump for a one-line fix in isolation.
 
-2. **Bump the version.** Edit `"version"` in `package.json` (and keep
-   `package-lock.json`'s two `version` fields in lockstep — the packaging
-   config test enforces this: `scripts/packaging-config.test.ts` "keeps
-   package.json and the lockfile version in lockstep"). From this commit
-   forward, every existing evidence envelope is stale.
+2. **Bump the version — and COMMIT the bump before anything is packaged.** Edit
+   `"version"` in `package.json` (and keep `package-lock.json`'s two `version`
+   fields in lockstep — the packaging config test enforces this:
+   `scripts/packaging-config.test.ts` "keeps package.json and the lockfile
+   version in lockstep"). From this commit forward, every existing evidence
+   envelope is stale.
+
+   ```powershell
+   git add package.json package-lock.json
+   git commit -m "chore(release): bump to <version>"
+   ```
+
+   The bump lands in its OWN commit, here — not folded into the evidence commit
+   of step 6. Two independent mechanisms make "package first, commit the bump
+   after" fail, and both of them fail at the END of the expensive run:
+
+   - **The dirty-inputs gate.** `package.json` is a release input
+     (`PACKAGING_CONFIG` → `PACKAGED_INPUTS` → `RELEASE_DIRTY_INPUTS` in
+     `scripts/lib/subject-registry.mjs`), and `package-lock.json` is one too
+     (via `BUILD_CONFIG_INPUTS`). Stage 12,
+     `scripts/finalize-release.mjs`, runs `preflightRelease`, whose first rule
+     reports every uncommitted input — and a failed gate promotes NOTHING:
+
+     ```
+     Refusing to promote official sidecars (reason: gate-failed).
+     Blocking failures:
+      - [dirty-inputs] 2 input(s) uncommitted: package-lock.json, package.json
+     ```
+
+     You have then burned a full build and must re-run from scratch.
+   - **The build identity chain binds the commit.** Stage 3
+     (`scripts/gen-build-attestation.mjs`) records `source_head` — the HEAD it
+     built from — and `computeReleaseBinding`
+     (`scripts/lib/release/binding.mjs`) folds that HEAD *and* its subject line
+     into the release binding digest through `commitFingerprint`. Packaging
+     first and committing after would promote an acceptance bound to a commit
+     that is not the released one. The gate says so independently: a bump commit
+     is not evidence-only, so the head relation turns `code-descendant` and the
+     preflight adds `attestation-head-stale` on top of the dirty inputs.
+
+   This does not contradict step 6. Evidence envelopes are **not** release
+   inputs — `docs/evidence/*` is in no subject set and in no dirty-input
+   selector, and `docs/evidence/*.json` is explicitly durable in the head-relation
+   walk (`isDurableReleaseArtifact`, `scripts/lib/git-provenance.mjs`). So
+   committing the envelopes AFTER packaging keeps the relation
+   `evidence-descendant`, which the gate accepts; committing `package.json`
+   afterwards would not.
 
 3. **Cheap recaptures.** These two are fast, hermetic, and required for BOTH
    pilot and public:
@@ -77,9 +119,24 @@ of `pilot` everywhere below, plus a code-signing certificate
    $env:HERMES_E2E_NO_LLM = '1'; node scripts/e2e-hermes-shared-state.mjs > raw-shared.json
    node scripts/capture-evidence.mjs shared-state raw-shared.json
 
-   npm run package:thin-installer:qa > raw-thin.json   # emits JSON on stdout
+   npm run build:plugin
+   $thin = powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/e2e-thin-network-installer.ps1 -EmitQaArtifact
+   [System.IO.File]::WriteAllLines("$PWD\raw-thin.json", [string[]]$thin[[array]::LastIndexOf([object[]]$thin, '{')..($thin.Count - 1)])
    node scripts/capture-evidence.mjs thin-installer raw-thin.json
    ```
+
+   The thin-installer capture is deliberately NOT `npm run
+   package:thin-installer:qa > raw-thin.json`. That redirect does not produce
+   JSON — npm's banner, `build:plugin`'s output and the harness's own `== Case
+   N: ... ==` progress lines share the same stdout, so the file is a mixed log
+   whose LAST object is the report. `capture-evidence.mjs` currently rescues it
+   (`scripts/lib/json-input.mjs` rescans for the final JSON object), but nothing
+   else can read the file and the rescue dies the moment anything prints after
+   the report. The capture above takes the harness's output apart in PowerShell
+   and keeps only the report (`WriteAllLines`, because PowerShell 5.1's
+   `Set-Content -Encoding utf8` prepends a BOM strict parsers reject), so
+   `raw-thin.json` is genuinely parseable. Keep `-File`: entering the harness as
+   `-Command "& .\scripts\…"` fails part-way through, in the extraction closure.
 
    (`docs/evidence/README.md` "Regenerate" has the full, current commands —
    treat that file as the source of truth if it and this checklist ever
@@ -92,7 +149,43 @@ of `pilot` everywhere below, plus a code-signing certificate
    native engine's round-trip, not wrapper code; see
    `docs/evidence/README.md`.)
 
-5. **Package.** This is the expensive step — the exact-artifact stage re-runs
+5. **Package.** First, clear the PREVIOUS version's installer out of `release/`.
+   Nothing cleans that directory — `scripts/package-win.mjs` runs the 12 stages
+   and no more, and electron-builder writes the new installer alongside whatever
+   is already sitting there. Check:
+
+   ```powershell
+   Get-ChildItem release\*.exe | Select-Object Name, Length, LastWriteTime
+   ```
+
+   Move or delete every `Tachles-Setup-<older-version>.exe` (and its `.blockmap`
+   sibling — no stage reads blockmaps; electron-builder rewrites the current
+   one). This is not tidiness. The installer is located by a SUBSTRING match on
+   the version that must hit exactly one file (`selectVersionedInstaller`,
+   `scripts/lib/release/exact-artifact.mjs`), so a leftover collides whenever
+   the new version string is contained in the older name — cutting `0.4.0` with
+   a leftover `0.4.0-alpha.9`, or `0.4.0-alpha.1` with a leftover
+   `0.4.0-alpha.10`. On a collision `measureInstallers` returns NOTHING, and the
+   run dies with `No installer .exe under release/` (gen-release-report,
+   finalize-release) or `[artifact-set] no installer .exe present under
+   release/` — which reads like a build failure rather than a stale file.
+
+   Delete installers and blockmaps only. Everything else under `release/` is
+   either regenerated by this run or is the record of the last one:
+   - `checksums.json`, `SHA256SUMS.txt`, `ACCEPTANCE.md`, `release-report.json`
+     and `update-manifest.json` are the official sidecars stage 12 promotes in
+     ONE atomic transaction, and a failed gate deliberately leaves the previous
+     ones standing (`Prior sidecars left untouched`). That is the last GOOD
+     release's record — do not hand-delete it.
+   - `.release-promote-journal.json`, if you ever see it, means a promotion was
+     interrupted; `finalize-release.mjs` heals it (`recoverRelease`) at the start
+     of the next run. Deleting it by hand destroys that recovery and strands the
+     `*.bak-<n>` pre-images next to it.
+   - `win-unpacked/` is the phase-1 payload that stages 5–11 sign, measure and
+     re-extract, and `lock-attest.json` is written by stage 8 and read by the
+     gate. Both are rewritten by a run; never touch either during one.
+
+   Then package. This is the expensive step — the exact-artifact stage re-runs
    the packaged E2E + a REAL denied-approval probe against the isolated runtime,
    machine-binding `packaged-e2e` + `approval` to this exact build:
 
@@ -115,9 +208,13 @@ of `pilot` everywhere below, plus a code-signing certificate
    commit them:
 
    ```powershell
-   git add docs/evidence/ CHANGELOG.md package.json package-lock.json
+   git add docs/evidence/ CHANGELOG.md
    git commit -m "chore(release): v<version> pilot evidence + changelog"
    ```
+
+   `package.json` / `package-lock.json` are deliberately absent here: they were
+   committed in step 2, before the build, and this commit must stay durable —
+   envelopes (and non-subject files like `CHANGELOG.md`) only.
 
 7. **Tag the release commit.**
 
@@ -253,11 +350,27 @@ of `pilot` everywhere below, plus a code-signing certificate
 
     ```powershell
     node scripts/verify-release-contract.mjs --channel pilot
+    node scripts/verify-published-release.mjs --tag v<version> --channel pilot
     ```
 
-    Must print `DISTRIBUTABLE` / `contract clean` with **zero** failures (the
+    The first must print `DISTRIBUTABLE` / `contract clean` with **zero** failures (the
     only acceptable `externalBlocker` is `thin-installer` if you chose not to
     recapture it in step 4 — that's honest, not a defect).
+
+    The second is REQUIRED, not optional: it is the only machine check over
+    step 9, which is otherwise pure hand-work. It re-reads the PUBLISHED release
+    and holds it to the shape this checklist mandates — prerelease, not draft,
+    exactly the three assets, the Latin-script title `Tachles <version> (Alpha —
+    Pilot)`, a body carrying the Hebrew user section and the verbatim
+    installation advisory, and a published installer digest equal to the ledger
+    entry recorded in step 10. It exists because step 9 drifted within minutes
+    of being read on v0.4.0-alpha.10: that release went out with a Hebrew title,
+    with `checksums.json` uploaded in place of the `SHA256SUMS.txt` the mandated
+    advisory tells testers to verify against, and with a Hebrew-only body
+    instead of the required bilingual one. Nothing caught any of it — it was
+    found by re-reading the checklist afterwards. A manual step with no verifier
+    drifts.
+
     Sanity-check that a previous companion install's update check
     (`SupportUpdatePanel` → "בדוק עדכון") now surfaces `<version>` as
     available, once its release channel eligibility (D1 — a prerelease
