@@ -6,6 +6,8 @@ const { checkCompanionUpdate } = require('./companion-update.cjs')
 const { downloadCompanionUpdate } = require('./companion-download.cjs')
 const { applyCompanionUpdate } = require('./companion-apply.cjs')
 const { readCompanionJournal } = require('./companion-update-journal.cjs')
+const { compareSemver } = require('./companion-update-core.cjs')
+const { resolveRollbackOffer, downloadCompanionRollback } = require('./companion-rollback.cjs')
 
 // IPC surface for the CONSENTED תכל'ס (companion) one-click update
 // (docs/specs/versioning.md §6.4, §7). The CHECK lives in ipc.cjs; this module
@@ -92,6 +94,61 @@ async function handleDownload() {
 }
 
 /**
+ * Download + verify the installer for the version this install came FROM (F5).
+ *
+ * Takes no parameters for the same reason `handleDownload` takes none, only more
+ * so: this one moves the app BACKWARDS, and the destination is read out of main's
+ * own durable journal. A renderer that could name the version would be able to
+ * name any version — which is precisely the downgrade primitive the forward
+ * path's "strictly newer" rule exists to deny.
+ *
+ * Shares `runDownloadExclusively` and the `inFlight` controller with the forward
+ * download on purpose: an update and a rollback must never race each other into
+ * the same journal, and the existing cancel handler then aborts whichever one is
+ * running without needing to know which it was.
+ */
+async function handleRollbackDownload() {
+  try {
+    return await runDownloadExclusively(async () => {
+      const controller = new AbortController()
+      inFlight = controller
+      try {
+        return await downloadCompanionRollback({ signal: controller.signal }, { onProgress: pushProgress })
+      } finally {
+        inFlight = null
+      }
+    })
+  } catch (error) {
+    const message = error && error.message ? error.message : 'החזרה לגרסה הקודמת נכשלה.'
+    rememberLog(`Companion rollback download failed: ${message}`)
+    return { ok: false, code: 'busy', message }
+  }
+}
+
+/**
+ * Is a rollback on offer, and to where? Read-only and offline (two local file
+ * reads), so the UI can call it on mount. Scalars only — the same rule the
+ * update-state handler follows.
+ */
+function handleRollbackOffer() {
+  try {
+    const offer = resolveRollbackOffer()
+    return {
+      available: offer.available === true,
+      target: offer.target || null,
+      from: offer.from || null,
+      code: offer.code || null,
+      message: offer.message || null
+    }
+  } catch (error) {
+    // Fail CLOSED: an unreadable journal means we cannot prove a previous version
+    // ever ran here, so no offer is made. Never a default-on.
+    rememberLog(`Companion rollback offer check failed: ${error?.message || error}`)
+    return { available: false, target: null, from: null, code: 'offer-check-failed', message: 'לא ניתן לבדוק אם קיימת גרסה קודמת לחזור אליה.' }
+  }
+}
+
+/**
  * Apply a download that already reached the journal's `ready` phase. This QUITS
  * THE APP on success — it is the last thing this process does.
  *
@@ -127,18 +184,34 @@ async function handleApply() {
  */
 function handleState() {
   const record = readCompanionJournal({})
-  if (!record) return { phase: null, targetVersion: null, currentVersion: app.getVersion() }
+  if (!record) return { phase: null, targetVersion: null, currentVersion: app.getVersion(), direction: null }
   return {
     phase: record.phase || null,
     targetVersion: record.targetVersion || null,
-    currentVersion: app.getVersion()
+    currentVersion: app.getVersion(),
+    // Which WAY a pending record points, decided here rather than in the
+    // renderer: the ONE SemVer implementation lives in main
+    // (companion-update-core.cjs), and a renderer-side string comparison would be
+    // a second, wrong ordering — '0.4.0-alpha.10' sorts below '0.4.0-alpha.9'
+    // lexically, which is precisely the bug that was found in the installer's
+    // PowerShell SemVer at alpha.9. `null` when the two cannot be ordered: the
+    // UI must not guess a direction it cannot prove.
+    direction: directionOf(record.currentVersion, record.targetVersion)
   }
+}
+
+function directionOf(from, to) {
+  const cmp = compareSemver(to, from)
+  if (cmp === null || cmp === 0) return null
+  return cmp > 0 ? 'forward' : 'rollback'
 }
 
 function registerCompanionUpdateIpc() {
   ipcMain.handle('hermes:companion-download', () => handleDownload())
   ipcMain.handle('hermes:companion-apply', () => handleApply())
   ipcMain.handle('hermes:companion-update-state', () => handleState())
+  ipcMain.handle('hermes:companion-rollback-offer', () => handleRollbackOffer())
+  ipcMain.handle('hermes:companion-rollback-download', () => handleRollbackDownload())
   // Cancel is a no-op when nothing is in flight — never an error, so a stale
   // click from a renderer whose download already finished cannot surface a
   // spurious failure.
@@ -149,4 +222,11 @@ function registerCompanionUpdateIpc() {
   })
 }
 
-module.exports = { registerCompanionUpdateIpc, handleDownload, handleApply, handleState }
+module.exports = {
+  registerCompanionUpdateIpc,
+  handleDownload,
+  handleApply,
+  handleState,
+  handleRollbackOffer,
+  handleRollbackDownload
+}

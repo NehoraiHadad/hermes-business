@@ -114,6 +114,12 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
   // this promise never settles.
   applyCompanionUpdate: () => invoke('hermes:companion-apply'),
   companionUpdateState: () => invoke('hermes:companion-update-state'),
+  // Rollback (F5) — argument-free for the same reason, and more strictly: this
+  // one moves BACKWARDS, so the destination is read from main's durable journal.
+  // A renderer that could name the version could name ANY version, which is the
+  // downgrade primitive the forward path exists to deny.
+  companionRollbackOffer: () => invoke('hermes:companion-rollback-offer'),
+  downloadCompanionRollback: () => invoke('hermes:companion-rollback-download'),
   onCompanionDownloadProgress: callback => {
     const listener = (_event, progress) => callback(progress)
     ipcRenderer.on('hermes:companion-download-progress', listener)

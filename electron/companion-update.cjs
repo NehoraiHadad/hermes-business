@@ -326,6 +326,13 @@ module.exports = {
   REQUEST_TIMEOUT_MS,
   CACHE_TTL_MS,
   STATE_FILE_NAME,
+  // Exported for the ROLLBACK path only (companion-rollback.cjs). The forward
+  // check needs just the latest eligible release, but a rollback must locate one
+  // SPECIFIC older release by tag, so it needs the list. It is exported rather
+  // than reimplemented so both paths share one URL, one timeout, one User-Agent
+  // and one `truncated` completeness rule — a second fetcher would be a second
+  // place for the release feed's shape to be assumed.
+  fetchReleases,
   checkCompanionUpdate,
   isPassiveUpdateCheckDisabled,
   getLastCheckedAt,

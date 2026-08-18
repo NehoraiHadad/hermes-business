@@ -38,9 +38,31 @@ const { verify: cryptoVerify } = require('node:crypto')
  * different material.
  */
 const UPDATE_TRUST_KEYS = Object.freeze({
-  // Generated 2026-08-18. Private half: %USERPROFILE%\.tachles-release\update-signing-key.pem
+  // PRIMARY (active signer). Generated 2026-08-18.
+  // Private half: %USERPROFILE%\.tachles-release\update-signing-key.pem
   'tachles-update-ed25519-947e2bb83d384c67': `-----BEGIN PUBLIC KEY-----
 MCowBQYDK2VwAyEAYD+OjPzYJc4EcU5dZlx8gF1Y04GYzaHKuPpt4OVPXfs=
+-----END PUBLIC KEY-----
+`,
+  // RESERVE (never signs a routine release). Generated 2026-08-18 alongside the
+  // primary, and shipped from this build onward for ONE reason: rotation only
+  // ever helps FUTURE installs. An app already on a user's disk trusts exactly
+  // the ids compiled into it, and we cannot reach it to add one — so if the
+  // primary key is lost or compromised AFTER a build ships, a brand-new key is
+  // worthless to that install and every user would have to reinstall by hand.
+  // Provisioning the reserve NOW, before there is a user base, is the only
+  // moment it can be done cheaply.
+  //
+  // What this does and does not buy, stated plainly: it protects against LOSS
+  // unconditionally. It protects against COMPROMISE only to the extent the two
+  // private halves live in different places — the reserve is meant to be moved
+  // offline and deleted from the build machine, and if it is left sitting next
+  // to the primary then a single machine compromise takes both and the reserve
+  // has bought nothing. There is deliberately no revocation channel: adding the
+  // reserve lets us sign again, it cannot make installed apps STOP trusting a
+  // stolen primary (see docs/specs/versioning.md §7.3).
+  'tachles-update-ed25519-c6379a37ef1fb417': `-----BEGIN PUBLIC KEY-----
+MCowBQYDK2VwAyEA5YNR4qOMt9uiv9cC96KbiutqyHvajZ0oVuX/NvvLpaU=
 -----END PUBLIC KEY-----
 `
 })

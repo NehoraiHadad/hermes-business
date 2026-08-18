@@ -101,6 +101,13 @@ export interface HermesDesktopApi {
   /** Read-only projection of the durable journal, so a verified-but-unapplied
    *  download survives a restart as a resumable offer. Scalars only. */
   companionUpdateState(): Promise<CompanionUpdateJournalState>
+  /** Is a one-step return to the previous version on offer, and to where? Offline
+   *  (two local file reads) and fail-closed: an unreadable journal reports
+   *  `available:false`, never an optimistic default. */
+  companionRollbackOffer(): Promise<CompanionRollbackOffer>
+  /** Download + verify the installer for the version this install came FROM. The
+   *  destination is main's to decide, not the caller's — hence no argument. */
+  downloadCompanionRollback(): Promise<CompanionDownloadResult>
   /** Streamed-download progress. `totalBytes:null` means the response carried no
    *  usable length — the UI must go indeterminate, never invent a denominator. */
   onCompanionDownloadProgress(callback: (progress: CompanionDownloadProgress) => void): () => void
@@ -217,6 +224,12 @@ function createBridgeDesktop(getBridge: BridgeAccessor): HermesDesktopApi {
     },
     async companionUpdateState() {
       return need('companionUpdateState')()
+    },
+    async companionRollbackOffer() {
+      return need('companionRollbackOffer')()
+    },
+    async downloadCompanionRollback() {
+      return need('downloadCompanionRollback')()
     },
     // Same reasoning as onCompanionUpdateAvailable: a subscribe call must not
     // throw synchronously out of a React effect, and without a bridge there is

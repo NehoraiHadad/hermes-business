@@ -114,6 +114,18 @@ export type UseCompanionUpdate = {
   /** An unresolved apply from a previous launch, or null. */
   stuckApply: StuckApply | null
   acknowledgeStuckApply: () => void
+
+  // ---- rollback to the previous version (§7.5) -----------------------------
+  /** Main's offline verdict on whether a one-step rollback is possible, or null
+   *  before the first read. `available:false` always carries a Hebrew `message`
+   *  saying why — the panel shows it instead of hiding the capability silently. */
+  rollbackOffer: CompanionRollbackOffer | null
+  /** True when the pending `ready` offer is a DOWNGRADE rather than an update.
+   *  Derived from main's `direction`, never from comparing version strings here:
+   *  the one SemVer implementation lives in main, and '…alpha.10' sorts below
+   *  '…alpha.9' under string comparison. */
+  rollingBack: boolean
+  rollback: () => Promise<void>
 }
 
 // A missing bridge is the ONE path that can still reject (createHermesDesktop's
@@ -132,6 +144,8 @@ export function useCompanionUpdate(): UseCompanionUpdate {
   const [error, setError] = useState<string | null>(null)
   const [errorCode, setErrorCode] = useState<string | null>(null)
   const [stuckApply, setStuckApply] = useState<StuckApply | null>(null)
+  const [rollbackOffer, setRollbackOffer] = useState<CompanionRollbackOffer | null>(null)
+  const [rollingBack, setRollingBack] = useState(false)
   // Guards state updates after unmount (the two subscriptions and any in-flight
   // action promise can all resolve after the component is gone).
   const mounted = useRef(true)
@@ -178,6 +192,7 @@ export function useCompanionUpdate(): UseCompanionUpdate {
   const adoptJournal = useCallback((state: CompanionUpdateJournalState) => {
     if (state.phase === 'ready' && state.targetVersion) {
       setReadyVersion(state.targetVersion)
+      setRollingBack(state.direction === 'rollback')
       setPhase('ready')
       return
     }
@@ -213,6 +228,26 @@ export function useCompanionUpdate(): UseCompanionUpdate {
     }
   }, [adoptJournal])
 
+  // Is a rollback possible? Offline on main's side (two local file reads), so it
+  // costs nothing to ask on mount. A rejection means no bridge ⇒ no offer, which
+  // is the fail-closed answer: we cannot prove a previous version ever ran here.
+  useEffect(() => {
+    let abandoned = false
+    hermesClient
+      .companionRollbackOffer()
+      .then(offer => {
+        if (abandoned || !mounted.current) return
+        setRollbackOffer(offer)
+      })
+      .catch(() => {
+        if (abandoned || !mounted.current) return
+        setRollbackOffer({ available: false, target: null, from: null, code: 'bridge-unavailable', message: null })
+      })
+    return () => {
+      abandoned = true
+    }
+  }, [])
+
   const check = useCallback(async (force = false) => {
     setChecking(true)
     try {
@@ -240,7 +275,10 @@ export function useCompanionUpdate(): UseCompanionUpdate {
       const state = await hermesClient.companionUpdateState()
       if (!mounted.current) return
       setPhase(state.phase === 'ready' && state.targetVersion ? 'ready' : 'idle')
-      if (state.phase === 'ready' && state.targetVersion) setReadyVersion(state.targetVersion)
+      if (state.phase === 'ready' && state.targetVersion) {
+        setReadyVersion(state.targetVersion)
+        setRollingBack(state.direction === 'rollback')
+      }
     } catch {
       if (mounted.current) setPhase('idle')
     }
@@ -251,6 +289,7 @@ export function useCompanionUpdate(): UseCompanionUpdate {
     setErrorCode(null)
     setReceivedBytes(0)
     setTotalBytes(null)
+    setRollingBack(false)
     setPhase('downloading')
     try {
       const result = await hermesClient.downloadCompanionUpdate()
@@ -269,6 +308,38 @@ export function useCompanionUpdate(): UseCompanionUpdate {
     } catch {
       if (!mounted.current) return
       setPhase('idle')
+      setError(BRIDGE_FAILURE)
+      setErrorCode('bridge-unavailable')
+    }
+  }, [])
+
+  // Deliberately a SEPARATE action from `download`, not a parameter on it. The
+  // two differ in the one way that matters — which direction the install moves —
+  // and a boolean argument would put that choice on a call site instead of on a
+  // distinct, separately-consented button the owner had to press.
+  const rollback = useCallback(async () => {
+    setError(null)
+    setErrorCode(null)
+    setReceivedBytes(0)
+    setTotalBytes(null)
+    setRollingBack(true)
+    setPhase('downloading')
+    try {
+      const result = await hermesClient.downloadCompanionRollback()
+      if (!mounted.current) return
+      if (result.ok) {
+        setReadyVersion(result.version)
+        setPhase('ready')
+        return
+      }
+      setPhase('idle')
+      setRollingBack(false)
+      setError(result.message)
+      setErrorCode(result.code)
+    } catch {
+      if (!mounted.current) return
+      setPhase('idle')
+      setRollingBack(false)
       setError(BRIDGE_FAILURE)
       setErrorCode('bridge-unavailable')
     }
@@ -331,6 +402,9 @@ export function useCompanionUpdate(): UseCompanionUpdate {
     cancel,
     apply,
     stuckApply,
-    acknowledgeStuckApply
+    acknowledgeStuckApply,
+    rollbackOffer,
+    rollingBack,
+    rollback
   }
 }

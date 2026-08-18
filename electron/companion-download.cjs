@@ -234,6 +234,7 @@ async function downloadCompanionUpdate(request = {}, deps = {}) {
     version = null,
     installerUrl = null,
     manifestUrl = null,
+    direction = 'forward',
     signal = null
   } = request || {}
 
@@ -281,6 +282,7 @@ async function downloadCompanionUpdate(request = {}, deps = {}) {
         version,
         installerUrl,
         manifestUrl,
+        direction,
         signal,
         fetchImpl,
         fsImpl,
@@ -315,6 +317,7 @@ async function runDownload(ctx) {
     version,
     installerUrl,
     manifestUrl,
+    direction,
     signal,
     fetchImpl,
     fsImpl,
@@ -416,6 +419,11 @@ async function runDownload(ctx) {
       // anti-replay anchor: a genuinely signed but OLD manifest is authentic and
       // off-topic, and off-topic is rejected.
       expectedVersion: version,
+      // Which way this install is allowed to move. 'forward' for the ordinary
+      // update; 'rollback' ONLY for the separately-consented return to the
+      // version the durable journal records this install came from. The verifier
+      // refuses an unknown value outright rather than defaulting.
+      direction,
       keys,
       verifySignature
     })

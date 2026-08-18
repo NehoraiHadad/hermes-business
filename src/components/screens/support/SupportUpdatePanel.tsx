@@ -1,4 +1,4 @@
-import { Download, LoaderCircle, RefreshCw, ShieldCheck, X } from 'lucide-react'
+import { Download, LoaderCircle, RefreshCw, RotateCcw, ShieldCheck, X } from 'lucide-react'
 import { useCompanionUpdate } from '../../../hooks/useCompanionUpdate'
 import { hermesClient, type HermesUpdateStatus } from '../../../lib/hermes-client'
 // Derived, not duplicated: the supported range/floor come straight from the
@@ -180,6 +180,9 @@ export function SupportUpdatePanel({
             </span>
           )}
           <div className="modal__actions">
+            {companion.rollbackOffer && !companion.rollbackOffer.available && companion.rollbackOffer.message ? (
+              <p className="version-note">{companion.rollbackOffer.message}</p>
+            ) : null}
             <button className="ghost-button" onClick={companion.acknowledgeStuckApply}>
               <X size={15} /> הבנתי, אפשר להסתיר
             </button>
@@ -230,6 +233,33 @@ export function SupportUpdatePanel({
         </div>
       ) : null}
 
+      {/* Return to the previous version. Shown only while nothing of ours is
+          running, and only when MAIN proved a previous version actually ran on
+          this machine — the offer is never rendered off a guess. Deliberately a
+          quiet secondary action: going backwards is the exception, and putting it
+          at the same weight as "update" would invite it as a routine choice. */}
+      {phase === 'idle' && companion.rollbackOffer?.available ? (
+        <div>
+          <p className="version-note">
+            אם משהו הפסיק לעבוד כמו קודם, אפשר לחזור לגרסה{' '}
+            <bdi dir="ltr">{companion.rollbackOffer.target}</bdi> — זו הגרסה שהייתה כאן לפני העדכון האחרון.
+          </p>
+          <p className="version-note">
+            ההגדרות והנתונים שלכם נשארים במקומם. שימו לב שדברים שנוספו בגרסה החדשה עשויים לא להופיע בגרסה הקודמת.
+          </p>
+          <div className="modal__actions">
+            <button
+              className="outline-button"
+              onClick={() => void companion.rollback()}
+              disabled={inFlight}
+              aria-label={`חזרו לגרסה ${companion.rollbackOffer.target ?? ''} של תכל'ס`}
+            >
+              <RotateCcw size={15} /> חזרו לגרסה הקודמת
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       {/* Download in progress — including the short "checking the file" step, which
           keeps the same bar so the owner sees one continuous operation. */}
       {phase === 'downloading' || phase === 'verifying' ? (
@@ -262,8 +292,11 @@ export function SupportUpdatePanel({
             יבצע משימות, וזה חוזר לעצמו מיד עם העלייה מחדש.
           </p>
           <div className="modal__actions">
+            {/* Same action, different promise. `rollingBack` comes from MAIN's
+                direction verdict, so the label can never say "update" while the
+                journal is about to install something older. */}
             <button className="primary-button" onClick={() => void companion.apply()}>
-              <Download size={15} /> התקן והפעל מחדש
+              <Download size={15} /> {companion.rollingBack ? 'התקן את הגרסה הקודמת' : 'התקן והפעל מחדש'}
             </button>
           </div>
         </div>

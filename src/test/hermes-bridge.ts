@@ -86,7 +86,19 @@ const HONEST_UNKNOWN_DEFAULTS = {
   // a machine with no interrupted update reports. The opposite default (a `ready`
   // phase) would fabricate a verified download that no test performed, so a
   // resumable-offer test must stub this explicitly.
-  companionUpdateState: () => ({ phase: null, targetVersion: null, currentVersion: '0.0.0' })
+  companionUpdateState: () => ({ phase: null, targetVersion: null, currentVersion: '0.0.0', direction: null }),
+  // Rollback offer (§7.5): "no previous version is recorded here" is the honest
+  // default AND the fail-closed one — it is exactly what a fresh install with no
+  // update history reports, and it offers nothing. The opposite default would
+  // fabricate a previous version that never ran on the machine, so a test that
+  // wants the offer visible must stub it explicitly.
+  companionRollbackOffer: () => ({
+    available: false,
+    target: null,
+    from: null,
+    code: 'no-recorded-update',
+    message: 'הגרסה הזו לא הותקנה דרך עדכון בלחיצה אחת, ולכן אין גרסה קודמת מתועדת לחזור אליה.'
+  })
 }
 
 // Side-effecting calls, or reads with no safe "unknown" shape: reject loudly
@@ -133,7 +145,11 @@ const NOT_STUBBED_METHODS = [
   // update flow it never drove. A test that exercises one stubs it explicitly.
   'downloadCompanionUpdate',
   'cancelCompanionDownload',
-  'applyCompanionUpdate'
+  'applyCompanionUpdate',
+  // Same bucket, same reason: a rollback downloads an executable too. It is only
+  // the DIRECTION that differs, and a permissive default here would let a test
+  // claim a verified downgrade it never performed.
+  'downloadCompanionRollback'
 ] as const
 
 // Full method inventory, statically checked against HermesDesktopBridge below

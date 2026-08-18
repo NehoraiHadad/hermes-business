@@ -199,6 +199,41 @@ describe('verifyUpdateManifest — every fail-closed branch', () => {
     expect(verifyIt(m2, { expectedVersion: '0.4.0-alpha.6' }).code).toBe('version-not-newer')
   })
 
+  it('direction-unknown: an unrecognised direction is refused, never defaulted into a branch', () => {
+    // A typo must not fall through to whichever side an if/else leaves open.
+    expect(verifyIt(signedDoc(), { direction: 'backward' }).code).toBe('direction-unknown')
+    expect(verifyIt(signedDoc(), { direction: 'rollBack' }).code).toBe('direction-unknown')
+    expect(verifyIt(signedDoc(), { direction: null }).code).toBe('direction-unknown')
+  })
+
+  it("direction:'rollback' inverts ONLY the ordering rule — an older manifest passes, a newer one does not", () => {
+    const older = doc({ version: '0.4.0-alpha.6', installer: { name: 'Tachles-Setup-0.4.0-alpha.6.exe', sha256: SHA, bytes: 10 } })
+    const m = attachSignature(older, toySign(KEY_ID)(manifestSigningBody(older)))
+    // Same document that is 'version-not-newer' going forward is ACCEPTED going back.
+    expect(verifyIt(m, { expectedVersion: '0.4.0-alpha.6' }).code).toBe('version-not-newer')
+    expect(verifyIt(m, { expectedVersion: '0.4.0-alpha.6', direction: 'rollback' }).ok).toBe(true)
+    // ...and the forward manifest is refused in the rollback direction.
+    expect(verifyIt(signedDoc(), { direction: 'rollback' }).code).toBe('version-not-older')
+  })
+
+  it("direction:'rollback' does NOT weaken the signature or the anti-replay equality", () => {
+    // The whole safety argument for allowing a downgrade rests on these two
+    // controls being untouched. If either could be skipped by asking for a
+    // rollback, the direction flag would BE the downgrade attack.
+    const older = doc({ version: '0.4.0-alpha.6', installer: { name: 'Tachles-Setup-0.4.0-alpha.6.exe', sha256: SHA, bytes: 10 } })
+    const signed = attachSignature(older, toySign(KEY_ID)(manifestSigningBody(older)))
+    expect(verifyIt({ ...signed, signature: 'AAAA' }, { expectedVersion: '0.4.0-alpha.6', direction: 'rollback' }).code).toBe('signature-invalid')
+    expect(verifyIt(signed, { expectedVersion: '0.4.0-alpha.5', direction: 'rollback' }).code).toBe('version-mismatch')
+    expect(verifyIt(signed, { expectedVersion: undefined, direction: 'rollback' }).code).toBe('expected-version-absent')
+  })
+
+  it('reinstalling the RUNNING version is refused in BOTH directions', () => {
+    const same = doc({ version: CURRENT, installer: { name: `Tachles-Setup-${CURRENT}.exe`, sha256: SHA, bytes: 10 } })
+    const m = attachSignature(same, toySign(KEY_ID)(manifestSigningBody(same)))
+    expect(verifyIt(m, { expectedVersion: CURRENT, currentVersion: CURRENT }).code).toBe('version-not-newer')
+    expect(verifyIt(m, { expectedVersion: CURRENT, currentVersion: CURRENT, direction: 'rollback' }).code).toBe('version-not-older')
+  })
+
   it('installer-absent: no installer record', () => {
     expect(verifyIt(signedDoc({ installer: undefined })).code).toBe('installer-absent')
   })

@@ -110,7 +110,26 @@ declare global {
     // when the apply was refused.
     applyCompanionUpdate: () => Promise<CompanionApplyRefusal>
     companionUpdateState: () => Promise<CompanionUpdateJournalState>
+    // Rollback (§7.5). Argument-free for the same reason, and more strictly so:
+    // this one moves the install BACKWARDS, and the destination is read out of
+    // main's own durable journal. A renderer able to name the version would be
+    // able to name ANY version — the exact downgrade primitive the forward
+    // path's "strictly newer" rule denies.
+    companionRollbackOffer: () => Promise<CompanionRollbackOffer>
+    downloadCompanionRollback: () => Promise<CompanionDownloadResult>
     onCompanionDownloadProgress: (callback: (progress: CompanionDownloadProgress) => void) => () => void
+  }
+
+  // Is a one-step return to the previous version on offer? `available:false`
+  // always carries a `code` and a Hebrew `message` saying WHY — "no previous
+  // version was ever recorded here" is a different fact from "it is no longer
+  // published", and the UI says which.
+  type CompanionRollbackOffer = {
+    available: boolean
+    target: string | null
+    from: string | null
+    code: string | null
+    message: string | null
   }
 
   // Streamed-download progress (electron/companion-download.cjs). `totalBytes` is
@@ -138,6 +157,10 @@ declare global {
     phase: 'downloading' | 'verifying' | 'ready' | 'applying' | null
     targetVersion: string | null
     currentVersion: string
+    // Which way a pending record points, decided in MAIN by the one SemVer
+    // implementation. `null` means the two versions could not be ordered — the
+    // UI must then say nothing about direction rather than guess.
+    direction: 'forward' | 'rollback' | null
   }
 
   // Wire contract of `hermes:companion-update` / `hermes:companion-update-available`

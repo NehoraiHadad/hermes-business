@@ -57,17 +57,38 @@ const UPDATE_MANIFEST_CODES = Object.freeze([
   'manifest-absent',
   'schema-unsupported',
   'expected-version-absent',
+  'direction-unknown',
   'signer-unknown',
   'signature-absent',
   'signature-invalid',
   'version-mismatch',
   'version-unparseable',
   'version-not-newer',
+  'version-not-older',
   'installer-absent',
   'installer-digest-malformed',
   'installer-bytes-invalid',
   'installer-name-mismatch'
 ])
+
+/**
+ * Which way this install is allowed to move. This is a CALLER-declared intent,
+ * never something read out of the manifest or off the network — a document does
+ * not get to tell us whether it is an upgrade.
+ *
+ *   'forward'  — the ordinary update: the manifest must be STRICTLY NEWER than
+ *                what is installed.
+ *   'rollback' — the deliberate, separately-consented return to the version this
+ *                install came from: the manifest must be STRICTLY OLDER.
+ *
+ * The anti-replay control is UNCHANGED in both directions, and that is the whole
+ * reason a rollback is safe to allow: `expectedVersion` must still match the
+ * manifest exactly, and for a rollback that value is derived from OUR OWN durable
+ * journal (the version we recorded updating away from), not from the renderer and
+ * not from the release feed. So an attacker cannot pick the destination — the
+ * most they could do is replay the exact version the user already ran.
+ */
+const UPDATE_DIRECTIONS = Object.freeze(['forward', 'rollback'])
 
 // Lowercase ONLY — one canonical spelling, so a manifest digest can never differ
 // from the checksums.json entry by case alone (a difference the cross-check in
@@ -93,6 +114,7 @@ function manifestSigningBody(doc) {
  *   manifest        : the parsed update-manifest.json (UNTRUSTED input)
  *   currentVersion  : the version currently INSTALLED
  *   expectedVersion : the version the update CHECK decided to install
+ *   direction       : 'forward' (default) | 'rollback' — see UPDATE_DIRECTIONS
  *   keys            : trusted key map { keyId: PEM } (an array of ids also works)
  *   verifySignature : injected (body, signatureB64, keyId) => boolean
  *
@@ -100,7 +122,7 @@ function manifestSigningBody(doc) {
  * first and only then are its claims (version, digest, name) examined — we never
  * make a decision based on a field of an unauthenticated document.
  */
-function verifyUpdateManifest({ manifest, currentVersion, expectedVersion, keys, verifySignature } = {}) {
+function verifyUpdateManifest({ manifest, currentVersion, expectedVersion, direction = 'forward', keys, verifySignature } = {}) {
   if (!manifest || typeof manifest !== 'object') return fail('manifest-absent', 'no update manifest supplied')
   if (manifest.schema !== UPDATE_MANIFEST_SCHEMA) {
     return fail('schema-unsupported', `manifest schema ${JSON.stringify(manifest.schema)} != ${UPDATE_MANIFEST_SCHEMA} — this build cannot interpret it`)
@@ -109,6 +131,12 @@ function verifyUpdateManifest({ manifest, currentVersion, expectedVersion, keys,
   // anti-replay control at all, so an absent one is a refusal, never a wildcard.
   if (!expectedVersion || typeof expectedVersion !== 'string') {
     return fail('expected-version-absent', 'no expectedVersion supplied — refusing to verify a manifest against "whatever it says"')
+  }
+  // A caller-side programming error, guarded like hostile input anyway: a typo
+  // ('backward', 'rollBack') must not silently fall through to whichever branch
+  // an `if/else` happens to leave open. There is no default-on-unknown.
+  if (!UPDATE_DIRECTIONS.includes(direction)) {
+    return fail('direction-unknown', `direction ${JSON.stringify(direction)} is not one of ${UPDATE_DIRECTIONS.join('/')} — refusing to guess which way this install may move`)
   }
 
   const trusted = Array.isArray(keys) ? keys : Object.keys(keys || {})
@@ -138,16 +166,23 @@ function verifyUpdateManifest({ manifest, currentVersion, expectedVersion, keys,
     return fail('version-mismatch', `manifest describes v${manifest.version} but the update check decided to install v${expectedVersion} (replayed/substituted manifest)`)
   }
 
-  // Defence in depth: even if the CHECK itself were tricked into "deciding" on an
-  // older version, the manifest must still be strictly newer than what is
-  // installed. Unparseable on either side means "cannot prove an order" → refuse
-  // (compareSemver returns null, which is never treated as equality).
+  // Defence in depth: even if the CHECK itself were tricked into "deciding" on
+  // the wrong version, the manifest must still lie on the side of the installed
+  // version that the DECLARED direction allows. Unparseable on either side means
+  // "cannot prove an order" → refuse (compareSemver returns null, which is never
+  // treated as equality). Note `cmp === 0` fails in BOTH directions: reinstalling
+  // the running version is not a move, and allowing it would give an attacker a
+  // free "make them run the installer again" primitive.
   const cmp = compareSemver(manifest.version, currentVersion)
+  const installedLabel = parseSemver(currentVersion)?.raw ?? currentVersion
   if (cmp === null) {
     return fail('version-unparseable', `cannot order manifest v${manifest.version} against installed ${currentVersion ? `v${currentVersion}` : '(absent)'} — refusing to guess`)
   }
-  if (cmp <= 0) {
-    return fail('version-not-newer', `manifest v${manifest.version} is not strictly newer than the installed v${parseSemver(currentVersion)?.raw ?? currentVersion} (rollback)`)
+  if (direction === 'forward' && cmp <= 0) {
+    return fail('version-not-newer', `manifest v${manifest.version} is not strictly newer than the installed v${installedLabel} (rollback)`)
+  }
+  if (direction === 'rollback' && cmp >= 0) {
+    return fail('version-not-older', `manifest v${manifest.version} is not strictly older than the installed v${installedLabel} — a rollback may only move backwards`)
   }
 
   const installer = manifest.installer
@@ -175,6 +210,7 @@ function fail(code, detail) { return { ok: false, code, detail } }
 module.exports = {
   UPDATE_MANIFEST_SCHEMA,
   UPDATE_MANIFEST_CODES,
+  UPDATE_DIRECTIONS,
   SHA256_HEX,
   manifestSigningBody,
   verifyUpdateManifest

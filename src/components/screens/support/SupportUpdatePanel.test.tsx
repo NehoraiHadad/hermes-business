@@ -357,7 +357,7 @@ describe('SupportUpdatePanel — failure paths keep the manual route open', () =
 
   it('surfaces a REFUSED apply — the only way applyCompanionUpdate ever resolves', async () => {
     stubBridge({
-      companionUpdateState: async () => ({ phase: 'ready', targetVersion: '0.5.0', currentVersion: '0.4.0' }),
+      companionUpdateState: async () => ({ phase: 'ready', targetVersion: '0.5.0', currentVersion: '0.4.0', direction: 'forward' }),
       applyCompanionUpdate: async () => ({
         ok: false,
         code: 'not-ready',
@@ -391,7 +391,8 @@ describe('SupportUpdatePanel — a download verified in a PREVIOUS session', () 
   const READY_STATE: CompanionUpdateJournalState = {
     phase: 'ready',
     targetVersion: '0.5.0',
-    currentVersion: '0.4.0'
+    currentVersion: '0.4.0',
+    direction: 'forward'
   }
 
   it('comes back as a resumable install offer, without re-downloading anything', async () => {
@@ -422,7 +423,8 @@ describe('SupportUpdatePanel — an install that was launched and never confirme
   const STUCK_STATE: CompanionUpdateJournalState = {
     phase: 'applying',
     targetVersion: '0.5.0',
-    currentVersion: '0.5.0'
+    currentVersion: '0.5.0',
+    direction: 'forward'
   }
 
   it('says so plainly, and can be acknowledged so it is not an un-dismissable nag', async () => {
@@ -452,11 +454,94 @@ describe('SupportUpdatePanel — an install that was launched and never confirme
 
   it('an unresolved install that landed on some THIRD version reports both versions', async () => {
     stubBridge({
-      companionUpdateState: async () => ({ phase: 'applying', targetVersion: '0.5.0', currentVersion: '0.4.9' })
+      companionUpdateState: async () => ({ phase: 'applying', targetVersion: '0.5.0', currentVersion: '0.4.9', direction: 'forward' })
     })
     render(<SupportUpdatePanel {...baseProps()} />)
 
     expect(await screen.findByText(/ולא ידוע אם/)).toBeInTheDocument()
     expect(screen.getByText(/הגרסה שפועלת עכשיו היא/)).toBeInTheDocument()
+  })
+})
+
+describe('SupportUpdatePanel — returning to the previous version', () => {
+  const OFFER = {
+    available: true,
+    target: '0.4.0-alpha.8',
+    from: '0.4.0-alpha.9',
+    code: null,
+    message: null
+  }
+
+  it('offers the rollback only when MAIN proved a previous version ran here', async () => {
+    stubBridge({ companionRollbackOffer: async () => OFFER })
+    render(<SupportUpdatePanel {...baseProps({ versions: { shell: '0.4.0-alpha.9' } })} />)
+
+    const button = await screen.findByRole('button', { name: /חזרו לגרסה 0\.4\.0-alpha\.8/ })
+    expect(button).toBeInTheDocument()
+    expect(screen.getByText(/זו הגרסה שהייתה כאן לפני העדכון האחרון/)).toBeInTheDocument()
+  })
+
+  it('shows NOTHING about rolling back when no previous version is recorded', async () => {
+    // The default bridge stub already reports available:false, which is what a
+    // fresh install genuinely looks like. Absence must be silent here — an offer
+    // the machine cannot honour would be worse than no offer at all.
+    render(<SupportUpdatePanel {...baseProps({ versions: { shell: '0.4.0-alpha.9' } })} />)
+    await screen.findByText(/תכל'ס/)
+    expect(screen.queryByRole('button', { name: /חזרו לגרסה/ })).not.toBeInTheDocument()
+  })
+
+  it('passes NO arguments to main — the destination is never the renderer’s to choose', async () => {
+    stubBridge({
+      companionRollbackOffer: async () => OFFER,
+      downloadCompanionRollback: async () => ({ ok: true as const, version: '0.4.0-alpha.8', bytes: 10, sha256: 'a'.repeat(64) })
+    })
+    render(<SupportUpdatePanel {...baseProps({ versions: { shell: '0.4.0-alpha.9' } })} />)
+
+    await userEvent.click(await screen.findByRole('button', { name: /חזרו לגרסה/ }))
+    expect(bridge().downloadCompanionRollback).toHaveBeenCalledWith()
+    // ...and it is a DIFFERENT action from the forward update, not the same one
+    // with a flag: a shared entry point would let a mis-set flag downgrade a user
+    // who pressed "update".
+    expect(bridge().downloadCompanionUpdate).not.toHaveBeenCalled()
+  })
+
+  it('labels the install step as a downgrade once the rollback is verified', async () => {
+    // The label is driven by MAIN's `direction`, so it can never say "update"
+    // while the journal is about to install something older.
+    stubBridge({
+      companionUpdateState: async () => ({
+        phase: 'ready' as const,
+        targetVersion: '0.4.0-alpha.8',
+        currentVersion: '0.4.0-alpha.9',
+        direction: 'rollback' as const
+      })
+    })
+    render(<SupportUpdatePanel {...baseProps({ versions: { shell: '0.4.0-alpha.9' } })} />)
+
+    expect(await screen.findByRole('button', { name: /התקן את הגרסה הקודמת/ })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /התקן והפעל מחדש/ })).not.toBeInTheDocument()
+  })
+
+  it('explains WHY there is no way back inside an unresolved-install notice', async () => {
+    // The one place the absence is worth stating out loud: the app may be broken
+    // right now and the owner is looking for an exit.
+    stubBridge({
+      companionUpdateState: async () => ({
+        phase: 'applying' as const,
+        targetVersion: '0.5.0',
+        currentVersion: '0.5.0',
+        direction: 'forward' as const
+      }),
+      companionRollbackOffer: async () => ({
+        available: false,
+        target: null,
+        from: null,
+        code: 'release-absent',
+        message: 'הגרסה הקודמת אינה זמינה יותר להורדה.'
+      })
+    })
+    render(<SupportUpdatePanel {...baseProps({ versions: { shell: '0.5.0' } })} />)
+
+    expect(await screen.findByText(/הגרסה הקודמת אינה זמינה יותר להורדה/)).toBeInTheDocument()
   })
 })

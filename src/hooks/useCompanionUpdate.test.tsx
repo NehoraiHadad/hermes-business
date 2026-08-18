@@ -206,7 +206,7 @@ describe('useCompanionUpdate — download progress subscription', () => {
 describe('useCompanionUpdate — the durable state read on mount', () => {
   it('restores a verified-but-unapplied download as a resumable ready offer', async () => {
     stubBridge({
-      companionUpdateState: async () => ({ phase: 'ready', targetVersion: '0.5.0', currentVersion: '0.4.0' })
+      companionUpdateState: async () => ({ phase: 'ready', targetVersion: '0.5.0', currentVersion: '0.4.0', direction: 'forward' })
     })
     const { result } = renderHook(() => useCompanionUpdate())
 
@@ -221,7 +221,7 @@ describe('useCompanionUpdate — the durable state read on mount', () => {
 
   it('never adopts a stale downloading record — nothing of OURS is in flight at mount', async () => {
     stubBridge({
-      companionUpdateState: async () => ({ phase: 'downloading', targetVersion: '0.5.0', currentVersion: '0.4.0' })
+      companionUpdateState: async () => ({ phase: 'downloading', targetVersion: '0.5.0', currentVersion: '0.4.0', direction: 'forward' })
     })
     const { result } = renderHook(() => useCompanionUpdate())
 
@@ -234,7 +234,7 @@ describe('useCompanionUpdate — the durable state read on mount', () => {
 
   it('surfaces an unconfirmed apply as an acknowledgeable notice, not as progress', async () => {
     stubBridge({
-      companionUpdateState: async () => ({ phase: 'applying', targetVersion: '0.5.0', currentVersion: '0.5.0' })
+      companionUpdateState: async () => ({ phase: 'applying', targetVersion: '0.5.0', currentVersion: '0.5.0', direction: 'forward' })
     })
     const { result } = renderHook(() => useCompanionUpdate())
 
@@ -328,7 +328,7 @@ describe('useCompanionUpdate — download / cancel / apply', () => {
 
   it('treats a RESOLVED apply as the refusal it is, then re-reads what main still holds', async () => {
     stubBridge({
-      companionUpdateState: async () => ({ phase: 'ready', targetVersion: '0.5.0', currentVersion: '0.4.0' }),
+      companionUpdateState: async () => ({ phase: 'ready', targetVersion: '0.5.0', currentVersion: '0.4.0', direction: 'forward' }),
       applyCompanionUpdate: async () => ({ ok: false, code: 'not-ready', message: 'אין עדכון מאומת שמוכן להתקנה.' })
     })
     const { result } = renderHook(() => useCompanionUpdate())

@@ -202,7 +202,19 @@ export function createDemoDesktop(): HermesDesktopApi {
       return { ok: false, code: 'demo', message: 'התקנת עדכון אינה זמינה בהדגמה. לא בוצע שינוי.' }
     },
     async companionUpdateState() {
-      return { phase: null, targetVersion: null, currentVersion: '0.4.0-demo' }
+      return { phase: null, targetVersion: null, currentVersion: '0.4.0-demo', direction: null }
+    },
+    async companionRollbackOffer() {
+      return {
+        available: false,
+        target: null,
+        from: null,
+        code: 'demo',
+        message: 'חזרה לגרסה קודמת אינה זמינה בהדגמה.'
+      }
+    },
+    async downloadCompanionRollback() {
+      return { ok: false as const, code: 'demo', message: 'חזרה לגרסה קודמת אינה זמינה בהדגמה. לא בוצע שינוי.' }
     },
     onCompanionDownloadProgress() {
       return () => {}
