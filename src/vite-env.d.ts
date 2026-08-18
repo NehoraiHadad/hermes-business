@@ -100,13 +100,55 @@ declare global {
     // Passive push (§6.5): a ONE-SHOT event fired by the main-process startup
     // timer only when it found an update-available verdict.
     onCompanionUpdateAvailable: (callback: (status: CompanionUpdateStatus) => void) => () => void
+    // The two CONSENTED actions (§7). They take NO arguments by design: main
+    // derives every operand from artifacts it produced itself (the verdict, the
+    // durable journal), so the renderer cannot redirect a download or name a
+    // file to execute. See electron/ipc-companion-update.cjs.
+    downloadCompanionUpdate: () => Promise<CompanionDownloadResult>
+    cancelCompanionDownload: () => Promise<{ ok: boolean; cancelled: boolean }>
+    // On SUCCESS the app quits, so this promise never settles; it resolves only
+    // when the apply was refused.
+    applyCompanionUpdate: () => Promise<CompanionApplyRefusal>
+    companionUpdateState: () => Promise<CompanionUpdateJournalState>
+    onCompanionDownloadProgress: (callback: (progress: CompanionDownloadProgress) => void) => () => void
+  }
+
+  // Streamed-download progress (electron/companion-download.cjs). `totalBytes` is
+  // null when the response carried no usable Content-Length — the UI must render
+  // an indeterminate bar rather than inventing a denominator.
+  type CompanionDownloadProgress = {
+    receivedBytes: number
+    totalBytes: number | null
+    phase: 'manifest' | 'downloading' | 'verifying' | 'ready'
+  }
+
+  // Never-rejects contract, same doctrine as the check (§8): every failure is a
+  // structured verdict with a Hebrew, user-safe `message` that states the machine
+  // was not changed.
+  type CompanionDownloadResult =
+    | { ok: true; version: string; bytes: number; sha256: string; message?: string }
+    | { ok: false; code: string; message: string; detail?: string }
+
+  type CompanionApplyRefusal = { ok: false; code: string; message: string }
+
+  // Read-only projection of the durable update journal. The installer PATH is
+  // deliberately absent — the renderer has no legitimate use for it and cannot
+  // pass one back.
+  type CompanionUpdateJournalState = {
+    phase: 'downloading' | 'verifying' | 'ready' | 'applying' | null
+    targetVersion: string | null
+    currentVersion: string
   }
 
   // Wire contract of `hermes:companion-update` / `hermes:companion-update-available`
   // (docs/specs/versioning.md §6.2). Scalars only — no raw GitHub response object
   // ever crosses this boundary. `status` is exactly one of the four verdicts §6.1
   // decides; `up-to-date` is reported ONLY on a complete positive proof, never as
-  // a default. `checkedAt` is epoch ms of the last SUCCESSFUL check, or `null`
+  // a default — either the running version matched the winning release, or a
+  // provably COMPLETE scan of a NON-EMPTY release census found nothing newer
+  // published at all (in which case `latest` is absent). An empty census is
+  // content-free and stays `unknown`. `unknown` means "could not determine",
+  // NOT "found nothing". `checkedAt` is epoch ms of the last SUCCESSFUL check, or `null`
   // before any check has completed.
   type CompanionUpdateStatus = {
     status: 'update-available' | 'up-to-date' | 'dev-ahead' | 'unknown'
@@ -118,6 +160,23 @@ declare global {
     publishedAt?: string
     checkedAt: number | null
     message?: string
+    // ---- managed (one-click) update -----------------------------------------
+    // Present ONLY on an `update-available` verdict. `managedUpdate` states
+    // whether this release actually carries the two assets a managed update
+    // needs — the pinned installer `Tachles-Setup-<latest>.exe` and the signed
+    // `update-manifest.json` — with both URLs allow-listed in main against
+    // `https://github.com/NehoraiHadad/hermes-business/releases/download/`.
+    //
+    // `false` is an HONEST, expected state (an older release, or one published
+    // without a manifest), never an error: `downloadUrl` (the release page) stays
+    // the manual fallback and the UI keeps offering it. `managedUpdateReason`
+    // carries the code that says which half is missing
+    // (`assets-absent` | `installer-asset-absent` | `manifest-asset-absent` |
+    //  `installer-url-rejected` | `manifest-url-rejected` | `version-absent`).
+    managedUpdate?: boolean
+    managedUpdateReason?: string
+    installerUrl?: string
+    manifestUrl?: string
   }
 
   // Durable record written by electron/whatsapp-guard-journal.cjs for the guard

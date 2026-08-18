@@ -166,9 +166,15 @@ describe('preload IPC error normalization', () => {
     const { bridge } = loadPreload(channel => {
       throw wrapLikeElectron(channel, `Error: ${HEBREW}`)
     })
-    const invokeMethods = Object.keys(bridge).filter(
-      name => name !== 'onRuntimeLog' && name !== 'onCompanionUpdateAvailable'
-    )
+    // Exclude SUBSCRIBERS by naming convention rather than by a hand-maintained
+    // deny-list. The previous literal list ('onRuntimeLog', 'onCompanionUpdateAvailable')
+    // silently became wrong the moment a third listener was bridged: the new method
+    // returns an unsubscribe function, `.rejects` got `undefined`, and this test failed
+    // for a reason that had nothing to do with error normalization. Every bridged
+    // subscriber in preload.cjs is named `on<Event>` and returns a teardown fn; every
+    // invoke method returns a promise. Keying off that invariant keeps the "EVERY
+    // method" guarantee real without needing an edit each time one is added.
+    const invokeMethods = Object.keys(bridge).filter(name => !/^on[A-Z]/.test(name))
     expect(invokeMethods.length).toBeGreaterThan(20)
     for (const name of invokeMethods) {
       await expect(bridge[name]()).rejects.toMatchObject({ message: HEBREW })

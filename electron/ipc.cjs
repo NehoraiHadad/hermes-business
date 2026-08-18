@@ -35,6 +35,7 @@ const { getProviderEvidence, recordProviderEvidence } = require('./provider-evid
 const { guardStatusWithActivation, readGuardActivationJournal } = require('./whatsapp-guard-journal.cjs')
 const { openFullSurface } = require('./open-full.cjs')
 const { checkCompanionUpdate } = require('./companion-update.cjs')
+const { registerCompanionUpdateIpc } = require('./ipc-companion-update.cjs')
 const {
   normalizeOpenFileFilters,
   createSerialGuard,
@@ -123,6 +124,10 @@ function registerIpc() {
   // never rejects — it resolves a scalar verdict for every branch, including a
   // concurrent-call rejection — so this handler must not wrap it in a second guard.
   ipcMain.handle('hermes:companion-update', (_event, force) => checkCompanionUpdate({ force: Boolean(force) }))
+  // The two CONSENTED actions that can follow that check — download+verify, and
+  // apply. Kept in their own module (ipc-companion-update.cjs) because unlike the
+  // check they take NO renderer input at all; see that file's header for why.
+  registerCompanionUpdateIpc()
   ipcMain.handle('assistant:window-state', () => currentWindowState())
   ipcMain.handle('assistant:set-window-mode', (_event, mode) => setWindowMode(mode))
   ipcMain.handle('assistant:set-always-on-top', (_event, value) => setMiniPinned(value))
