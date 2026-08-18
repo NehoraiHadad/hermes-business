@@ -3,12 +3,19 @@ import { describe, expect, it } from 'vitest'
 import {
   parseSemver,
   compareSemver,
+  scanReleases,
   selectEligibleRelease,
+  linkHeaderHasNextPage,
+  isCompleteScan,
   decideVerdict,
   sanitizeReleaseNotes,
   sanitizeDownloadUrl,
   DOWNLOAD_URL_PREFIX
 } from './companion-update-core.cjs'
+
+// A scan that proved it saw everything AND actually read a census: no next
+// page, nothing unorderable, at least one entry examined.
+const COMPLETE = { truncated: false, examined: 3, undecided: 0 }
 
 describe('parseSemver — strict SemVer 2.0.0, null on anything else', () => {
   it('parses a plain version', () => {
@@ -161,6 +168,131 @@ describe('selectEligibleRelease — skip drafts, skip prereleases when current i
   })
 })
 
+describe('scanReleases — separates DECISIVE exclusions from UNDECIDABLE ones', () => {
+  it('reports the winning candidate alongside a zero undecided count on a clean listing', () => {
+    const releases = [release({ tag_name: 'v1.0.0' }), release({ tag_name: 'v1.2.0' })]
+    const scan = scanReleases(releases, '0.9.0')
+    expect(scan.eligible.tag_name).toBe('v1.2.0')
+    expect(scan.undecided).toBe(0)
+  })
+
+  it('a draft is DECISIVE (never published) — it does not make the scan incomplete, even with a garbage tag', () => {
+    expect(scanReleases([release({ tag_name: 'garbage', draft: true })], '1.0.0').undecided).toBe(0)
+  })
+
+  it('a prerelease filtered out for a stable install is DECISIVE (channel policy D1), not undecided', () => {
+    const releases = [
+      release({ tag_name: 'v0.4.0-alpha.7', prerelease: true }),
+      release({ tag_name: 'v0.4.0-alpha.8', prerelease: true })
+    ]
+    const scan = scanReleases(releases, '0.4.0')
+    expect(scan.eligible).toBeNull()
+    expect(scan.undecided).toBe(0)
+  })
+
+  it('a prerelease with a garbage tag is still policy-excluded for a stable install (not undecided)', () => {
+    expect(scanReleases([release({ tag_name: 'nightly-build', prerelease: true })], '1.0.0').undecided).toBe(0)
+  })
+
+  it('an unparseable tag on a real published in-channel release IS undecided — it might be something newer', () => {
+    const scan = scanReleases([release({ tag_name: 'garbage' }), release({ tag_name: 'v1.0.0' })], '0.9.0')
+    expect(scan.eligible.tag_name).toBe('v1.0.0')
+    expect(scan.undecided).toBe(1)
+  })
+
+  it('a non-object entry is undecided — the payload is not shaped like a release listing', () => {
+    expect(scanReleases([null, 42, 'x'], '1.0.0').undecided).toBe(3)
+  })
+
+  it('an unparseable tag on a prerelease IS undecided when the install is itself a prerelease (no policy exclusion applies)', () => {
+    expect(scanReleases([release({ tag_name: 'garbage', prerelease: true })], '1.0.0-alpha.1').undecided).toBe(1)
+  })
+
+  it('a non-array input yields no candidate and no fabricated counts', () => {
+    expect(scanReleases(null, '1.0.0')).toEqual({ eligible: null, examined: 0, undecided: 0 })
+  })
+
+  it('reports how many entries were examined — an EMPTY census is a distinct fact from a filtered one', () => {
+    expect(scanReleases([], '1.0.0')).toEqual({ eligible: null, examined: 0, undecided: 0 })
+    // Same null candidate, but a real census WAS read: examined > 0.
+    const filtered = scanReleases(
+      [release({ tag_name: 'v0.4.0-alpha.8', prerelease: true }), release({ tag_name: 'v0.4.0-alpha.7', prerelease: true })],
+      '0.4.0'
+    )
+    expect(filtered).toEqual({ eligible: null, examined: 2, undecided: 0 })
+  })
+
+  it('counts drafts and policy-excluded entries as examined — they were read and decisively ruled out', () => {
+    expect(scanReleases([release({ draft: true }), release({ tag_name: 'v0.1.0' })], '1.0.0').examined).toBe(2)
+  })
+})
+
+describe('linkHeaderHasNextPage — the ONLY truncation signal (single request, no pagination)', () => {
+  it('detects a quoted rel="next"', () => {
+    const header =
+      '<https://api.github.com/repositories/1/releases?per_page=20&page=2>; rel="next", ' +
+      '<https://api.github.com/repositories/1/releases?per_page=20&page=3>; rel="last"'
+    expect(linkHeaderHasNextPage(header)).toBe(true)
+  })
+
+  it('detects a bare rel=next and a space-separated rel list (RFC 8288)', () => {
+    expect(linkHeaderHasNextPage('<https://api.github.com/x?page=2>; rel=next')).toBe(true)
+    expect(linkHeaderHasNextPage('<https://api.github.com/x?page=2>; rel="prev next"')).toBe(true)
+  })
+
+  it('is false for a last/prev-only header (the final page of a paginated set)', () => {
+    const header =
+      '<https://api.github.com/repositories/1/releases?page=1>; rel="prev", ' +
+      '<https://api.github.com/repositories/1/releases?page=1>; rel="first"'
+    expect(linkHeaderHasNextPage(header)).toBe(false)
+  })
+
+  it('never mistakes a rel="next" substring INSIDE the URI for a real relation', () => {
+    expect(linkHeaderHasNextPage('<https://evil.example/?x=rel%3D%22next%22&rel="next">; rel="last"')).toBe(false)
+  })
+
+  it('is false for an absent/blank/non-string header (the CALLER decides what unreadable means)', () => {
+    expect(linkHeaderHasNextPage(null)).toBe(false)
+    expect(linkHeaderHasNextPage(undefined)).toBe(false)
+    expect(linkHeaderHasNextPage('')).toBe(false)
+    expect(linkHeaderHasNextPage('   ')).toBe(false)
+    expect(linkHeaderHasNextPage(42)).toBe(false)
+  })
+
+  it('never throws on hostile input', () => {
+    expect(() => linkHeaderHasNextPage('<'.repeat(5000))).not.toThrow()
+    expect(() => linkHeaderHasNextPage(',,,;;;rel=')).not.toThrow()
+  })
+})
+
+describe('isCompleteScan — completeness needs positive proof on BOTH axes', () => {
+  it('is true only for an untruncated scan with nothing left undecided', () => {
+    expect(isCompleteScan({ truncated: false, undecided: 0 })).toBe(true)
+  })
+
+  it('says nothing about emptiness — an empty census IS complete (all zero entries were seen)', () => {
+    expect(isCompleteScan({ truncated: false, examined: 0, undecided: 0 })).toBe(true)
+  })
+
+  it('is false when the listing was truncated', () => {
+    expect(isCompleteScan({ truncated: true, undecided: 0 })).toBe(false)
+  })
+
+  it('is false when any entry could not be ordered', () => {
+    expect(isCompleteScan({ truncated: false, undecided: 1 })).toBe(false)
+  })
+
+  it('a MISSING field is never proof — an absent/partial scan object is incomplete', () => {
+    expect(isCompleteScan(undefined)).toBe(false)
+    expect(isCompleteScan({})).toBe(false)
+    expect(isCompleteScan({ undecided: 0 })).toBe(false)
+    expect(isCompleteScan({ truncated: false })).toBe(false)
+    // Truthy-but-not-`false` values must not sneak through a loose check.
+    expect(isCompleteScan({ truncated: 'no', undecided: 0 })).toBe(false)
+    expect(isCompleteScan({ truncated: 0, undecided: 0 })).toBe(false)
+  })
+})
+
 describe('decideVerdict — exactly the four statuses; unknown is the default (§8)', () => {
   it('update-available: eligible newer than current', () => {
     const eligible = release({ tag_name: 'v2.0.0' })
@@ -176,16 +308,80 @@ describe('decideVerdict — exactly the four statuses; unknown is the default (�
     expect(decideVerdict('2.0.0', release({ tag_name: 'v1.0.0' }))).toEqual({ status: 'dev-ahead' })
   })
 
-  it('unknown: no eligible release found (empty/all-filtered list) — empty is NOT proof of up-to-date', () => {
+  it('unknown: no candidate and NO scan facts at all — a missing completeness proof is not a proof', () => {
     expect(decideVerdict('1.0.0', null)).toEqual({ status: 'unknown' })
   })
 
   it('unknown: current itself is unparseable', () => {
     expect(decideVerdict('not-a-version', release())).toEqual({ status: 'unknown' })
+    // ...and it stays unknown even on a provably complete scan: without a
+    // parseable running version there is nothing to compare against.
+    expect(decideVerdict('not-a-version', null, COMPLETE)).toEqual({ status: 'unknown' })
   })
 
   it('unknown: the eligible release somehow carries an unparseable tag (defensive)', () => {
     expect(decideVerdict('1.0.0', release({ tag_name: 'garbage' }))).toEqual({ status: 'unknown' })
+  })
+})
+
+describe('decideVerdict — a COMPLETE, NON-EMPTY scan with no candidate is a proof; an empty one is not', () => {
+  it('up-to-date: complete NON-EMPTY scan, no eligible candidate (the stable-install / all-prerelease case)', () => {
+    expect(decideVerdict('0.4.0', null, COMPLETE)).toEqual({ status: 'up-to-date' })
+  })
+
+  it('unknown: an EMPTY census is content-free — reading reassurance into [] is the fake-"מעודכן" of §1.4', () => {
+    const scan = scanReleases([], '0.4.0')
+    expect(scan.eligible).toBeNull()
+    expect(scan.examined).toBe(0)
+    // The scan IS complete — emptiness is not incompleteness — and it still
+    // must not yield up-to-date: this repo publishes releases, so [] is an
+    // upstream anomaly, and up-to-date would durably swallow a pending update.
+    expect(isCompleteScan({ truncated: false, examined: scan.examined, undecided: scan.undecided })).toBe(true)
+    expect(
+      decideVerdict('0.4.0', scan.eligible, { truncated: false, examined: scan.examined, undecided: scan.undecided })
+    ).toEqual({ status: 'unknown' })
+  })
+
+  it('unknown: TRUNCATED listing with no candidate — the unexamined page may hold the update', () => {
+    expect(decideVerdict('0.4.0', null, { truncated: true, examined: 20, undecided: 0 })).toEqual({ status: 'unknown' })
+  })
+
+  it('unknown: untruncated listing whose tags were all unorderable — skipped is not "older"', () => {
+    const scan = scanReleases([release({ tag_name: 'garbage' }), release({ tag_name: 'also-garbage' })], '1.0.0')
+    expect(scan.eligible).toBeNull()
+    expect(scan.undecided).toBe(2)
+    expect(
+      decideVerdict('1.0.0', scan.eligible, { truncated: false, examined: scan.examined, undecided: scan.undecided })
+    ).toEqual({ status: 'unknown' })
+  })
+
+  it('the end-to-end stable-install case: 0.4.0 against a repo publishing only prereleases ⇒ up-to-date', () => {
+    const releases = [
+      release({ tag_name: 'v0.4.0-alpha.8', prerelease: true }),
+      release({ tag_name: 'v0.4.0-alpha.7', prerelease: true }),
+      release({ tag_name: 'v0.4.0-alpha.6', prerelease: true })
+    ]
+    const scan = scanReleases(releases, '0.4.0')
+    expect(
+      decideVerdict('0.4.0', scan.eligible, { truncated: false, examined: scan.examined, undecided: scan.undecided })
+    ).toEqual({ status: 'up-to-date' })
+    // The same listing for a prerelease install still resolves through the
+    // normal comparison path — the fix must not disturb the alpha channel.
+    const alphaScan = scanReleases(releases, '0.4.0-alpha.6')
+    expect(
+      decideVerdict('0.4.0-alpha.6', alphaScan.eligible, {
+        truncated: false,
+        examined: alphaScan.examined,
+        undecided: alphaScan.undecided
+      })
+    ).toEqual({ status: 'update-available', release: alphaScan.eligible })
+  })
+
+  it('a found candidate stays decisive under truncation (all three comparison verdicts)', () => {
+    const truncated = { truncated: true, examined: 20, undecided: 3 }
+    expect(decideVerdict('1.0.0', release({ tag_name: 'v2.0.0' }), truncated).status).toBe('update-available')
+    expect(decideVerdict('1.0.0', release({ tag_name: 'v1.0.0' }), truncated).status).toBe('up-to-date')
+    expect(decideVerdict('2.0.0', release({ tag_name: 'v1.0.0' }), truncated).status).toBe('dev-ahead')
   })
 })
 

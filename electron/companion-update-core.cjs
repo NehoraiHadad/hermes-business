@@ -95,33 +95,123 @@ function compareSemver(a, b) {
 }
 
 /**
- * Select the highest ELIGIBLE release out of a raw GitHub releases listing (see
- * §6.1). Eligibility: not a draft; not a prerelease when `currentVersion` is
- * itself stable (an alpha/beta install compares against everything, so it can
- * see both the next prerelease AND the stable release that closes it — D1); a
- * `tag_name` that parses as SemVer. A release with an unparseable tag is
- * SKIPPED, never causes a failure. Returns the winning raw release object, or
- * `null` when nothing is eligible (empty list, all drafts, all unparseable).
+ * Scan a raw GitHub releases listing (see §6.1) and report BOTH the winning
+ * candidate and how trustworthy the scan itself was.
+ *
+ * Returns `{ eligible, examined, undecided }`:
+ *   - `eligible`  — the highest eligible raw release object, or `null`.
+ *   - `examined`  — how many entries the scan actually looked at. A census of
+ *     ZERO entries is not the same fact as a census that was read and found to
+ *     hold nothing newer; `decideVerdict` keeps them apart (see there).
+ *   - `undecided` — how many entries could NOT be ordered against
+ *     `currentVersion` at all. This is the difference that matters for the
+ *     fail-closed semantics: an entry may be left out of the running for two
+ *     very different reasons.
+ *
+ * DECISIVE exclusions (do NOT count as undecided — we know they can never be an
+ * available update):
+ *   - `draft: true` — not published at all, so it cannot be offered to anyone,
+ *     whatever its tag says.
+ *   - `prerelease: true` while `currentVersion` is stable — excluded by CHANNEL
+ *     POLICY (D1), not by ignorance: a stable install is deliberately not
+ *     offered alphas. An alpha/beta install compares against everything, so it
+ *     sees both the next prerelease AND the stable release that closes it.
+ *
+ * UNDECIDED exclusions (counted, because they might well be something newer we
+ * simply could not read):
+ *   - a non-object entry — the payload is not shaped like a release listing.
+ *   - an unparseable `tag_name` on a real, published, in-channel release — it
+ *     is skipped (never a failure, per §6.1) but we cannot claim it is older
+ *     than the running version. `decideVerdict` refuses to call such a scan
+ *     complete, which is exactly why "all tags unparseable" stays `unknown`.
  */
-function selectEligibleRelease(releases, currentVersion) {
-  if (!Array.isArray(releases)) return null
+function scanReleases(releases, currentVersion) {
+  if (!Array.isArray(releases)) return { eligible: null, examined: 0, undecided: 0 }
   const current = parseSemver(currentVersion)
   const currentIsStable = Boolean(current) && current.prerelease.length === 0
 
   let best = null
   let bestParsed = null
+  let undecided = 0
   for (const release of releases) {
-    if (!release || typeof release !== 'object') continue
+    if (!release || typeof release !== 'object') {
+      undecided += 1
+      continue
+    }
     if (release.draft === true) continue
-    const parsed = parseSemver(release.tag_name)
-    if (!parsed) continue
+    // Policy exclusion is evaluated BEFORE parsing: a prerelease an install can
+    // never be offered is decisively out of the running even if its tag is
+    // garbage, so it must not poison the completeness of the scan.
     if (release.prerelease === true && currentIsStable) continue
+    const parsed = parseSemver(release.tag_name)
+    if (!parsed) {
+      undecided += 1
+      continue
+    }
     if (!best || compareSemver(parsed, bestParsed) > 0) {
       best = release
       bestParsed = parsed
     }
   }
-  return best
+  return { eligible: best, examined: releases.length, undecided }
+}
+
+/**
+ * Select the highest ELIGIBLE release out of a raw GitHub releases listing —
+ * the candidate half of `scanReleases`, kept as its own named export because
+ * "which release wins" is a question worth asking (and testing) on its own.
+ * Returns the winning raw release object, or `null` when nothing is eligible
+ * (empty list, all drafts, all unparseable).
+ */
+function selectEligibleRelease(releases, currentVersion) {
+  return scanReleases(releases, currentVersion).eligible
+}
+
+/**
+ * Does a GitHub `Link` response header advertise a NEXT page? (RFC 8288.) This
+ * is the only completeness signal the check has: the request asks for
+ * `per_page=20`, so "no eligible release among the results" is a COMPLETE proof
+ * only when there is no further page to look at.
+ *
+ * Pure on purpose — the impure layer merely READS the header off the response;
+ * what its value means is a decision, and decisions live here.
+ *
+ * Parsing is deliberately narrow and tolerant: the value is split into
+ * `<uri>; params` segments, and only the params half of each segment is
+ * examined, so a `rel="next"` substring appearing INSIDE a URI can never be
+ * mistaken for a real relation. Both the quoted (`rel="next"`, possibly a
+ * space-separated list such as `rel="prev next"`) and bare (`rel=next`) forms
+ * are recognised. Anything unrecognised returns `false` — and the CALLER treats
+ * an unreadable/absent header as incomplete, so a `false` here never becomes an
+ * unearned completeness claim on its own.
+ */
+function linkHeaderHasNextPage(value) {
+  if (typeof value !== 'string' || value.trim() === '') return false
+  for (const segment of value.split(',')) {
+    const uriEnd = segment.indexOf('>')
+    if (uriEnd < 0) continue
+    const params = segment.slice(uriEnd + 1)
+    if (/(?:^|;)\s*rel\s*=\s*(?:"[^"]*\bnext\b[^"]*"|'[^']*\bnext\b[^']*'|next)\s*(?:;|$)/i.test(params)) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * Is a scan a COMPLETE census of everything published? Requires positive proof
+ * on both axes, and a missing field is never proof:
+ *   - `truncated === false` — the response explicitly carried no next-page link
+ *     (and the header was readable at all).
+ *   - `undecided === 0`     — every published, in-channel entry was orderable.
+ *
+ * Deliberately says NOTHING about the census being non-empty: an empty listing
+ * is perfectly complete (we saw all zero of its entries). Whether zero entries
+ * can support a verdict is a separate question, answered in `decideVerdict`.
+ */
+function isCompleteScan(scan) {
+  if (!scan || typeof scan !== 'object') return false
+  return scan.truncated === false && scan.undecided === 0
 }
 
 // The only four verdict statuses the companion self-update check ever reports.
@@ -135,25 +225,71 @@ const STATUSES = Object.freeze({
 /**
  * Decide the verdict from an ALREADY-SUCCESSFUL fetch (the caller must not call
  * this on a network/parse failure — those resolve to `unknown` directly without
- * consulting this function). `eligible` is the release `selectEligibleRelease`
- * chose (or `null`).
+ * consulting this function). `eligible` is the release `scanReleases` chose (or
+ * `null`); `scan` carries the facts about the scan itself:
+ * `{ truncated, undecided }` (see `isCompleteScan`).
  *
  * Returns `{ status, release? }`:
  *   - `update-available` — the eligible release is newer than `current` (proven
  *     positively; `release` carries the winning raw release object).
- *   - `up-to-date`        — `current` equals the eligible release exactly.
+ *   - `up-to-date`        — either `current` equals the eligible release
+ *     exactly, OR a COMPLETE and NON-EMPTY scan found no eligible candidate.
  *   - `dev-ahead`         — `current` is newer than anything eligible published.
  *   - `unknown`           — every other, unproven branch: `current` itself is
- *     unparseable, or no eligible release was found (empty/all-filtered list).
+ *     unparseable, or no eligible candidate was found by an INCOMPLETE scan, or
+ *     the census was EMPTY.
  *
- * `up-to-date` is NEVER the default — it requires a complete positive proof
- * (current version parses AND an eligible release exists AND they compare
- * equal). Anything ambiguous falls through to `unknown`.
+ * `up-to-date` is still NEVER a soft default (§8) — but the three cases the
+ * no-candidate branch used to conflate are now separated, because they are not
+ * the same claim:
+ *
+ *   1. A COMPLETE scan of a NON-EMPTY census that found no eligible candidate is
+ *      a positive proof of the only thing `up-to-date`/`מעודכן` actually
+ *      asserts to the user: "nothing newer than what you run is published for
+ *      you". A stable install when every published release is a prerelease is
+ *      exactly this case — the fetch fully succeeded, a real census was read,
+ *      and it definitively proved there is nothing to install. Reporting
+ *      `unknown` there ("לא ניתן לבדוק עדכונים כרגע") would be a LIE about
+ *      the check having failed, which is its own fail-open in the other
+ *      direction: it hides a proven-good state behind a fake error.
+ *   2. An INCOMPLETE scan that found no eligible candidate proves nothing: the
+ *      unexamined remainder may hold the very release we were looking for.
+ *      Stays `unknown`.
+ *   3. An EMPTY census (`examined === 0`) is CONTENT-FREE, and reading
+ *      reassurance into content-free data is exactly the fake-"מעודכן" the
+ *      spec's §1.4 doctrine violation was about. This repo has published
+ *      releases and a never-shrinking ledger (scripts/lib/release/prior-ledger.mjs),
+ *      so `[]` is an ANOMALY — an upstream incident, a proxy, a misconfigured
+ *      mirror — not the honest steady state "nothing has shipped yet". Between
+ *      `up-to-date` (durable: cached and written to `lastStatus`, and it
+ *      silently swallows a pending update) and `unknown` (recoverable: "couldn't
+ *      check"), fail-closed for a security-relevant update channel means
+ *      `unknown`. The one legitimately-empty state — before the very first
+ *      release exists — belongs to a developer running an unpublished build, for
+ *      whom "inconclusive" is no less truthful than "מעודכן". Note this is a
+ *      NON-EMPTINESS test, not a completeness test: an empty census is perfectly
+ *      complete (we saw all zero of its entries), which is why it lives here and
+ *      not inside `isCompleteScan`.
+ *
+ * Truncation and a FOUND candidate: GitHub returns releases newest-CREATED
+ * first, so anything a truncated page omits was created BEFORE everything we
+ * saw. Combined with this repo's strictly monotonic version doctrine (§5.2 bump
+ * rules + the no-reuse ledger, §1.3), the omitted tail is strictly older than
+ * the page we did read — so a comparison anchored on a REAL release found in
+ * that page stays decisive under truncation, for all three of
+ * `update-available` / `up-to-date` / `dev-ahead`. `update-available` is safe
+ * even without the monotonicity argument: something newer demonstrably exists,
+ * and older omitted entries cannot unmake that. With NO candidate there is no
+ * anchor at all, which is precisely why that branch — and only that branch —
+ * demands a complete scan.
  */
-function decideVerdict(current, eligible) {
+function decideVerdict(current, eligible, scan) {
   const parsedCurrent = parseSemver(current)
   if (!parsedCurrent) return { status: STATUSES.UNKNOWN }
-  if (!eligible) return { status: STATUSES.UNKNOWN }
+  if (!eligible) {
+    const provenEmptyOfNewer = isCompleteScan(scan) && scan.examined > 0
+    return provenEmptyOfNewer ? { status: STATUSES.UP_TO_DATE } : { status: STATUSES.UNKNOWN }
+  }
   const parsedEligible = parseSemver(eligible.tag_name)
   if (!parsedEligible) return { status: STATUSES.UNKNOWN }
 
@@ -231,7 +367,10 @@ module.exports = {
   DOWNLOAD_URL_PREFIX,
   parseSemver,
   compareSemver,
+  scanReleases,
   selectEligibleRelease,
+  linkHeaderHasNextPage,
+  isCompleteScan,
   decideVerdict,
   sanitizeReleaseNotes,
   sanitizeDownloadUrl

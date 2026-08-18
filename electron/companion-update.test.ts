@@ -46,12 +46,39 @@ afterEach(() => {
   }
 })
 
-function jsonResponse(status: number, body: unknown) {
+// A GitHub-shaped response. By DEFAULT its headers are READABLE and carry no
+// `Link` — which is exactly what api.github.com returns when the whole release
+// set fits in one `per_page=20` page, i.e. positive proof that the scan saw
+// everything. Pass `link` to simulate a paginated (⇒ truncated) listing.
+function jsonResponse(status: number, body: unknown, options: { link?: string } = {}) {
   return {
     ok: status >= 200 && status < 300,
     status,
+    headers: {
+      get: (name: string) => (String(name).toLowerCase() === 'link' ? (options.link ?? null) : null)
+    },
     json: async () => body
   }
+}
+
+// A response whose headers cannot be read at all (a non-conforming fetch impl /
+// proxy). Completeness is then unprovable — the check must fail CLOSED.
+function headerlessResponse(status: number, body: unknown) {
+  return { ok: status >= 200 && status < 300, status, json: async () => body }
+}
+
+const NEXT_PAGE_LINK =
+  '<https://api.github.com/repositories/1/releases?per_page=20&page=2>; rel="next", ' +
+  '<https://api.github.com/repositories/1/releases?per_page=20&page=3>; rel="last"'
+
+// The live shape that exposed the defect: every published release is a
+// prerelease, so a STABLE install has no eligible candidate at all.
+function allPrereleases() {
+  return [
+    release({ tag_name: 'v0.4.0-alpha.8', prerelease: true }),
+    release({ tag_name: 'v0.4.0-alpha.7', prerelease: true }),
+    release({ tag_name: 'v0.4.0-alpha.6', prerelease: true })
+  ]
 }
 
 function release(overrides: Record<string, unknown> = {}) {
@@ -83,7 +110,12 @@ describe('checkCompanionUpdate — positive proof required for each verdict', ()
       notes: 'Fixed a bug.',
       downloadUrl: 'https://github.com/NehoraiHadad/hermes-business/releases/tag/v1.1.0',
       publishedAt: '2026-01-01T00:00:00Z',
-      checkedAt: 1000
+      checkedAt: 1000,
+      // This fixture publishes no assets, so the managed one-click path is
+      // honestly reported as unavailable — the manual downloadUrl above is what
+      // the UI offers. Silence here would be indistinguishable from a bug.
+      managedUpdate: false,
+      managedUpdateReason: 'assets-absent'
     })
     expect(fetchImpl).toHaveBeenCalledTimes(1)
     const [calledUrl, calledInit] = fetchImpl.mock.calls[0]
@@ -119,6 +151,129 @@ describe('checkCompanionUpdate — positive proof required for each verdict', ()
     )
     expect(v.status).toBe('update-available')
     expect(v.downloadUrl).toBeUndefined()
+  })
+})
+
+describe('checkCompanionUpdate — managed-update asset resolution (one-click download targets)', () => {
+  const ASSET_BASE = 'https://github.com/NehoraiHadad/hermes-business/releases/download/v1.1.0'
+
+  function withAssets(assets: unknown[]) {
+    return [release({ assets })]
+  }
+
+  function installerAsset(url = `${ASSET_BASE}/Tachles-Setup-1.1.0.exe`) {
+    return { name: 'Tachles-Setup-1.1.0.exe', browser_download_url: url }
+  }
+
+  function manifestAsset(url = `${ASSET_BASE}/update-manifest.json`) {
+    return { name: 'update-manifest.json', browser_download_url: url }
+  }
+
+  async function check(assets: unknown[], version = '1.0.0') {
+    const fetchImpl = vi.fn(async () => jsonResponse(200, withAssets(assets)))
+    return checkCompanionUpdate(
+      { force: true },
+      { fetch: fetchImpl, getVersion: () => version, stateDir: () => freshStateDir(), now: () => 1000 }
+    )
+  }
+
+  it('resolves BOTH asset URLs from the pinned names and marks the managed path available', async () => {
+    const v = await check([installerAsset(), manifestAsset(), { name: 'SHA256SUMS.txt', browser_download_url: `${ASSET_BASE}/SHA256SUMS.txt` }])
+    expect(v.status).toBe('update-available')
+    expect(v.managedUpdate).toBe(true)
+    expect(v.installerUrl).toBe(`${ASSET_BASE}/Tachles-Setup-1.1.0.exe`)
+    expect(v.manifestUrl).toBe(`${ASSET_BASE}/update-manifest.json`)
+    expect(v.managedUpdateReason).toBeUndefined()
+    // The manual fallback is NEVER removed by the managed path existing.
+    expect(v.downloadUrl).toBe('https://github.com/NehoraiHadad/hermes-business/releases/tag/v1.1.0')
+  })
+
+  it('a release with the installer but NO manifest is an honest "manual fallback", not a crash', async () => {
+    const v = await check([installerAsset()])
+    expect(v.status).toBe('update-available')
+    expect(v.managedUpdate).toBe(false)
+    expect(v.managedUpdateReason).toBe('manifest-asset-absent')
+    expect(v.installerUrl).toBeUndefined()
+    expect(v.downloadUrl).toBeTruthy()
+  })
+
+  it('a release whose installer asset is named for a DIFFERENT version does not match', async () => {
+    const v = await check([{ name: 'Tachles-Setup-9.9.9.exe', browser_download_url: `${ASSET_BASE}/Tachles-Setup-9.9.9.exe` }, manifestAsset()])
+    expect(v.managedUpdate).toBe(false)
+    expect(v.managedUpdateReason).toBe('installer-asset-absent')
+  })
+
+  it('a look-alike host on the installer asset is rejected, and the verdict says so', async () => {
+    const v = await check([
+      installerAsset('https://github.com.evil.tld/NehoraiHadad/hermes-business/releases/download/v1.1.0/Tachles-Setup-1.1.0.exe'),
+      manifestAsset()
+    ])
+    expect(v.status).toBe('update-available')
+    expect(v.managedUpdate).toBe(false)
+    expect(v.managedUpdateReason).toBe('installer-url-rejected')
+    expect(v.installerUrl).toBeUndefined()
+  })
+
+  it('an http:// downgrade on the manifest asset is rejected', async () => {
+    const v = await check([installerAsset(), manifestAsset('http://github.com/NehoraiHadad/hermes-business/releases/download/v1.1.0/update-manifest.json')])
+    expect(v.managedUpdate).toBe(false)
+    expect(v.managedUpdateReason).toBe('manifest-url-rejected')
+  })
+
+  it('assets are not reported on non-update-available verdicts at all', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(200, [release({ tag_name: 'v1.0.0', assets: [installerAsset(), manifestAsset()] })]))
+    const v = await checkCompanionUpdate(
+      { force: true },
+      { fetch: fetchImpl, getVersion: () => '1.0.0', stateDir: () => freshStateDir(), now: () => 1000 }
+    )
+    expect(v).toEqual({ status: 'up-to-date', current: '1.0.0', checkedAt: 1000 })
+  })
+})
+
+describe('checkCompanionUpdate — a COMPLETE, NON-EMPTY scan with no candidate is an ANSWER, not a failure', () => {
+  it('stable install + a repo publishing only prereleases ⇒ up-to-date (the defect this suite pins)', async () => {
+    // The exact live shape: 0.4.0 stable installed, every published release is
+    // an alpha. The fetch fully succeeded and PROVED there is nothing to
+    // install; reporting "לא ניתן לבדוק עדכונים כרגע" here would claim the
+    // check failed when it did not.
+    const fetchImpl = vi.fn(async () => jsonResponse(200, allPrereleases()))
+    const v = await checkCompanionUpdate(
+      { force: true },
+      { fetch: fetchImpl, getVersion: () => '0.4.0', stateDir: () => freshStateDir(), now: () => 7000 }
+    )
+    expect(v).toEqual({ status: 'up-to-date', current: '0.4.0', checkedAt: 7000 })
+    expect(v.message).toBeUndefined()
+  })
+
+  it('the SAME listing for a prerelease install still reports the newest alpha (alpha channel untouched)', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(200, allPrereleases()))
+    const v = await checkCompanionUpdate(
+      { force: true },
+      { fetch: fetchImpl, getVersion: () => '0.4.0-alpha.6', stateDir: () => freshStateDir(), now: () => 7100 }
+    )
+    expect(v.status).toBe('update-available')
+    expect(v.latest).toBe('0.4.0-alpha.8')
+  })
+
+  it('a found candidate stays decisive even on a TRUNCATED listing (omitted entries were created earlier)', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(200, [release()], { link: NEXT_PAGE_LINK }))
+    const v = await checkCompanionUpdate(
+      { force: true },
+      { fetch: fetchImpl, getVersion: () => '1.0.0', stateDir: () => freshStateDir(), now: () => 7300 }
+    )
+    expect(v.status).toBe('update-available')
+    expect(v.latest).toBe('1.1.0')
+  })
+
+  it('the durable state records the proven up-to-date, not a fake unknown', async () => {
+    const dir = freshStateDir()
+    const fetchImpl = vi.fn(async () => jsonResponse(200, allPrereleases()))
+    await checkCompanionUpdate(
+      { force: true },
+      { fetch: fetchImpl, getVersion: () => '0.4.0', stateDir: () => dir, now: () => 7400 }
+    )
+    const written = JSON.parse(fs.readFileSync(path.join(dir, STATE_FILE_NAME), 'utf8'))
+    expect(written).toMatchObject({ lastCheckedAt: 7400, lastStatus: 'up-to-date' })
   })
 })
 
@@ -176,8 +331,10 @@ describe('checkCompanionUpdate — §8 failure-semantics table: every row resolv
     expect(v.status).toBe('unknown')
   })
 
-  it('all tags unparseable — still carries the honest "can\'t check" message, not a bare status', async () => {
-    const fetchImpl = vi.fn(async () => jsonResponse(200, [release({ tag_name: 'garbage' }), release({ tag_name: 'also-garbage' })]))
+  it('all tags unparseable — an unreadable tag is not proof of being older, so the scan is incomplete', async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse(200, [release({ tag_name: 'garbage' }), release({ tag_name: 'also-garbage' })])
+    )
     const v = await checkCompanionUpdate(
       { force: true },
       { fetch: fetchImpl, getVersion: () => '1.0.0', stateDir: () => freshStateDir(), now: () => 1 }
@@ -185,13 +342,60 @@ describe('checkCompanionUpdate — §8 failure-semantics table: every row resolv
     expect(v).toEqual({ status: 'unknown', current: '1.0.0', checkedAt: 1, message: 'לא ניתן לבדוק עדכונים כרגע' })
   })
 
-  it('empty release list — empty is NOT proof of up-to-date', async () => {
+  it('an unparseable RUNNING version — nothing to compare against, even on a complete listing', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(200, [release({ tag_name: 'v1.0.0' })]))
+    const v = await checkCompanionUpdate(
+      { force: true },
+      { fetch: fetchImpl, getVersion: () => 'not-a-version', stateDir: () => freshStateDir(), now: () => 1 }
+    )
+    expect(v).toEqual({
+      status: 'unknown',
+      current: 'not-a-version',
+      checkedAt: 1,
+      message: 'לא ניתן לבדוק עדכונים כרגע'
+    })
+  })
+
+  it('empty release list — [] is content-free, and content-free is NOT proof of up-to-date', async () => {
+    // The scan is COMPLETE here (readable headers, no next page, nothing
+    // unorderable) and it still must not report מעודכן: this repo publishes
+    // releases and keeps a never-shrinking ledger, so an empty listing is an
+    // upstream anomaly, and up-to-date would durably (cache + lastStatus)
+    // swallow a pending update. 'unknown' degrades to a recoverable
+    // "couldn't check" instead.
     const fetchImpl = vi.fn(async () => jsonResponse(200, []))
     const v = await checkCompanionUpdate(
       { force: true },
       { fetch: fetchImpl, getVersion: () => '1.0.0', stateDir: () => freshStateDir(), now: () => 1 }
     )
     expect(v).toEqual({ status: 'unknown', current: '1.0.0', checkedAt: 1, message: 'לא ניתן לבדוק עדכונים כרגע' })
+  })
+
+  it('TRUNCATED listing (Link rel="next") with no eligible candidate — the unseen page may hold the update', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(200, allPrereleases(), { link: NEXT_PAGE_LINK }))
+    const v = await checkCompanionUpdate(
+      { force: true },
+      { fetch: fetchImpl, getVersion: () => '0.4.0', stateDir: () => freshStateDir(), now: () => 1 }
+    )
+    expect(v).toEqual({ status: 'unknown', current: '0.4.0', checkedAt: 1, message: 'לא ניתן לבדוק עדכונים כרגע' })
+  })
+
+  it('truncated EMPTY listing — unknown twice over (empty census AND an unseen page)', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(200, [], { link: NEXT_PAGE_LINK }))
+    const v = await checkCompanionUpdate(
+      { force: true },
+      { fetch: fetchImpl, getVersion: () => '1.0.0', stateDir: () => freshStateDir(), now: () => 1 }
+    )
+    expect(v.status).toBe('unknown')
+  })
+
+  it('UNREADABLE response headers with no eligible candidate — completeness unprovable ⇒ fails closed', async () => {
+    const fetchImpl = vi.fn(async () => headerlessResponse(200, allPrereleases()))
+    const v = await checkCompanionUpdate(
+      { force: true },
+      { fetch: fetchImpl, getVersion: () => '0.4.0', stateDir: () => freshStateDir(), now: () => 1 }
+    )
+    expect(v.status).toBe('unknown')
   })
 
   it('concurrent check → serial-guard rejection surfaces its own message, never a rejected promise', async () => {
