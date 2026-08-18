@@ -205,6 +205,59 @@ describe('FullAppShell — passive companion-update surface (B1)', () => {
     expect(screen.getAllByText("גרסה חדשה של תכל'ס זמינה — פרטים במסך תמיכה")).toHaveLength(1)
   })
 
+  // The announcement used to end at "פרטים במסך תמיכה" and leave the owner to
+  // find the screen. The banner is the CTA for that: it navigates, and it obeys
+  // exactly the same one-time-per-version rule as the toast and the gear dot.
+  it('the banner CTA navigates to the support screen (and marks the version seen on arrival)', async () => {
+    const user = userEvent.setup()
+    render(<Harness initialScreen="chat" />)
+
+    act(() => {
+      emitCompanionUpdateAvailable(PUSHED_VERDICT)
+    })
+
+    const cta = screen.getByRole('button', { name: 'מעבר לעדכון' })
+    expect(screen.getByText(/יש גרסה חדשה של תכל'ס/)).toBeInTheDocument()
+    await user.click(cta)
+
+    // The support screen is now rendered (its update panel is the destination),
+    // the version is persisted as seen, and the banner is gone.
+    expect(screen.getByRole('heading', { name: 'גרסאות ועדכונים' })).toBeInTheDocument()
+    expect(localStorage.getItem(DISMISSED_KEY)).toBe('0.5.0')
+    expect(screen.queryByRole('button', { name: 'מעבר לעדכון' })).not.toBeInTheDocument()
+  })
+
+  it('"לא עכשיו" persists the same seen-marker, so nothing re-announces it later', async () => {
+    const user = userEvent.setup()
+    render(<Harness />)
+
+    act(() => {
+      emitCompanionUpdateAvailable(PUSHED_VERDICT)
+    })
+    await user.click(screen.getByRole('button', { name: 'לא עכשיו' }))
+
+    expect(localStorage.getItem(DISMISSED_KEY)).toBe('0.5.0')
+    expect(screen.queryByRole('button', { name: 'מעבר לעדכון' })).not.toBeInTheDocument()
+    expect(gearButton()).toHaveAccessibleName('הגדרות ועזרה')
+
+    // A repeat push for a version already put aside stays silent.
+    act(() => {
+      emitCompanionUpdateAvailable(PUSHED_VERDICT)
+    })
+    expect(screen.queryByRole('button', { name: 'מעבר לעדכון' })).not.toBeInTheDocument()
+  })
+
+  it('never shows the banner for a version dismissed in a prior session', () => {
+    localStorage.setItem(DISMISSED_KEY, '0.5.0')
+    render(<Harness />)
+
+    act(() => {
+      emitCompanionUpdateAvailable(PUSHED_VERDICT)
+    })
+
+    expect(screen.queryByRole('button', { name: 'מעבר לעדכון' })).not.toBeInTheDocument()
+  })
+
   it('a repeated push for the same version (defensive) never re-triggers the toast callback twice', () => {
     const notifySpy = vi.fn()
     render(<Harness notifySpy={notifySpy} />)

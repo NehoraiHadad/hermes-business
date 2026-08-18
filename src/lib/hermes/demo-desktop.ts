@@ -186,6 +186,26 @@ export function createDemoDesktop(): HermesDesktopApi {
     },
     onCompanionUpdateAvailable() {
       return () => {}
+    },
+
+    // A demo session downloads and runs nothing: there is no main process to
+    // fetch an installer, hash it or launch it. Every action therefore refuses
+    // honestly (a structured, Hebrew, "nothing was changed" verdict — the same
+    // shape a real failure has) instead of pretending an update flow happened.
+    async downloadCompanionUpdate() {
+      return { ok: false, code: 'demo', message: 'עדכון אינו זמין בהדגמה. לא בוצע שינוי.' }
+    },
+    async cancelCompanionDownload() {
+      return { ok: true, cancelled: false }
+    },
+    async applyCompanionUpdate() {
+      return { ok: false, code: 'demo', message: 'התקנת עדכון אינה זמינה בהדגמה. לא בוצע שינוי.' }
+    },
+    async companionUpdateState() {
+      return { phase: null, targetVersion: null, currentVersion: '0.4.0-demo' }
+    },
+    onCompanionDownloadProgress() {
+      return () => {}
     }
   }
 }

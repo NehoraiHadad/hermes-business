@@ -56,7 +56,7 @@ const RUNTIME_LIFECYCLE_METHODS = ['getRuntime', 'startRuntime', 'restartRuntime
 
 // Honest "unknown" reads: the app's fail-closed parsers already know how to
 // render these as "not proven" rather than as a positive result.
-const HONEST_UNKNOWN_DEFAULTS: Record<string, () => unknown> = {
+const HONEST_UNKNOWN_DEFAULTS = {
   getWhatsappGuard: () => null,
   getWhatsappGuardActivation: () => null,
   getProviderEvidence: () => null,
@@ -68,12 +68,25 @@ const HONEST_UNKNOWN_DEFAULTS: Record<string, () => unknown> = {
   // Companion self-update check (docs/specs/versioning.md §6.2/§8): the honest
   // "unproven" shape a test that forgets to stub it gets by default — never a
   // fabricated up-to-date/update-available.
+  //
+  // The managed-update fields (`managedUpdate` / `managedUpdateReason` /
+  // `installerUrl` / `manifestUrl`) are deliberately ABSENT here and not
+  // defaulted to `true`: they exist only on a real `update-available` verdict,
+  // and a default that implied a one-click update was available would be exactly
+  // the fabricated capability this fail-closed mock exists to prevent. A test
+  // that needs them stubs the whole verdict.
   checkCompanionUpdate: () => ({
     status: 'unknown',
     current: '0.0.0',
     checkedAt: null,
     message: 'not probed (test default)'
-  })
+  }),
+  // Durable-journal projection (§7): "no update is pending" is a genuinely safe
+  // and honest default — it offers nothing, claims nothing, and is exactly what
+  // a machine with no interrupted update reports. The opposite default (a `ready`
+  // phase) would fabricate a verified download that no test performed, so a
+  // resumable-offer test must stub this explicitly.
+  companionUpdateState: () => ({ phase: null, targetVersion: null, currentVersion: '0.0.0' })
 }
 
 // Side-effecting calls, or reads with no safe "unknown" shape: reject loudly
@@ -111,7 +124,16 @@ const NOT_STUBBED_METHODS = [
   'createDiagnostics',
   'setWindowMode',
   'setAlwaysOnTop',
-  'hideWindow'
+  'hideWindow',
+  // The three CONSENTED update actions (docs/specs/versioning.md §7). They belong
+  // here for the strongest reason on this list: between them they download an
+  // executable, abort that download, and RUN the result — `applyCompanionUpdate`
+  // quits the app on success. There is no "harmless unknown" shape for any of
+  // them, and a default that resolved `{ok:true}` would let a test claim an
+  // update flow it never drove. A test that exercises one stubs it explicitly.
+  'downloadCompanionUpdate',
+  'cancelCompanionDownload',
+  'applyCompanionUpdate'
 ] as const
 
 // Full method inventory, statically checked against HermesDesktopBridge below
@@ -123,10 +145,28 @@ const ALL_METHOD_NAMES = [
   ...(Object.keys(HONEST_UNKNOWN_DEFAULTS) as BridgeMethodName[]),
   'onRuntimeLog',
   'onCompanionUpdateAvailable',
+  'onCompanionDownloadProgress',
   ...NOT_STUBBED_METHODS
 ] as const satisfies readonly BridgeMethodName[]
 
-type MissingBridgeMethod = Exclude<BridgeMethodName, (typeof ALL_METHOD_NAMES)[number]>
+// Account for the methods at the TYPE level, not by reading back the element type
+// of ALL_METHOD_NAMES. The previous version spread `Object.keys(HONEST_UNKNOWN_DEFAULTS)
+// as BridgeMethodName[]` into that array; `Object.keys` is typed `string[]`, and the
+// cast widened the spread's element type to the WHOLE BridgeMethodName union. So
+// `(typeof ALL_METHOD_NAMES)[number]` was always the full union and this Exclude was
+// unconditionally `never` — the guard compiled, read as if it worked, and caught
+// nothing. (Verified: deleting a real method from the list still typechecked clean.)
+// Deriving each group's literal keys directly keeps the check real.
+type AccountedBridgeMethod =
+  | (typeof RUNTIME_LIFECYCLE_METHODS)[number]
+  | 'getWindowState'
+  | keyof typeof HONEST_UNKNOWN_DEFAULTS
+  | 'onRuntimeLog'
+  | 'onCompanionUpdateAvailable'
+  | 'onCompanionDownloadProgress'
+  | (typeof NOT_STUBBED_METHODS)[number]
+
+type MissingBridgeMethod = Exclude<BridgeMethodName, AccountedBridgeMethod>
 // If this line fails to compile, HermesDesktopBridge (src/vite-env.d.ts) grew
 // a method that ALL_METHOD_NAMES above does not account for yet — add it to
 // the right fail-closed group from §4.2 (or to NOT_STUBBED_METHODS with a
@@ -164,6 +204,27 @@ export function emitCompanionUpdateAvailable(status: CompanionUpdateStatus): voi
   companionUpdateListeners.forEach(listener => listener(status))
 }
 
+let companionProgressListeners: Array<(progress: CompanionDownloadProgress) => void> = []
+
+function onCompanionDownloadProgressDefaultImpl(
+  callback: (progress: CompanionDownloadProgress) => void
+): () => void {
+  companionProgressListeners.push(callback)
+  return () => {
+    companionProgressListeners = companionProgressListeners.filter(listener => listener !== callback)
+  }
+}
+
+/**
+ * Simulates one streamed-download progress frame from the main process
+ * (electron/companion-download.cjs). `totalBytes: null` is a first-class case,
+ * not a degenerate one — it is what a response without a usable length looks
+ * like, and the UI must go indeterminate on it rather than invent a denominator.
+ */
+export function emitCompanionDownloadProgress(progress: CompanionDownloadProgress): void {
+  companionProgressListeners.forEach(listener => listener(progress))
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function defaultImplFor(name: BridgeMethodName): (...args: any[]) => any {
   if ((RUNTIME_LIFECYCLE_METHODS as readonly string[]).includes(name)) {
@@ -173,7 +234,7 @@ function defaultImplFor(name: BridgeMethodName): (...args: any[]) => any {
     return async () => ({ ...FAIL_CLOSED_WINDOW_STATE })
   }
   if (name in HONEST_UNKNOWN_DEFAULTS) {
-    const factory = HONEST_UNKNOWN_DEFAULTS[name]
+    const factory = (HONEST_UNKNOWN_DEFAULTS as Record<string, () => unknown>)[name]
     return async () => factory()
   }
   if (name === 'onRuntimeLog') {
@@ -181,6 +242,9 @@ function defaultImplFor(name: BridgeMethodName): (...args: any[]) => any {
   }
   if (name === 'onCompanionUpdateAvailable') {
     return onCompanionUpdateAvailableDefaultImpl
+  }
+  if (name === 'onCompanionDownloadProgress') {
+    return onCompanionDownloadProgressDefaultImpl
   }
   // NOT_STUBBED_METHODS, and (fail-closed, not open) anything unaccounted for.
   return async () => {
@@ -228,6 +292,7 @@ export function bridge(): BridgeMock {
 export function resetBridge(): void {
   runtimeLogListeners = []
   companionUpdateListeners = []
+  companionProgressListeners = []
   for (const name of ALL_METHOD_NAMES) {
     const mockFn = (bridgeInstance as Record<string, ReturnType<typeof vi.fn>>)[name]
     mockFn.mockReset()

@@ -82,6 +82,28 @@ export interface HermesDesktopApi {
   /** Passive push (§6.5): a ONE-SHOT event fired only when the startup timer
    *  found `update-available`. Returns an unsubscribe function. */
   onCompanionUpdateAvailable(callback: (status: CompanionUpdateStatus) => void): () => void
+
+  // --- תכל'ס (companion) CONSENTED one-click update (§7) --------------------
+  // All four take NO arguments by design. Main derives every operand from
+  // artifacts it produced itself (the verdict it decided, the durable journal
+  // it wrote), so a compromised renderer cannot redirect a download or name a
+  // file to execute — the worst it can do is trigger the same update the owner
+  // could have triggered by clicking. Nothing to pass, so nothing to forge.
+  /** Download + verify the update the last CHECK decided on. Never rejects on the
+   *  main side: every failure is a structured verdict with a Hebrew message. */
+  downloadCompanionUpdate(): Promise<CompanionDownloadResult>
+  /** No-op (not an error) when nothing is in flight — there is only ever one
+   *  download, so there is nothing for the caller to identify. */
+  cancelCompanionDownload(): Promise<{ ok: boolean; cancelled: boolean }>
+  /** Resolves ONLY when the apply was REFUSED. On success the app quits, so this
+   *  promise never settles — there is no success branch to write. */
+  applyCompanionUpdate(): Promise<CompanionApplyRefusal>
+  /** Read-only projection of the durable journal, so a verified-but-unapplied
+   *  download survives a restart as a resumable offer. Scalars only. */
+  companionUpdateState(): Promise<CompanionUpdateJournalState>
+  /** Streamed-download progress. `totalBytes:null` means the response carried no
+   *  usable length — the UI must go indeterminate, never invent a denominator. */
+  onCompanionDownloadProgress(callback: (progress: CompanionDownloadProgress) => void): () => void
 }
 
 export type BridgeAccessor = () => HermesDesktopBridge | undefined
@@ -181,6 +203,27 @@ function createBridgeDesktop(getBridge: BridgeAccessor): HermesDesktopApi {
     onCompanionUpdateAvailable(callback) {
       const onAvailable = getBridge()?.onCompanionUpdateAvailable
       return onAvailable ? onAvailable(callback) : () => {}
+    },
+
+    // No arguments cross this boundary — see the interface note above.
+    async downloadCompanionUpdate() {
+      return need('downloadCompanionUpdate')()
+    },
+    async cancelCompanionDownload() {
+      return need('cancelCompanionDownload')()
+    },
+    async applyCompanionUpdate() {
+      return need('applyCompanionUpdate')()
+    },
+    async companionUpdateState() {
+      return need('companionUpdateState')()
+    },
+    // Same reasoning as onCompanionUpdateAvailable: a subscribe call must not
+    // throw synchronously out of a React effect, and without a bridge there is
+    // genuinely no progress stream to report (no "unknown" value exists here).
+    onCompanionDownloadProgress(callback) {
+      const onProgress = getBridge()?.onCompanionDownloadProgress
+      return onProgress ? onProgress(callback) : () => {}
     }
   }
 }

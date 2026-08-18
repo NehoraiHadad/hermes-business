@@ -235,3 +235,50 @@
   margin-top: 0;
 }
 
+
+/* Companion one-click update (docs/specs/versioning.md §7). The warn tone was
+   already used by the panel's compat notice without a rule of its own. */
+.version-note--warn {
+  color: var(--amber-ink);
+}
+
+.update-progress {
+  margin: 13px 18px 0;
+}
+
+.update-progress__track {
+  overflow: hidden;
+  height: 8px;
+  background: var(--line);
+  border-radius: 999px;
+}
+
+/* Plain block child: in the RTL layout it starts at the inline-start (right)
+   edge on its own, so nothing here assumes a left-to-right fill direction. */
+.update-progress__fill {
+  height: 100%;
+  background: var(--indigo);
+  border-radius: 999px;
+  transition: width 200ms linear;
+}
+
+/* No usable Content-Length ⇒ no denominator ⇒ no percentage to draw. The bar
+   pulses in place instead of sliding, which also keeps it direction-neutral. */
+.update-progress__track--indeterminate .update-progress__fill {
+  animation: update-progress-pulse 1.2s ease-in-out infinite;
+  transition: none;
+}
+
+@keyframes update-progress-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.update-progress__label {
+  margin: 7px 0 0;
+}
