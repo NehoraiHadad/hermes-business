@@ -10,6 +10,57 @@
 
 ---
 
+## [0.4.0-alpha.10] - 2026-08-18
+
+### מה חדש (למשתמש)
+
+- **אפשר לחזור לגרסה הקודמת.** אם עדכון גרם למשהו להפסיק לעבוד, יש עכשיו כפתור
+  במסך התמיכה שמחזיר את תכל'ס לגרסה שהייתה כאן לפני העדכון האחרון. ההגדרות
+  והנתונים נשארים במקומם. הכפתור מופיע רק כשבאמת יש לאן לחזור.
+
+### Technical
+
+- **Reserve update-signing key** (`tachles-update-ed25519-c6379a37ef1fb417`)
+  ships alongside the primary in `electron/update-trust.cjs`. Rotation only ever
+  reaches FUTURE installs — a shipped build trusts exactly the ids compiled into
+  it and there is no channel to add one — so a key generated after release is
+  worthless to existing installs. Provisioning the spare before there is a user
+  base is the only cheap moment. Protects against LOSS unconditionally; against
+  COMPROMISE only while the two private halves live apart. No revocation channel
+  exists, and `docs/specs/versioning.md` §7.4 states that rather than implying
+  otherwise.
+- **One-step rollback** (§7.5). `direction: 'forward' | 'rollback'` on
+  `verifyUpdateManifest` inverts ONLY the ordering rule; the signature check and
+  the `expectedVersion` anti-replay equality are untouched. What makes that safe
+  is that the rollback's expected version comes from our own durable journal —
+  the version this install recorded updating away from — not from the release
+  feed, so the destination is a fact about the machine's past. New pure core
+  (`companion-rollback-core.cjs`) + orchestrator (`companion-rollback.cjs`);
+  the download engine, verifier, journal, launch-time reconciliation and NSIS
+  argv are all reused unchanged. Confirmed against app-builder-lib's NSIS
+  templates that they contain no downgrade guard.
+- An ACTIVE `applying` record is archived as `applied-unhealthy` BEFORE a
+  rollback download begins. Without that, `beginCompanionUpdate` would clobber
+  the only evidence a previous version ran here, and a failed rollback would
+  clear the journal as `failed` — permanently removing the way back, on a
+  version that is already broken.
+- `handleState` now projects a `direction`, computed in main by the one SemVer
+  implementation, so the install button can never say "update" while the journal
+  is about to install something older.
+- **Fixed:** `scripts/e2e-companion-update.mjs` wrote into the LIVE profile.
+  `clearCompanionJournal` takes `file` and `history` as separate options and
+  defaults `history` to the real `%LOCALAPPDATA%\hermes` home; the harness
+  redirected only `file`, so every rehearsal appended synthetic outcomes to the
+  user's real update history.
+- **Fixed:** the same harness hardcoded alpha.7/alpha.8 and had gone stale to
+  the point of refusing to run. Versions are now discovered from whatever
+  installer `release/` holds.
+- 44 new tests; the offline rehearsal is now 20 assertions across 8 scenarios,
+  including a rollback ACCEPTED and the same signed document REFUSED going
+  forward.
+
+---
+
 ## [0.4.0-alpha.9] - 2026-08-18
 
 ### מה חדש (למשתמש)
