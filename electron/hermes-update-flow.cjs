@@ -8,7 +8,10 @@ const { stopOfficialSurfaces, recoverRuntime, closeDesktopScript } = require('./
 // unit-testable without a live Hermes, git checkout, or Electron.
 // `hermes-update.cjs` wires the real collaborators; tests inject fakes. The
 // runtime-lifecycle helpers that bracket the transaction (stopOfficialSurfaces,
-// recoverRuntime) live in update-runtime.cjs.
+// recoverRuntime) live in update-runtime.cjs. Note that stopOfficialSurfaces is
+// used TWICE: once before the mutation, and once after a rollback — a rollback
+// only rewrites the checkout, so the surfaces must be restarted from the restored
+// code before any health proof about it can be honest.
 
 async function runOfficialUpdate(deps) {
   const {
@@ -23,6 +26,11 @@ async function runOfficialUpdate(deps) {
     createPreUpdateBackup,
     captureRollbackAnchor,
     rollbackAfterFailedUpdate,
+    // AUTHORITATIVE `hermes gateway status` reader, used to PROVE the old gateway
+    // is gone after the post-rollback stop. Wired in hermes-update.cjs like every
+    // other side-effecting collaborator; an unwired one throws, which fails closed
+    // (see the post-rollback branch).
+    gatewayState,
     journal
   } = deps
 
@@ -101,6 +109,80 @@ async function runOfficialUpdate(deps) {
       const outcome = rollbackAfterFailedUpdate({ command, anchor, backupPath })
       let recovered = false
       try {
+        // STOP BEFORE RECOVERING, or the health proof below covers the WRONG CODE.
+        //
+        // rollbackAfterFailedUpdate resets the git checkout and stops NOTHING. So
+        // whatever is running at this instant is still executing the code we just
+        // reverted, and both halves of recoverRuntime are no-ops against it:
+        // ensureGatewayBackground returns early when a gateway is already running,
+        // and startHermes() returns early on `if (state.running) return state`.
+        // Without this stop, recoverRuntime would prove "both healths pass" about
+        // processes running the reverted code, and getHermesVersion(command) reads
+        // the CHECKOUT, so nothing downstream could notice the discrepancy.
+        //
+        // The sharpest case is the post-update version re-gate: the flow starts the
+        // new code, finds the landed version unsupported, reverts the checkout,
+        // re-verifies against those same still-running unsupported-version
+        // processes, and tells the owner
+        // "ההתקנה שוחזרה לגרסה הקודמת והמערכת פועלת". On disk that is true; in
+        // memory the rejected version is still the thing serving the user. A
+        // rollback that leaves the rejected code running and then reports success is
+        // worse than one that fails loudly. This repo does not call anything healthy
+        // without a proof that covers what is ACTUALLY RUNNING, and before this stop
+        // the proof did not cover it.
+        //
+        // UNCONDITIONAL, not "only where needed". When `update --yes` itself threw,
+        // the surfaces are already down from the pre-mutation stop and this is a
+        // pure no-op (stopHermes() is `if (!proc) return`; `gateway stop --all` on a
+        // stopped gateway is caught and logged inside stopOfficialSurfaces; the
+        // Windows sweep finds no process under the install root). Making it
+        // conditional would require the flow to know whether the FIRST recoverRuntime
+        // got far enough to restart anything before it threw — which is not
+        // observable from here without inventing state. So we do not guess: the cost
+        // of a redundant stop is a few seconds on an already-failing path, while the
+        // cost of wrongly skipping one is the false claim above.
+        //
+        // It is also the repo's ONE stop path, the same helper the pre-mutation phase
+        // uses — no second stop mechanism is invented for the rollback.
+        //
+        // FAILURE HANDLING IS DELIBERATELY STRICTER HERE than in companion-apply.cjs,
+        // where a failed gateway stop is logged and the update proceeds. There, the
+        // stop is not a precondition for anything that follows (the installer replaces
+        // files regardless, and the journal already records the transaction). Here the
+        // stop is exactly what makes the following health proof MEAN anything, so a
+        // stop we could not complete leaves us unable to prove the restore. It sits
+        // INSIDE this try on purpose: a throw leaves `recovered` false, the journal is
+        // PRESERVED for launch-time recovery, and the honest original/fail-closed
+        // message is what reaches the owner — never a success claim we cannot back.
+        await stopOfficialSurfaces(command, deps)
+        // ...and PROVE the old gateway is actually gone before trusting the restart.
+        //
+        // stopOfficialSurfaces swallows a failed `gateway stop --all` on purpose
+        // (`.catch(log)`): during the PRE-mutation phase a noisy stop must not abort
+        // an update. That swallow is correct there and is deliberately left alone —
+        // the extra strictness belongs to THIS call site only, which is why the
+        // verification lives next to the call rather than inside the helper.
+        //
+        // Here the consequence of a silently-failed stop is specific and bad: the old
+        // gateway survives, ensureGatewayBackground early-returns because it is still
+        // running, and the deep assertion then certifies the code we just REVERTED —
+        // the exact false claim the stop above exists to prevent, arriving through the
+        // one door the stop cannot close by itself.
+        //
+        // `unknown` fails closed with `running`, and that is not pedantry: the reader
+        // returns `unknown` when the command is missing, the spawn failed, or the
+        // output was unparseable. "We could not look" is not "it is not there", and
+        // this is the same rule the WhatsApp guard activation path already applies to
+        // this same reader. Anything other than a POSITIVE `stopped` means we cannot
+        // prove the restore, so we do not claim it: throwing here leaves `recovered`
+        // false, preserves the journal for launch-time recovery, and surfaces the
+        // original error — never a success we cannot back.
+        const afterStop = gatewayState({ command })
+        if (afterStop.state !== 'stopped') {
+          throw new Error(
+            `gateway still reports "${afterStop.state}" after the post-rollback stop${afterStop.reason ? ` (${afterStop.reason})` : ''}; the restored code cannot be verified`
+          )
+        }
         await recoverRuntime(command, deps)
         recovered = true
       } catch (recoveryError) {

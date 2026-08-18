@@ -1,6 +1,11 @@
 const { findHermes } = require('./paths.cjs')
 const { rememberLog } = require('./logs.cjs')
-const { assertFullHealth } = require('./hermes-health.cjs')
+const {
+  assertFullHealth,
+  assertGatewayDeepHealthy,
+  waitForGatewayDeepHealth,
+  GATEWAY_SETTLE_POLL_MS
+} = require('./hermes-health.cjs')
 const { rollbackAfterFailedUpdate } = require('./hermes-rollback.cjs')
 const {
   detectIncompleteUpdate,
@@ -24,6 +29,50 @@ const {
 //      place (so the next launch retries), record the failures, and surface an
 //      honest, non-secret message for the UI. We never report restored/running
 //      unless both checks actually pass.
+//
+// ── Why step 2 waits before it samples ───────────────────────────────────────
+// Step 2 is not merely a report: FAILING it is what authorises step 3 to `git
+// reset` the install checkout. So a health check that samples too early does not
+// produce a false alarm here — it DESTROYS a landed update and then tells the
+// owner it rolled back, which the owner cannot tell apart from a genuine failure.
+//
+// And this path is MORE exposed to that race than any other. main.cjs runs it
+// immediately after `await ensureGatewayBackground()` + `await startHermes()`,
+// before the guard recovery, the guard-activation transaction and the companion
+// recovery — all of which happen to buy the gateway time that this call site does
+// not get. ensureGatewayBackground returns when the gateway PROCESS is up; the
+// gateway then needs ~15-16 s more to reach gateway_state.json state='running'
+// (deep probe [5]), almost all of it spent connecting platforms. Measured live
+// twice on 2026-08-18 — see the note on waitForGatewayDeepHealth in
+// hermes-health.cjs for the raw timeline.
+//
+// So step 2 first WAITS, bounded, on the read-only deep probe, and only then runs
+// the unchanged assertFullHealth exactly once. The wait is ADVISORY: it decides
+// nothing. Whether it succeeds or times out, the same single assertion produces
+// the verdict, so a genuinely broken install still takes the rollback path with
+// the same anchor, the same journal handling and the same user-facing copy.
+//
+// The BUDGET here is 180 s, deliberately larger than the companion updater's
+// 120 s, for two reasons that are specific to this call site:
+//   * it samples EARLIER in the launch sequence (see above), so less of the
+//     gateway's settle has already elapsed when it looks;
+//   * the cost matrix is asymmetric and one side is irreversible. Waiting too
+//     long costs launch-path seconds on a path that only runs at all when a
+//     previous update was interrupted; sampling too early spends a destructive
+//     `git reset` on a healthy install. The budget goes to the side that cannot
+//     be undone.
+// 180 s is not invented for this: it is exactly the budget gateway-ensure.cjs
+// already grants `gateway install --start-now`, i.e. this repo's existing
+// statement of how long a gateway may take to come up. The poll interval stays
+// the shared GATEWAY_SETTLE_POLL_MS (~5 s against a probe that itself costs
+// ~5.7 s), so the worst case is ~16 probes.
+//
+// Step 3's POST-ROLLBACK assertion deliberately does NOT wait, and that is not an
+// oversight: (a) rollbackAfterFailedUpdate only `git reset`s the checkout — it
+// never stops or restarts the gateway, so there is no new settle window to wait
+// for; and (b) reaching step 3 at all means the full deadline above was already
+// burned, so the gateway has had at least that long regardless.
+const ROLLBACK_SETTLE_DEADLINE_MS = 180_000
 
 async function recoverIncompleteUpdate(deps = {}) {
   const {
@@ -33,6 +82,17 @@ async function recoverIncompleteUpdate(deps = {}) {
     rollback = rollbackAfterFailedUpdate,
     fail = recordFailure,
     clear = clearJournal,
+    // The bounded settle wait and everything it needs, injectable down to the
+    // clock and the sleep so the ordering AND the bounds are testable without a
+    // test ever actually waiting.
+    awaitGatewayHealth = waitForGatewayDeepHealth,
+    assertGatewayDeep = assertGatewayDeepHealthy,
+    // No default: an uninjected `sleep` stays undefined and the shared helper
+    // falls back to its own real setTimeout.
+    sleep,
+    now = Date.now,
+    settleDeadlineMs = ROLLBACK_SETTLE_DEADLINE_MS,
+    settlePollMs = GATEWAY_SETTLE_POLL_MS,
     log = rememberLog
   } = deps
 
@@ -47,6 +107,23 @@ async function recoverIncompleteUpdate(deps = {}) {
   }
 
   // 2. Is the install already verified-healthy as it sits?
+  // Bounded, non-mutating wait FIRST (see the header): the gateway may still be
+  // coming up, and mistaking that for a broken update is what would authorise the
+  // destructive rollback below. The result is advisory only — the assertion after
+  // it is unchanged and still decides alone.
+  const settle = await awaitGatewayHealth(command, {
+    assertGatewayDeep,
+    sleep,
+    now,
+    deadlineMs: settleDeadlineMs,
+    pollMs: settlePollMs,
+    log
+  })
+  if (!settle.healthy) {
+    log(
+      `Gateway still not deep-healthy ${settle.waitedMs}ms into update recovery; running the health gate anyway (its verdict decides whether to roll back)`
+    )
+  }
   try {
     await fullHealth(command)
     clear({ outcome: 'recovered-healthy' })
@@ -83,4 +160,4 @@ async function recoverIncompleteUpdate(deps = {}) {
   return { recovered: false, action: 'fail-closed', message: outcome.message, record }
 }
 
-module.exports = { recoverIncompleteUpdate }
+module.exports = { recoverIncompleteUpdate, ROLLBACK_SETTLE_DEADLINE_MS }

@@ -33,6 +33,13 @@ describe('runOfficialUpdate — success ordering & health gates', () => {
       'ensureGw',
       'start',
       'health',
+      // TWO deep probes, and both are load-bearing. The first is the bounded
+      // settle wait's readiness probe: stopOfficialSurfaces just stopped the
+      // gateway, so ensureGw necessarily started a FRESH one and it needs ~15-16 s
+      // to reach state='running'. The second is the unchanged gate whose verdict
+      // alone decides success vs the destructive rollback. Same read-only command,
+      // and here it passes on the first sample, so the wait costs exactly one probe.
+      'deepHealth',
       'deepHealth',
       'journal:verifying',
       'version:0.19.1',

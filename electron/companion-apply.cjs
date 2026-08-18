@@ -106,6 +106,21 @@ function defaultStopForeground() {
 function defaultFullHealth(command) {
   return require('./hermes-health.cjs').assertFullHealth(command)
 }
+// The gateway-only half of the health gate, used as the READINESS signal of the
+// bounded settle wait below. Deliberately the SAME assertion hermes-health.cjs
+// makes — not a parallel "is it up yet?" format — so the thing we wait for is
+// exactly the thing that later decides the outcome.
+function defaultAssertGatewayDeep(command) {
+  return require('./hermes-health.cjs').assertGatewayDeepHealthy(command)
+}
+// The wait LOOP itself is shared infrastructure and lives in hermes-health.cjs,
+// beside the assertion it polls — see the long note there for why (both launch
+// -time recovery paths race the same gateway settle, and the agent-update path
+// must never depend on this companion-update module). Required lazily, like every
+// other default here, so this file stays loadable under vitest.
+function defaultAwaitGatewayHealth(command, options) {
+  return require('./hermes-health.cjs').waitForGatewayDeepHealth(command, options)
+}
 // The repo's ONE gateway stop path, identical to the command update-runtime.cjs
 // stopOfficialSurfaces issues before a Hermes-agent update. No parallel stop
 // mechanism is invented here.
@@ -280,6 +295,32 @@ async function applyCompanionUpdate(request = {}, deps = {}) {
   }
 }
 
+// ── This call site's budget for the shared gateway settle wait ───────────────
+// The race, the measurements behind it and the mechanism are documented on
+// waitForGatewayDeepHealth in hermes-health.cjs. What belongs HERE is only how
+// much this particular gate is willing to wait, and why:
+//   * 120 s is ~7.5x the 15-16 s settle measured live on this exact path
+//     (alpha.9 → alpha.10, twice; the gate sampled ~10 s after the gateway
+//     process started and missed state='running' by 4.9 s and 6.1 s). The margin
+//     is not padding: the settle is dominated by a NETWORK-bound platform connect
+//     that retries up to 8 times, so its tail is far longer than its median.
+//   * 120 s is also exactly the timeout hermes-health.cjs already grants this same
+//     `gateway status --deep` command, and well under the 180 s gateway-ensure.cjs
+//     grants `gateway install --start-now` — this repo already agrees that a
+//     gateway may take minutes.
+//   * 5 s is a real poll, not a busy loop: one `gateway status --deep` costs ~5.7 s
+//     of Python CLI startup measured on this machine, so the effective cadence is
+//     ~11 s and the wait costs ~11 probes at worst.
+//   * What this wait can cost: it only runs after an update actually landed (phase
+//     `applying` + running version == target), at most once per update, and only
+//     AFTER createWindow() — the UI is already on screen, so the app cannot feel
+//     hung. What NOT waiting cost: every successful update was reported to the
+//     owner as "עודכן ... אך בדיקות הבריאות נכשלות", the journal was never cleared,
+//     the ~104 MB consumed installer was never deleted, and no `applied` entry was
+//     ever archived to history.
+const HEALTH_WAIT_DEADLINE_MS = 120_000
+const HEALTH_WAIT_POLL_MS = 5_000
+
 /**
  * Launch-time reconciliation of a companion update that never reported back.
  *
@@ -295,9 +336,11 @@ async function applyCompanionUpdate(request = {}, deps = {}) {
  *                       KEPT (it is still valid) and reported so the UI can offer
  *                       to resume. Never auto-applied — this ran without consent.
  *   applied           — `applying` + the running version IS the target AND both
- *                       health proofs pass. Journal cleared, installer deleted.
- *   applied-unhealthy — `applying` + right version but a health proof failed. We
- *                       do NOT claim success and we do NOT clear the journal.
+ *                       health proofs pass (after a bounded wait for the gateway
+ *                       to finish coming up). Journal cleared, installer deleted.
+ *   applied-unhealthy — `applying` + right version but a health proof still failed
+ *                       once that wait's deadline expired. We do NOT claim success
+ *                       and we do NOT clear the journal.
  *   apply-failed      — `applying` + still the OLD version: the silent install
  *                       failed or its UAC/retry dialog was cancelled. Journal
  *                       cleared, installer KEPT for a manual retry.
@@ -317,6 +360,17 @@ async function recoverIncompleteCompanionUpdate(deps = {}) {
     removeFile = (file) => fs.rmSync(file, { force: true }),
     resolveCommand = findHermes,
     fullHealth = defaultFullHealth,
+    // The bounded settle wait and everything it needs, injectable down to the
+    // clock and the sleep so the ordering AND the bounds are testable without a
+    // test ever actually waiting.
+    awaitGatewayHealth = defaultAwaitGatewayHealth,
+    assertGatewayDeep = defaultAssertGatewayDeep,
+    // No default: an uninjected `sleep` stays undefined and the shared helper
+    // falls back to its own real setTimeout. Tests inject a fake clock instead.
+    sleep,
+    now = Date.now,
+    healthWaitDeadlineMs = HEALTH_WAIT_DEADLINE_MS,
+    healthPollIntervalMs = HEALTH_WAIT_POLL_MS,
     app = null,
     argv = process.argv,
     log = rememberLog
@@ -401,6 +455,29 @@ async function recoverIncompleteCompanionUpdate(deps = {}) {
           detail: `תכל'ס עודכן לגרסה ${record.targetVersion}, אך Hermes אינו מותקן ולא ניתן לאמת שהמערכת פועלת.`
         }
       }
+      // Give the freshly-restarted gateway a bounded chance to finish coming up
+      // before the gate samples it — see the long note above HEALTH_WAIT_*: the
+      // gate used to sample ~10 s after the gateway process started, and the
+      // gateway needs ~15-16 s to write gateway_state.json state='running'
+      // (probe [5]). This wait removes that race; it does NOT relax the gate.
+      // Its result is advisory ONLY: whether it succeeded or timed out, the
+      // composed health gate below runs exactly once and its verdict alone
+      // decides. A gateway that is genuinely dead therefore still ends in
+      // `applied-unhealthy`, with the same recorded failure and the same
+      // preserved journal — it just takes the full deadline to say so.
+      const settle = await awaitGatewayHealth(command, {
+        assertGatewayDeep,
+        sleep,
+        now,
+        deadlineMs: healthWaitDeadlineMs,
+        pollMs: healthPollIntervalMs,
+        log
+      })
+      if (!settle.healthy) {
+        log(
+          `Gateway still not deep-healthy ${settle.waitedMs}ms after an applied companion update; running the health gate anyway`
+        )
+      }
       try {
         await fullHealth(command)
       } catch (error) {
@@ -468,6 +545,8 @@ async function recoverIncompleteCompanionUpdate(deps = {}) {
 module.exports = {
   INSTALLER_ARGS,
   RELAUNCH_MARKER,
+  HEALTH_WAIT_DEADLINE_MS,
+  HEALTH_WAIT_POLL_MS,
   wasRelaunchedByInstaller,
   digestFileSha256,
   applyCompanionUpdate,

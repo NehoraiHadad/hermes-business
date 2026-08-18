@@ -9,6 +9,7 @@ const {
   assertRunningVersionSupported
 } = require('./hermes-compat.cjs')
 const { assertGatewayDeepHealthy } = require('./hermes-health.cjs')
+const { officialGatewayState } = require('./gateway-status.cjs')
 const { assertReleaseReachable } = require('./hermes-update-preflight.cjs')
 const { createPreUpdateBackup } = require('./hermes-backup.cjs')
 const { captureRollbackAnchor, rollbackAfterFailedUpdate } = require('./hermes-rollback.cjs')
@@ -40,6 +41,10 @@ function defaultDeps() {
     createPreUpdateBackup,
     captureRollbackAnchor,
     rollbackAfterFailedUpdate,
+    // The repo's ONE authoritative gateway-liveness reader (official
+    // `hermes gateway status`, never the heartbeat). The flow uses it to prove the
+    // old gateway is gone after a post-rollback stop.
+    gatewayState: officialGatewayState,
     journal
   }
 }

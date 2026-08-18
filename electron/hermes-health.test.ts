@@ -1,8 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
+  GATEWAY_SETTLE_DEADLINE_MS,
+  GATEWAY_SETTLE_POLL_MS,
   interpretGatewayDeep,
   assertGatewayDeepHealthy,
-  assertFullHealth
+  assertFullHealth,
+  waitForGatewayDeepHealth
 } from './hermes-health.cjs'
 
 const CMD = 'C:\\Users\\me\\AppData\\Local\\hermes\\hermes-agent\\venv\\Scripts\\hermes.exe'
@@ -224,5 +227,108 @@ describe('assertFullHealth', () => {
     await expect(
       assertFullHealth(CMD, { ...base, assertGatewayDeep: vi.fn().mockRejectedValue(new Error('deep failed')) })
     ).rejects.toThrow('deep failed')
+  })
+})
+
+
+// A FAKE CLOCK, not a real one: `sleep` never sleeps, it only advances `now`, so
+// the bounded wait's tests measure the exact simulated time and probe count the
+// real code would burn without any test ever waiting.
+function makeClock() {
+  let t = 1_000_000
+  const slept: number[] = []
+  return {
+    now: () => t,
+    slept,
+    sleep: vi.fn(async (ms: number) => {
+      slept.push(ms)
+      t += ms
+    }),
+    elapsed: () => t - 1_000_000
+  }
+}
+
+describe('waitForGatewayDeepHealth — the bounded settle wait', () => {
+  it('returns on the FIRST pass without sleeping', async () => {
+    const clock = makeClock()
+    const result = await waitForGatewayDeepHealth(CMD, {
+      assertGatewayDeep: vi.fn(async () => ({ healthy: true })),
+      sleep: clock.sleep,
+      now: clock.now,
+      log: vi.fn()
+    })
+    expect(result).toMatchObject({ healthy: true, attempts: 1, waitedMs: 0, lastReason: null })
+    expect(clock.slept).toEqual([])
+  })
+
+  it('honours an injected deadline/interval and reports the last failure reason', async () => {
+    const clock = makeClock()
+    const result = await waitForGatewayDeepHealth(CMD, {
+      assertGatewayDeep: vi.fn(async () => {
+        throw new Error('probe [5] FAIL')
+      }),
+      sleep: clock.sleep,
+      now: clock.now,
+      deadlineMs: 20_000,
+      pollMs: 4_000,
+      log: vi.fn()
+    })
+    expect(result).toMatchObject({ healthy: false, attempts: 6, waitedMs: 20_000, lastReason: 'probe [5] FAIL' })
+    expect(clock.slept).toEqual([4000, 4000, 4000, 4000, 4000])
+  })
+
+  it('terminates even against a FROZEN clock (the attempt cap does not depend on time)', async () => {
+    // The elapsed-deadline bound alone would spin forever here. The derived
+    // attempt cap is the second, clock-independent bound that must hold.
+    const probe = vi.fn(async () => {
+      throw new Error('probe [5] FAIL')
+    })
+    const result = await waitForGatewayDeepHealth(CMD, {
+      assertGatewayDeep: probe,
+      sleep: vi.fn(async () => {}),
+      now: () => 5_000,
+      deadlineMs: 30_000,
+      pollMs: 3_000,
+      log: vi.fn()
+    })
+    expect(result).toMatchObject({ healthy: false, attempts: 11, waitedMs: 0 })
+    expect(probe).toHaveBeenCalledTimes(11)
+  })
+
+  it('never throws, whatever the probe does', async () => {
+    const result = await waitForGatewayDeepHealth(CMD, {
+      assertGatewayDeep: vi.fn(() => {
+        throw 'not an Error'
+      }),
+      sleep: vi.fn(async () => {}),
+      now: () => 0,
+      deadlineMs: 0,
+      pollMs: 1_000,
+      log: vi.fn()
+    })
+    expect(result).toMatchObject({ healthy: false, attempts: 1, lastReason: 'not an Error' })
+  })
+
+  it('the shipped defaults are the measured ones (120 s / 5 s)', () => {
+    // 120 s ≈ 7.5x the 15-16 s settle measured live; 5 s is a real poll against
+    // a probe that itself costs ~5.7 s. Call sites may raise the DEADLINE for
+    // their own cost matrix (the agent-update recovery does, because it gates a
+    // destructive rollback) but they all poll at this cadence.
+    expect(GATEWAY_SETTLE_DEADLINE_MS).toBe(120_000)
+    expect(GATEWAY_SETTLE_POLL_MS).toBe(5_000)
+  })
+
+  it('uses those defaults when a call site names no budget of its own', async () => {
+    const clock = makeClock()
+    const result = await waitForGatewayDeepHealth(CMD, {
+      assertGatewayDeep: vi.fn(async () => {
+        throw new Error('probe [5] FAIL')
+      }),
+      sleep: clock.sleep,
+      now: clock.now,
+      log: vi.fn()
+    })
+    expect(result.attempts).toBe(GATEWAY_SETTLE_DEADLINE_MS / GATEWAY_SETTLE_POLL_MS + 1)
+    expect(result.waitedMs).toBe(GATEWAY_SETTLE_DEADLINE_MS)
   })
 })

@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from 'vitest'
 import path from 'node:path'
 import os from 'node:os'
 import {
+  HEALTH_WAIT_DEADLINE_MS,
+  HEALTH_WAIT_POLL_MS,
   INSTALLER_ARGS,
   applyCompanionUpdate,
   recoverIncompleteCompanionUpdate,
@@ -248,19 +250,52 @@ describe('applyCompanionUpdate — installer handoff', () => {
 
 // ── Recovery ────────────────────────────────────────────────────────────────
 
-function makeRecoverDeps(rec: unknown, overrides: Record<string, unknown> = {}) {
+// A FAKE CLOCK, not a real one: `sleep` never sleeps, it only advances `now`.
+// Every test that exercises the bounded settle wait therefore runs instantly
+// while still measuring the exact simulated time and probe count the real code
+// would burn. `deepFailures` is how many times the read-only `gateway status
+// --deep` readiness probe reports FAIL before it starts passing (Infinity = a
+// gateway that never comes up).
+function makeClock() {
+  let t = 1_000_000
+  const slept: number[] = []
   return {
+    now: () => t,
+    slept,
+    sleep: vi.fn(async (ms: number) => {
+      slept.push(ms)
+      t += ms
+    }),
+    elapsed: () => t - 1_000_000
+  }
+}
+
+function makeRecoverDeps(rec: unknown, overrides: Record<string, unknown> = {}) {
+  const { deepFailures = 0, ...rest } = overrides as { deepFailures?: number } & Record<string, unknown>
+  const clock = makeClock()
+  let deepCalls = 0
+  const deps = {
     detect: vi.fn(() => rec),
     clear: vi.fn(),
     recordFailure: vi.fn(),
     removeFile: vi.fn(),
     resolveCommand: vi.fn(() => CMD),
     fullHealth: vi.fn(async () => ({ health: { ok: true } })),
+    // Injected by DEFAULT so no test can ever reach the real hermes-health.cjs
+    // (which would spawn a live `hermes gateway status --deep`).
+    assertGatewayDeep: vi.fn(async () => {
+      deepCalls += 1
+      if (deepCalls <= deepFailures) throw new Error('deep liveness probe(s) [5] reported FAIL')
+      return { healthy: true }
+    }),
+    sleep: clock.sleep,
+    now: clock.now,
     app: { getVersion: () => CURRENT },
     argv: ['electron.exe', '.'],
     log: vi.fn(),
-    ...overrides
+    ...rest
   }
+  return Object.assign(deps, { clock })
 }
 
 describe('recoverIncompleteCompanionUpdate — out-of-band outcome at the next launch', () => {
@@ -397,6 +432,162 @@ describe('recoverIncompleteCompanionUpdate — out-of-band outcome at the next l
     // ...and the SAME verdict without it (hand-started app, or a reboot).
     const byHand = makeRecoverDeps(record({ phase: 'applying' }), { app: { getVersion: () => TARGET } })
     await expect(recoverIncompleteCompanionUpdate(byHand)).resolves.toMatchObject({ outcome: 'applied' })
+  })
+})
+
+// ── The settle race (measured live on 2026-08-18, alpha.9 → alpha.10, twice) ──
+// The gateway was restarted by the update and needed ~15-16 s to write
+// gateway_state.json state='running' (deep probe [5]); the gate sampled it at
+// ~10 s and declared a perfectly healthy update `applied-unhealthy`. These tests
+// pin the WAIT that closes that race — and, just as importantly, pin that the
+// wait cannot become an excuse to pass a broken gateway or to block forever.
+
+describe('recoverIncompleteCompanionUpdate — bounded wait for the gateway to settle', () => {
+  const applying = () => record({ phase: 'applying' })
+  const atTarget = { app: { getVersion: () => TARGET } }
+
+  it('a gateway that is already settled pays NO wait at all (one probe, no sleep)', async () => {
+    const deps = makeRecoverDeps(applying(), { ...atTarget })
+    await expect(recoverIncompleteCompanionUpdate(deps)).resolves.toMatchObject({ outcome: 'applied' })
+    expect(deps.assertGatewayDeep).toHaveBeenCalledTimes(1)
+    expect(deps.sleep).not.toHaveBeenCalled()
+    expect(deps.clock.elapsed()).toBe(0)
+  })
+
+  it('deep probe FAILs the first samples then passes ⇒ applied, journal cleared, installer deleted', async () => {
+    // 3 failures then a pass = 15 s of simulated waiting, i.e. exactly the settle
+    // time measured live (14:49:29 process start → 14:49:45 state='running').
+    const deps = makeRecoverDeps(applying(), { ...atTarget, deepFailures: 3 })
+    const result = await recoverIncompleteCompanionUpdate(deps)
+
+    expect(result).toMatchObject({ outcome: 'applied', resumable: false, targetVersion: TARGET })
+    expect(deps.assertGatewayDeep).toHaveBeenCalledTimes(4)
+    expect(deps.sleep.mock.calls.map(c => c[0])).toEqual([HEALTH_WAIT_POLL_MS, HEALTH_WAIT_POLL_MS, HEALTH_WAIT_POLL_MS])
+    expect(deps.clock.elapsed()).toBe(3 * HEALTH_WAIT_POLL_MS)
+    // The happy-path consequences that the false alarm used to withhold:
+    // the journal is cleared (which is what archives the `applied` HISTORY entry
+    // the rollback feature's second anchor depends on)...
+    expect(deps.clear).toHaveBeenCalledWith({ outcome: 'applied' })
+    // ...and the ~104 MB consumed installer is finally deleted.
+    expect(deps.removeFile).toHaveBeenCalledWith(INSTALLER)
+    expect(deps.recordFailure).not.toHaveBeenCalled()
+  })
+
+  it('runs the composed health gate EXACTLY ONCE, and only after the wait', async () => {
+    const calls: string[] = []
+    const clock = makeClock()
+    let deepCalls = 0
+    const deps = {
+      ...makeRecoverDeps(applying(), atTarget),
+      sleep: clock.sleep,
+      now: clock.now,
+      assertGatewayDeep: vi.fn(async () => {
+        deepCalls += 1
+        calls.push(`deep:${deepCalls}`)
+        if (deepCalls <= 2) throw new Error('deep liveness probe(s) [5] reported FAIL')
+        return { healthy: true }
+      }),
+      fullHealth: vi.fn(async () => {
+        calls.push('fullHealth')
+        return { health: { ok: true } }
+      })
+    }
+    await expect(recoverIncompleteCompanionUpdate(deps)).resolves.toMatchObject({ outcome: 'applied' })
+    // fullHealth is NEVER retried: re-entering it would re-enter
+    // ensureGatewayBackground, whose miss branch restarts the gateway we are
+    // waiting on. The cheap read-only probe is what repeats.
+    expect(calls).toEqual(['deep:1', 'deep:2', 'deep:3', 'fullHealth'])
+    expect(deps.fullHealth).toHaveBeenCalledTimes(1)
+    expect(deps.fullHealth).toHaveBeenCalledWith(CMD)
+  })
+
+  it('FAIL-CLOSED: a gateway that never comes up still ends applied-unhealthy, journal PRESERVED', async () => {
+    const deps = makeRecoverDeps(applying(), {
+      ...atTarget,
+      deepFailures: Number.POSITIVE_INFINITY,
+      fullHealth: vi.fn(async () => {
+        throw new Error('deep liveness probe(s) [5] reported FAIL')
+      })
+    })
+    const result = await recoverIncompleteCompanionUpdate(deps)
+
+    // Byte-for-byte today's outcome — the wait removed a race, not a gate.
+    expect(result).toMatchObject({ outcome: 'applied-unhealthy', resumable: false, targetVersion: TARGET })
+    expect(result.detail).toContain('deep liveness probe(s) [5] reported FAIL')
+    expect(deps.clear).not.toHaveBeenCalled()
+    expect(deps.removeFile).not.toHaveBeenCalled()
+    expect(deps.recordFailure).toHaveBeenCalled()
+    expect(deps.fullHealth).toHaveBeenCalledTimes(1)
+  })
+
+  it('BOUNDED: the wait stops at the deadline — a broken gateway cannot hang the launch path', async () => {
+    const deps = makeRecoverDeps(applying(), {
+      ...atTarget,
+      deepFailures: Number.POSITIVE_INFINITY,
+      fullHealth: vi.fn(async () => {
+        throw new Error('deep liveness probe(s) [5] reported FAIL')
+      })
+    })
+    await recoverIncompleteCompanionUpdate(deps)
+
+    // Exact, not "roughly": one immediate sample plus one per poll interval up to
+    // the deadline. If someone later widens the deadline or drops a bound, this
+    // number changes and this test says so.
+    const expectedProbes = HEALTH_WAIT_DEADLINE_MS / HEALTH_WAIT_POLL_MS + 1
+    expect(deps.assertGatewayDeep).toHaveBeenCalledTimes(expectedProbes)
+    expect(deps.sleep).toHaveBeenCalledTimes(expectedProbes - 1)
+    expect(deps.clock.elapsed()).toBe(HEALTH_WAIT_DEADLINE_MS)
+    // ...and every sleep really was the poll interval, never a longer blocking one.
+    expect(new Set(deps.sleep.mock.calls.map(c => c[0]))).toEqual(new Set([HEALTH_WAIT_POLL_MS]))
+  })
+
+  it('the wait is ADVISORY: if it times out but the real gate passes, the update IS applied', async () => {
+    const deps = makeRecoverDeps(applying(), { ...atTarget, deepFailures: Number.POSITIVE_INFINITY })
+    // fullHealth (the default here) passes: the gate, not the wait, decides.
+    await expect(recoverIncompleteCompanionUpdate(deps)).resolves.toMatchObject({ outcome: 'applied' })
+    expect(deps.clear).toHaveBeenCalledWith({ outcome: 'applied' })
+    expect(deps.clock.elapsed()).toBe(HEALTH_WAIT_DEADLINE_MS)
+  })
+
+  it('never waits when Hermes is not installed (there is nothing to probe)', async () => {
+    const deps = makeRecoverDeps(applying(), { ...atTarget, resolveCommand: vi.fn(() => null) })
+    await expect(recoverIncompleteCompanionUpdate(deps)).resolves.toMatchObject({ outcome: 'applied-unhealthy' })
+    expect(deps.assertGatewayDeep).not.toHaveBeenCalled()
+    expect(deps.sleep).not.toHaveBeenCalled()
+  })
+
+  it('never waits on ANY other recovery outcome (no launch-path cost when nothing was applied)', async () => {
+    const cases: Array<[string, unknown, Record<string, unknown>]> = [
+      ['none', null, {}],
+      ['discarded-partial', record({ phase: 'downloading' }), {}],
+      ['discarded-partial', record({ phase: 'verifying' }), {}],
+      ['resumable', record({ phase: 'ready' }), {}],
+      ['apply-failed', record({ phase: 'applying' }), {}],
+      ['unexpected-version', record({ phase: 'applying' }), { app: { getVersion: () => '0.9.9' } }],
+      [
+        'malformed',
+        { ...record({ phase: 'applying' }), installerPath: null, malformed: true, invalidCode: 'x' },
+        {}
+      ]
+    ]
+    for (const [outcome, rec, overrides] of cases) {
+      const deps = makeRecoverDeps(rec, overrides)
+      await expect(recoverIncompleteCompanionUpdate(deps)).resolves.toMatchObject({ outcome })
+      expect(deps.assertGatewayDeep, outcome).not.toHaveBeenCalled()
+      expect(deps.fullHealth, outcome).not.toHaveBeenCalled()
+      expect(deps.sleep, outcome).not.toHaveBeenCalled()
+      expect(deps.clock.elapsed()).toBe(0)
+    }
+  })
+})
+
+describe("the companion recovery's settle budget", () => {
+  it('is the measured 120 s / 5 s (the loop itself is unit-tested in hermes-health.test.ts)', () => {
+    // 120 s ≈ 7.5x the 15-16 s settle measured live, and the same timeout
+    // hermes-health.cjs already grants `gateway status --deep`; 5 s is a real
+    // poll against a probe that itself costs ~5.7 s.
+    expect(HEALTH_WAIT_DEADLINE_MS).toBe(120_000)
+    expect(HEALTH_WAIT_POLL_MS).toBe(5_000)
   })
 })
 
