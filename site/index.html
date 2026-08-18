@@ -46,7 +46,7 @@
           <li><a href="#contact">יצירת קשר</a></li>
         </ul>
       </nav>
-      <a class="btn btn-primary btn-nav" href="https://github.com/NehoraiHadad/hermes-business/releases/latest">הורדה</a>
+      <a class="btn btn-primary btn-nav" href="https://github.com/NehoraiHadad/hermes-business/releases">הורדה</a>
     </div>
   </header>
 
@@ -64,7 +64,7 @@
             חיבורים ותזכורות — בלי שהמידע העסקי שלך עוזב את המחשב.
           </p>
           <div class="hero-actions">
-            <a class="btn btn-primary btn-lg" href="https://github.com/NehoraiHadad/hermes-business/releases/latest">
+            <a class="btn btn-primary btn-lg" href="https://github.com/NehoraiHadad/hermes-business/releases">
               הורדה ל-Windows (Alpha)
             </a>
             <a class="btn btn-link" href="#how">איך זה עובד? ←</a>
@@ -203,12 +203,12 @@
       <div class="container">
         <h2>הורדה</h2>
         <div class="download-box">
-          <a class="btn btn-primary btn-lg" id="download-btn" href="https://github.com/NehoraiHadad/hermes-business/releases/latest">
+          <a class="btn btn-primary btn-lg" id="download-btn" href="https://github.com/NehoraiHadad/hermes-business/releases">
             הורדת הגרסה האחרונה
           </a>
           <p class="download-version" id="download-version" hidden></p>
         </div>
-        <p class="section-footnote">
+        <p class="section-footnote" id="download-note">
           ההורדה נפתחת בעמוד הגרסאות שלנו ב-GitHub — שם תמצאו את כל הגרסאות,
           מה חדש בכל אחת, וקובצי האימות.
         </p>
@@ -275,25 +275,122 @@
   </footer>
 
   <script>
-    // Phase 3 — progressive enhancement only. On any failure this stays
-    // completely silent: nothing visible changes, and the download button
-    // (a plain link to /releases/latest) keeps working with or without JS.
+    // Progressive enhancement only. Without it (JS off, offline, GitHub blocked,
+    // rate limit) every download link still works: they point at the releases
+    // list, and the footnote below them says so.
+    //
+    // WHY NOT /releases/latest — the endpoint this used to call. GitHub defines
+    // "latest" as the newest release that is NOT a prerelease. Every Tachles
+    // release so far is a prerelease, so that endpoint answered 404 to the API
+    // call (the version label therefore never once appeared) and 302'd the
+    // button to the bare releases LIST. The page looked fine and the button led
+    // somewhere, so nothing announced itself as broken — but a first-time
+    // visitor landed on a list of eight releases and had to work out which one
+    // and which of its three files to take. This reads the full list instead.
     (function () {
       "use strict";
-      fetch("https://api.github.com/repos/NehoraiHadad/hermes-business/releases/latest")
-        .then(function (res) {
-          if (!res.ok) return null;
-          return res.json();
-        })
+
+      var SEMVER = /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/;
+      var INSTALLER = /^Tachles-Setup-.+\.exe$/;
+
+      function parseTag(tag) {
+        var m = SEMVER.exec(String(tag || "").trim());
+        if (!m) return null;
+        return {
+          nums: [Number(m[1]), Number(m[2]), Number(m[3])],
+          pre: m[4] ? m[4].split(".") : []
+        };
+      }
+
+      // SemVer 2.0.0 §11.4.4: all-digit identifiers compare NUMERICALLY. A plain
+      // string compare would sort alpha.10 BELOW alpha.9 and quietly offer the
+      // wrong build — the same trap that was found in the installer's own
+      // comparator, so it is not repeated here.
+      function cmpIdent(a, b) {
+        var an = /^\d+$/.test(a);
+        var bn = /^\d+$/.test(b);
+        if (an && bn) return Number(a) - Number(b);
+        if (an) return -1;
+        if (bn) return 1;
+        return a < b ? -1 : a > b ? 1 : 0;
+      }
+
+      function cmpTag(a, b) {
+        for (var i = 0; i < 3; i++) if (a.nums[i] !== b.nums[i]) return a.nums[i] - b.nums[i];
+        if (!a.pre.length && !b.pre.length) return 0;
+        if (!a.pre.length) return 1;   // a release outranks its own prereleases
+        if (!b.pre.length) return -1;
+        var n = Math.max(a.pre.length, b.pre.length);
+        for (var j = 0; j < n; j++) {
+          if (a.pre[j] === undefined) return -1;
+          if (b.pre[j] === undefined) return 1;
+          var c = cmpIdent(a.pre[j], b.pre[j]);
+          if (c !== 0) return c;
+        }
+        return 0;
+      }
+
+      // Highest version wins, not "whatever GitHub listed first" — feed order is
+      // by creation date, which is only incidentally version order.
+      function pickLatest(releases) {
+        var best = null;
+        var bestParsed = null;
+        for (var i = 0; i < releases.length; i++) {
+          var r = releases[i];
+          if (!r || r.draft === true) continue;
+          var parsed = parseTag(r.tag_name);
+          if (!parsed) continue;
+          var assets = r.assets || [];
+          var asset = null;
+          for (var k = 0; k < assets.length; k++) {
+            if (INSTALLER.test(assets[k].name)) { asset = assets[k]; break; }
+          }
+          // A release with no installer asset is not something anyone can
+          // download, so it must never win and leave the button pointing at
+          // nothing.
+          if (!asset) continue;
+          if (!best || cmpTag(parsed, bestParsed) > 0) {
+            best = { tag: r.tag_name, url: asset.browser_download_url };
+            bestParsed = parsed;
+          }
+        }
+        return best;
+      }
+
+      fetch("https://api.github.com/repos/NehoraiHadad/hermes-business/releases?per_page=20", {
+        headers: { Accept: "application/vnd.github+json" }
+      })
+        .then(function (res) { return res.ok ? res.json() : null; })
         .then(function (data) {
-          if (!data || !data.tag_name) return;
-          var el = document.getElementById("download-version");
-          if (!el) return;
-          el.textContent = "גרסה אחרונה: " + data.tag_name;
-          el.hidden = false;
+          if (!Array.isArray(data)) return;
+          var latest = pickLatest(data);
+          if (!latest) return;
+
+          var btn = document.getElementById("download-btn");
+          if (btn) {
+            btn.href = latest.url;
+            btn.textContent = "הורדת תכל'ס " + latest.tag;
+          }
+
+          var label = document.getElementById("download-version");
+          if (label) {
+            label.textContent = "גרסה אחרונה: " + latest.tag;
+            label.hidden = false;
+          }
+
+          // The footnote described the OLD behaviour ("opens the releases
+          // page"). Once the button hands over a file directly that sentence is
+          // no longer true, so it is corrected rather than left to contradict
+          // what just happened.
+          var note = document.getElementById("download-note");
+          if (note && btn) {
+            note.textContent =
+              "ההורדה מתחילה מיד. כל הגרסאות, מה חדש בכל אחת וקובצי האימות נמצאים בעמוד הגרסאות ב-GitHub.";
+          }
         })
         .catch(function () {
-          // Silent by design — offline/blocked fetch must not change anything visible.
+          // Silent by design — a blocked or offline fetch must leave the working
+          // static links and their honest description exactly as they are.
         });
     })();
   </script>
