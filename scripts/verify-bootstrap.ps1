@@ -13,6 +13,15 @@ $source = Get-Content -Raw -LiteralPath $bootstrap
 $null = [scriptblock]::Create($source)
 $pwsh = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
 
+# Invoke-ProbeProcess / Test-ExternalGate / ConvertTo-SingleLineText. Kept in
+# their own module so the EXTERNAL-vs-OUR-BUG boundary is unit-testable offline
+# (scripts/lib/tests/external-gate.tests.ps1) rather than only observable on a
+# bad network day. See that file for the CI run 32149075429 post-mortem: `2>&1`
+# on a native command under ErrorActionPreference='Stop' truncated a failure to
+# one console-wrapped fragment and hid the 403 from this gate. EVERY child
+# process this script launches and then INSPECTS goes through that runner.
+. (Join-Path $PSScriptRoot 'lib\external-gate.ps1')
+
 # verify:bootstrap has two kinds of gate:
 #   1. DETERMINISTIC (offline): parse checks, the installer-lib unit suite, and
 #      explicit-home isolation. These NEVER touch the network and MUST pass -
@@ -36,29 +45,25 @@ Write-Host '== Deterministic gate: explicit-home isolation (offline) =='
 $isolationRoot = Join-Path $root ".tmp-hermes-home\bootstrap-isolation-$([guid]::NewGuid().ToString('N'))"
 New-Item -ItemType Directory -Force -Path $isolationRoot | Out-Null
 try {
-  $previousErrorPreference = $ErrorActionPreference
-  $ErrorActionPreference = 'Continue'
-  $isolationOutput = & $pwsh `
-    -NoProfile `
-    -ExecutionPolicy Bypass `
-    -File $bootstrap `
-    -PayloadRoot $root `
-    -HermesHome $isolationRoot `
-    -SkipHermesInstall `
-    -SkipGatewaySetup `
-    -SkipCompanionInstall `
-    -NoLaunch 2>&1
-  $isolationExitCode = $LASTEXITCODE
-  $ErrorActionPreference = $previousErrorPreference
-  if ($isolationExitCode -eq 0) {
+  # Routed through Invoke-ProbeProcess for the same reason Gate 2 is: this gate
+  # asserts on the CHILD'S TEXT, so it must see all of it. The old `2>&1` form
+  # needed an ErrorActionPreference='Continue' dance to survive at all, and still
+  # matched against newline-joined records - a console wrap landing inside
+  # "Hermes is not installed" would have failed a perfectly correct run.
+  $isolation = Invoke-ProbeProcess -FilePath $pwsh -ArgumentList @(
+    '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ('"{0}"' -f $bootstrap),
+    '-PayloadRoot', ('"{0}"' -f $root),
+    '-HermesHome', ('"{0}"' -f $isolationRoot),
+    '-SkipHermesInstall', '-SkipGatewaySetup', '-SkipCompanionInstall', '-NoLaunch'
+  )
+  if ($isolation.ExitCode -eq 0) {
     throw 'An explicit empty HermesHome incorrectly reused a global Hermes installation.'
   }
-  if (($isolationOutput -join "`n") -notmatch 'Hermes is not installed') {
-    throw "The isolated missing-Hermes branch returned an unexpected error:`n$($isolationOutput -join "`n")"
+  if ($isolation.Text -notmatch 'Hermes is not installed') {
+    throw "The isolated missing-Hermes branch returned an unexpected error: $($isolation.Text)"
   }
 }
 finally {
-  $ErrorActionPreference = 'Stop'
   if (Test-Path -LiteralPath $isolationRoot) {
     Remove-Item -LiteralPath $isolationRoot -Recurse -Force
   }
@@ -68,16 +73,30 @@ Write-Host 'Deterministic gates passed (parse, library unit suite, explicit-home
 # -- Gate 2: live external release-channel probe ------------------------------
 Write-Host '== External probe: live Hermes release channel =='
 
-function Test-ExternalGate {
-  param([string]$Message)
-  # Reachability / rate-limit / upstream-range drift are EXTERNAL conditions,
-  # not defects in our selection logic (which Gate 1 proved offline).
-  return ($Message -match '(?i)unable to connect|could not|connection|timed out|timeout|network|resolve host|host name|SSL|TLS|403|429|rate limit|No compatible official Hermes release')
+# Prefix that marks a throw as "external condition, swallow it". ONLY
+# Invoke-ReleaseProbe ever applies it, and only to a failing CHILD PROCESS.
+# Every assertion this script makes itself throws WITHOUT the marker and is
+# therefore always fatal - that is the boundary, enforced structurally rather
+# than by hoping a regex never over-matches our own error text.
+$externalGateMarker = 'EXTERNAL-GATE-CONDITION: '
+
+function Invoke-ReleaseProbe {
+  # Runs one bootstrap probe mode and returns its STDOUT lines. A non-zero exit
+  # is classified against the child's COMPLETE output; a success returns the
+  # lines for this script's own (always-fatal) assertions to inspect.
+  param([Parameter(Mandatory)][string]$Label, [Parameter(Mandatory)][string]$Mode)
+  $probe = Invoke-ProbeProcess -FilePath $pwsh -ArgumentList @(
+    '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ('"{0}"' -f $bootstrap), $Mode
+  )
+  if ($probe.ExitCode -eq 0) { return $probe.Output }
+  if (Test-ExternalGate -Message $probe.Text) {
+    throw "$externalGateMarker$Label exited $($probe.ExitCode): $($probe.Text)"
+  }
+  throw "$Label exited $($probe.ExitCode): $($probe.Text)"
 }
 
 try {
-  $resolveOutput = & $pwsh -NoProfile -ExecutionPolicy Bypass -File $bootstrap -ResolveOnly 2>&1
-  if ($LASTEXITCODE -ne 0) { throw ($resolveOutput -join "`n") }
+  $resolveOutput = Invoke-ReleaseProbe -Label 'the release-resolution probe (-ResolveOnly)' -Mode '-ResolveOnly'
   $jsonLine = @($resolveOutput | ForEach-Object { [string]$_ } | Where-Object { $_.Trim().StartsWith('{') }) |
     Select-Object -Last 1
   if (-not $jsonLine) { throw "Bootstrap did not return release metadata:`n$($resolveOutput -join "`n")" }
@@ -90,8 +109,7 @@ try {
     throw 'Bootstrap selected a release without an immutable tag.'
   }
 
-  $integrityOutput = & $pwsh -NoProfile -ExecutionPolicy Bypass -File $bootstrap -VerifyInstallerOnly 2>&1
-  if ($LASTEXITCODE -ne 0) { throw ($integrityOutput -join "`n") }
+  $integrityOutput = Invoke-ReleaseProbe -Label 'the installer-integrity probe (-VerifyInstallerOnly)' -Mode '-VerifyInstallerOnly'
   $integrityJson = @($integrityOutput | ForEach-Object { [string]$_ } | Where-Object { $_.Trim().StartsWith('{') }) |
     Select-Object -Last 1
   $integrity = $integrityJson | ConvertFrom-Json
@@ -106,8 +124,11 @@ try {
 }
 catch {
   $message = [string]$_.Exception.Message
-  if (Test-ExternalGate -Message $message) {
-    Write-Host "EXTERNAL-GATE: live Hermes release probe unavailable - $message"
+  # Only a CHILD-PROCESS failure that Invoke-ReleaseProbe already classified as
+  # external is swallowed. This script's own assertions carry no marker and fall
+  # through to the rethrow, so a genuine selection-logic defect still fails CI.
+  if ($message.StartsWith($externalGateMarker)) {
+    Write-Host "EXTERNAL-GATE: live Hermes release probe unavailable - $($message.Substring($externalGateMarker.Length))"
     Write-Host 'EXTERNAL-GATE: deterministic gates passed; skipping live verification (external dependency, not a build failure).'
     exit 0
   }

@@ -19,6 +19,9 @@ foreach ($module in @('Logging.ps1', 'Hashing.ps1', 'HttpRetry.ps1', 'HttpDownlo
 # The companion installer resolves headers from $BootstrapVersion when dot-sourced.
 $BootstrapVersion = [string](Get-Content -Raw -LiteralPath (Join-Path $root 'package.json') | ConvertFrom-Json).version
 . (Join-Path $root 'installer\bootstrap-companion.ps1')
+# Verifier-side, not shipped: the external-gate seam verify-bootstrap.ps1 uses to
+# tell an unreachable/rate-limited upstream apart from a defect in our own logic.
+. (Join-Path $PSScriptRoot 'lib\external-gate.ps1')
 
 $script:Passed = 0
 $script:Failed = 0
@@ -43,12 +46,16 @@ function Assert-True {
 $mockServerScript = Join-Path $PSScriptRoot 'mock-http-server.ps1'
 $powershell = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
 function Start-MockServer {
-  param([int]$Port, [string]$StopFile, [string]$Mode, [string]$BodyPath, [int]$FailCount = 0)
+  # RetryAfterSeconds only matters to the 'retryafter' mode; it is always passed
+  # so the 403/429 rate-limit cases can drive the wait the server dictates.
+  param([int]$Port, [string]$StopFile, [string]$Mode, [string]$BodyPath, [int]$FailCount = 0,
+    [int]$RetryAfterSeconds = 2)
   if (Test-Path -LiteralPath $StopFile) { Remove-Item -LiteralPath $StopFile -Force }
   $process = Start-Process -FilePath $powershell -PassThru -WindowStyle Hidden -ArgumentList @(
     '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ('"{0}"' -f $mockServerScript),
     '-Port', $Port, '-StopFile', ('"{0}"' -f $StopFile), '-Mode', $Mode,
-    '-BodyPath', ('"{0}"' -f $BodyPath), '-FailCount', $FailCount
+    '-BodyPath', ('"{0}"' -f $BodyPath), '-FailCount', $FailCount,
+    '-RetryAfterSeconds', $RetryAfterSeconds
   )
   # Let the child bind its listener; the retry logic under test also tolerates a
   # brief pre-bind window (connection-refused is retryable).
@@ -71,7 +78,7 @@ foreach ($suite in @(
     'companion-contract.tests.ps1', 'safezip-entrypoint.tests.ps1',
     'companion-install.tests.ps1', 'release-acquisition.tests.ps1',
     'release-packaging.tests.ps1', 'backend-enable.tests.ps1', 'backend-bundling.tests.ps1',
-    'business-install.tests.ps1')) {
+    'business-install.tests.ps1', 'external-gate.tests.ps1')) {
   . (Join-Path $PSScriptRoot "lib\tests\$suite")
 }
 
@@ -95,6 +102,8 @@ $parseTargets = @(
   'scripts\lib\tests\companion-install.tests.ps1', 'scripts\lib\tests\release-acquisition.tests.ps1',
   'scripts\lib\tests\release-packaging.tests.ps1', 'scripts\lib\tests\backend-enable.tests.ps1',
   'scripts\lib\tests\backend-bundling.tests.ps1', 'scripts\lib\tests\business-install.tests.ps1',
+  'scripts\lib\external-gate.ps1', 'scripts\lib\tests\external-gate.tests.ps1',
+  'scripts\verify-bootstrap.ps1',
   'scripts\e2e-companion-nsis-contract.ps1', 'scripts\lib\fixture-companion-installer.ps1',
   'scripts\test-bootstrap-lib.ps1'
 )
@@ -123,6 +132,7 @@ try {
   Invoke-BackendEnableTests -WorkRoot $workRoot
   Invoke-BackendBundlingTests -Root $root
   Invoke-BusinessInstallTests -Root $root -WorkRoot $workRoot
+  Invoke-ExternalGateTests -Root $root -WorkRoot $workRoot
 }
 finally {
   if (Test-Path -LiteralPath $workRoot) {
