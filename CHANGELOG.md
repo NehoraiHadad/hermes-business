@@ -10,6 +10,24 @@
 
 ---
 
+## [0.4.0-alpha.9] - 2026-08-18
+
+### מה חדש (למשתמש)
+
+- **הגרסה הראשונה שמתעדכנת מעצמה.** alpha.8 הביאה את מנגנון העדכון; זו הגרסה
+  הראשונה שאפשר להתקין דרכו בלחיצה אחת, בלי להוריד כלום מהדפדפן. אם יש לכם
+  alpha.8 — תראו הצעה לעדכן בתוך האפליקציה.
+
+### Technical
+
+- Repo hygiene: `docs/evidence/forensics/` is now gitignored. It was untracked
+  but not ignored, so it resurfaced as noise and was swept into a release commit
+  by an over-broad `git add -A` (caught and reverted before it reached master).
+- No runtime code changes. This release exists to exercise the alpha.8 →
+  alpha.9 one-click update path end to end against real published assets.
+
+---
+
 ## [0.4.0-alpha.8] - 2026-08-18
 
 ### מה חדש (למשתמש)

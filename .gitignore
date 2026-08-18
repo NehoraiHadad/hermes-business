@@ -27,3 +27,9 @@ __pycache__/
 # would let an attacker sign an installer every installed app accepts as genuine.
 .tachles-release/
 *update-signing-key*.pem
+
+# User-owned forensic captures live under docs/evidence/forensics/ and are
+# deliberately NOT tracked (see "chore: untrack user-owned forensics capture").
+# Without this rule they resurface as untracked noise and get swept into a
+# release commit by an over-broad `git add`.
+docs/evidence/forensics/
