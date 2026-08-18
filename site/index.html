@@ -46,7 +46,7 @@
           <li><a href="#contact">יצירת קשר</a></li>
         </ul>
       </nav>
-      <a class="btn btn-primary btn-nav" href="https://github.com/NehoraiHadad/hermes-business/releases">הורדה</a>
+      <a class="btn btn-primary btn-nav" data-download-installer href="https://github.com/NehoraiHadad/hermes-business/releases/download/v0.4.0-alpha.10/Tachles-Setup-0.4.0-alpha.10.exe">הורדה</a>
     </div>
   </header>
 
@@ -64,7 +64,7 @@
             חיבורים ותזכורות — בלי שהמידע העסקי שלך עוזב את המחשב.
           </p>
           <div class="hero-actions">
-            <a class="btn btn-primary btn-lg" href="https://github.com/NehoraiHadad/hermes-business/releases">
+            <a class="btn btn-primary btn-lg" data-download-installer href="https://github.com/NehoraiHadad/hermes-business/releases/download/v0.4.0-alpha.10/Tachles-Setup-0.4.0-alpha.10.exe">
               הורדה ל-Windows (Alpha)
             </a>
             <a class="btn btn-link" href="#how">איך זה עובד? ←</a>
@@ -203,14 +203,14 @@
       <div class="container">
         <h2>הורדה</h2>
         <div class="download-box">
-          <a class="btn btn-primary btn-lg" id="download-btn" href="https://github.com/NehoraiHadad/hermes-business/releases">
+          <a class="btn btn-primary btn-lg" id="download-btn" data-download-installer href="https://github.com/NehoraiHadad/hermes-business/releases/download/v0.4.0-alpha.10/Tachles-Setup-0.4.0-alpha.10.exe">
             הורדת הגרסה האחרונה
           </a>
           <p class="download-version" id="download-version" hidden></p>
         </div>
         <p class="section-footnote" id="download-note">
-          ההורדה נפתחת בעמוד הגרסאות שלנו ב-GitHub — שם תמצאו את כל הגרסאות,
-          מה חדש בכל אחת, וקובצי האימות.
+          ההורדה מתחילה מיד. כל הגרסאות, מה חדש בכל אחת וקובצי האימות נמצאים
+          בעמוד הגרסאות ב-GitHub.
         </p>
         <p class="section-footnote">
           <em>סטטוס נוכחי: גרסת Alpha מוקדמת — דברים עוד משתנים ומשתפרים.</em>
@@ -275,9 +275,17 @@
   </footer>
 
   <script>
-    // Progressive enhancement only. Without it (JS off, offline, GitHub blocked,
-    // rate limit) every download link still works: they point at the releases
-    // list, and the footnote below them says so.
+    // Progressive enhancement only, and now genuinely OPTIONAL. Without it (JS
+    // off, offline, GitHub blocked, rate-limited) every download button still
+    // hands over a real installer, because its static href is the direct asset
+    // URL of the newest PUBLISHED release — the one recorded in
+    // release-ledger.json, which site/download-link.test.mjs pins. The script
+    // only makes that newer; it is not what makes the page work.
+    //
+    // The rate-limit case is not hypothetical: api.github.com allows 60
+    // unauthenticated requests per hour PER IP, so a handful of people behind
+    // one office NAT can exhaust it between them — and every one of them would
+    // otherwise have been handed a release list instead of a download.
     //
     // WHY NOT /releases/latest — the endpoint this used to call. GitHub defines
     // "latest" as the newest release that is NOT a prerelease. Every Tachles
@@ -366,31 +374,28 @@
           var latest = pickLatest(data);
           if (!latest) return;
 
+          // EVERY download button, not just the one in the download section.
+          // The nav and hero buttons were left behind when this was first
+          // written against a single id, so two of the three still went to the
+          // release list even when the fetch succeeded.
+          var buttons = document.querySelectorAll("[data-download-installer]");
+          for (var i = 0; i < buttons.length; i++) buttons[i].href = latest.url;
+
+          // Only the primary button takes the version into its label. The nav
+          // and hero buttons keep their own wording, which is about the action
+          // rather than about which build it fetches.
           var btn = document.getElementById("download-btn");
-          if (btn) {
-            btn.href = latest.url;
-            btn.textContent = "הורדת תכל'ס " + latest.tag;
-          }
+          if (btn) btn.textContent = "הורדת תכל'ס " + latest.tag;
 
           var label = document.getElementById("download-version");
           if (label) {
             label.textContent = "גרסה אחרונה: " + latest.tag;
             label.hidden = false;
           }
-
-          // The footnote described the OLD behaviour ("opens the releases
-          // page"). Once the button hands over a file directly that sentence is
-          // no longer true, so it is corrected rather than left to contradict
-          // what just happened.
-          var note = document.getElementById("download-note");
-          if (note && btn) {
-            note.textContent =
-              "ההורדה מתחילה מיד. כל הגרסאות, מה חדש בכל אחת וקובצי האימות נמצאים בעמוד הגרסאות ב-GitHub.";
-          }
         })
         .catch(function () {
-          // Silent by design — a blocked or offline fetch must leave the working
-          // static links and their honest description exactly as they are.
+          // Silent by design — a blocked or offline fetch leaves the static
+          // hrefs in place, and those already download a real installer.
         });
     })();
   </script>

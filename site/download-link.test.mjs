@@ -5,6 +5,9 @@ import { fileURLToPath } from 'node:url'
 import { JSDOM } from 'jsdom'
 import { describe, expect, it } from 'vitest'
 
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const LEDGER = JSON.parse(readFileSync(path.join(ROOT, 'release-ledger.json'), 'utf8'))
+
 // The download button is the ONLY way a first-time visitor gets the product, and
 // it is the one surface with no build step, no types and no other test — an
 // endpoint that quietly stops resolving there is invisible until someone tries
@@ -96,29 +99,101 @@ describe('site download button', () => {
     expect(doc.getElementById('download-btn').href).toContain('/v0.4.0-alpha.9/')
   })
 
-  it('corrects the footnote once the button hands over a file directly', async () => {
-    const before = new JSDOM(HTML).window.document.getElementById('download-note').textContent
-    expect(before).toContain('נפתחת בעמוד הגרסאות')
+  it('upgrades EVERY download button, not only the one in the download section', async () => {
+    // The nav and hero buttons were left behind when this was first written
+    // against a single id: two of the three still went to the release list even
+    // when the fetch succeeded. A visitor clicking the nav button is asking for
+    // the same thing as one clicking the big one.
     const doc = await renderWith(ok([release('v0.4.0-alpha.10')]))
+    const buttons = [...doc.querySelectorAll('[data-download-installer]')]
+    expect(buttons.length).toBe(3)
+    for (const button of buttons) {
+      expect(button.href).toBe(`${DOWNLOAD}/v0.4.0-alpha.10/Tachles-Setup-0.4.0-alpha.10.exe`)
+    }
+  })
+
+  it('does not turn the footer "Releases" link into a download', async () => {
+    // That link goes to the releases page BY NAME. Pointing it at a file would
+    // be a lie about where it leads, so it deliberately carries no marker.
+    const doc = await renderWith(ok([release('v0.4.0-alpha.10')]))
+    const footer = [...doc.querySelectorAll('a')].find(a => a.textContent.trim() === 'Releases')
+    expect(footer).toBeTruthy()
+    expect(footer.hasAttribute('data-download-installer')).toBe(false)
+    expect(footer.href).toBe('https://github.com/NehoraiHadad/hermes-business/releases')
+  })
+
+  it('hands over a real installer with NO javascript at all', async () => {
+    // The whole point of the static href. api.github.com allows 60
+    // unauthenticated requests per hour PER IP, so a few people behind one
+    // office NAT can exhaust it between them; before this, every one of them was
+    // handed a release list instead of a download.
+    const doc = new JSDOM(HTML).window.document
+    for (const button of doc.querySelectorAll('[data-download-installer]')) {
+      expect(button.getAttribute('href')).toMatch(/\/releases\/download\/v[^/]+\/Tachles-Setup-.+\.exe$/)
+    }
+    // ...and the footnote must describe THAT, not the old redirect behaviour.
     expect(doc.getElementById('download-note').textContent).toContain('מתחילה מיד')
   })
 
-  it('leaves the working static links alone when GitHub cannot be reached', async () => {
-    // Rate limit, offline, blocked — the page must degrade to something that
-    // still works and still describes itself accurately, never to a dead button.
+  it('pins the static href to the newest PUBLISHED release in release-ledger.json', () => {
+    // The ledger is the record of what actually shipped (RELEASING.md step 10),
+    // so it is the only honest offline source for "which installer exists". This
+    // is what stops the static fallback from silently rotting: cut a release,
+    // forget the site, and this fails.
+    const newest = Object.keys(LEDGER.entries).sort(compareSemver).pop()
+    const expected = `${DOWNLOAD}/v${newest}/Tachles-Setup-${newest}.exe`
+    const doc = new JSDOM(HTML).window.document
+    const hrefs = [...doc.querySelectorAll('[data-download-installer]')].map(a => a.getAttribute('href'))
+    expect(hrefs.length).toBe(3)
+    for (const href of hrefs) expect(href).toBe(expected)
+  })
+
+  it('leaves the static installer links alone when GitHub cannot be reached', async () => {
+    // Rate limit, offline, blocked. The page must degrade to something that
+    // still downloads the product - never to a dead button, and never to a list.
+    const newest = Object.keys(LEDGER.entries).sort(compareSemver).pop()
+    const staticHref = `${DOWNLOAD}/v${newest}/Tachles-Setup-${newest}.exe`
     for (const failing of [async () => ({ ok: false, status: 403, json: async () => ({}) }), async () => { throw new Error('offline') }]) {
       const doc = await renderWith(failing)
-      const btn = doc.getElementById('download-btn')
-      expect(btn.href).toBe('https://github.com/NehoraiHadad/hermes-business/releases')
+      expect(doc.getElementById('download-btn').href).toBe(staticHref)
       expect(doc.getElementById('download-version').hidden).toBe(true)
-      expect(doc.getElementById('download-note').textContent).toContain('נפתחת בעמוד הגרסאות')
     }
   })
 
   it('ignores a malformed payload rather than writing junk into the button', async () => {
+    const newest = Object.keys(LEDGER.entries).sort(compareSemver).pop()
+    const staticHref = `${DOWNLOAD}/v${newest}/Tachles-Setup-${newest}.exe`
     for (const payload of [null, {}, 'nope', [null, 7, { tag_name: 'nightly', assets: [] }]]) {
       const doc = await renderWith(ok(payload))
-      expect(doc.getElementById('download-btn').href).toBe('https://github.com/NehoraiHadad/hermes-business/releases')
+      expect(doc.getElementById('download-btn').href).toBe(staticHref)
     }
   })
 })
+
+/** Minimal SemVer ordering, only for picking the newest ledger entry. */
+function compareSemver(a, b) {
+  const parse = v => {
+    const [core, pre] = v.split('-')
+    return { nums: core.split('.').map(Number), pre: pre ? pre.split('.') : [] }
+  }
+  const pa = parse(a)
+  const pb = parse(b)
+  for (let i = 0; i < 3; i++) if (pa.nums[i] !== pb.nums[i]) return pa.nums[i] - pb.nums[i]
+  if (!pa.pre.length && !pb.pre.length) return 0
+  if (!pa.pre.length) return 1
+  if (!pb.pre.length) return -1
+  for (let i = 0; i < Math.max(pa.pre.length, pb.pre.length); i++) {
+    const x = pa.pre[i]
+    const y = pb.pre[i]
+    if (x === undefined) return -1
+    if (y === undefined) return 1
+    const xn = /^\d+$/.test(x)
+    const yn = /^\d+$/.test(y)
+    if (xn && yn) {
+      if (Number(x) !== Number(y)) return Number(x) - Number(y)
+    } else if (x !== y) {
+      return x < y ? -1 : 1
+    }
+  }
+  return 0
+}
