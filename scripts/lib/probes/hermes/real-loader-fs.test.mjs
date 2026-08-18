@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync, utimesSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync, utimesSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -87,9 +87,11 @@ describe('real-loader-fs cleanup control flow', () => {
 
 describe('real-loader-fs generic stale-sandbox sweep', () => {
   it('removes only old, correctly-prefixed sandboxes and never the live/keep root', () => {
-    const stale = mkdtempSync(path.join(os.tmpdir(), 'hermes-realloader-'))
-    const fresh = mkdtempSync(path.join(os.tmpdir(), 'hermes-realloader-'))
-    const foreign = mkdtempSync(path.join(os.tmpdir(), 'unrelated-'))
+    // Canonicalize: on an 8.3-short TEMP (CI runners) mkdtemp returns the short
+    // form while the sweep enumerates the canonical root — keys must match.
+    const stale = realpathSync.native(mkdtempSync(path.join(os.tmpdir(), 'hermes-realloader-')))
+    const fresh = realpathSync.native(mkdtempSync(path.join(os.tmpdir(), 'hermes-realloader-')))
+    const foreign = realpathSync.native(mkdtempSync(path.join(os.tmpdir(), 'unrelated-')))
     owned.push(fresh, foreign)
     // Age the stale one past the threshold.
     const old = new Date(Date.now() - 7_200_000)

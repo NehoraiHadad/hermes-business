@@ -140,7 +140,18 @@ export function removeOwnedDir(dir) {
  */
 export function sweepStaleSandboxes({ prefix = 'hermes-realloader-', maxAgeMs = 3_600_000, keep = null } = {}) {
   const tempRoot = osTempRoot()
-  const keepKey = keep ? pathKey(keep) : null
+  // Realpath-resolve `keep` before keying: enumerated targets are built on the
+  // CANONICAL temp root, so a keep handed in via an 8.3-short TEMP (e.g.
+  // C:\Users\RUNNER~1\...) would never match its own canonical entry and the
+  // live root would lose its protection exactly when it matters.
+  let keepKey = null
+  if (keep) {
+    try {
+      keepKey = pathKey(realpathSync.native(keep))
+    } catch {
+      keepKey = pathKey(keep)
+    }
+  }
   const now = Date.now()
   let entries = []
   try {

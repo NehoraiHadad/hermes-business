@@ -16,7 +16,10 @@ let previousHome: string | undefined
 
 beforeEach(() => {
   previousHome = process.env.HERMES_BUSINESS_HOME
-  home = fs.mkdtempSync(path.join(os.tmpdir(), 'hermes-canonical-'))
+  // Canonicalize the suite root: on an 8.3-short TEMP (CI runners) the raw
+  // mkdtemp path is an alias, and every "non-reparse dirs are unchanged"
+  // assertion below would see selected != realpath through no fault of its own.
+  home = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'hermes-canonical-')))
   process.env.HERMES_BUSINESS_HOME = home
 })
 afterEach(() => {

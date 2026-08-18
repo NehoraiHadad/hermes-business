@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { rmSync } from 'node:fs'
+import { realpathSync, rmSync } from 'node:fs'
 import os from 'node:os'
 import {
   createTempHermesHome,
@@ -16,7 +16,11 @@ describe('createTempHermesHome', () => {
     const home = createTempHermesHome()
     try {
       expect(home.toLowerCase()).toContain('hermes-qa-home-')
-      expect(home.toLowerCase().startsWith(os.tmpdir().toLowerCase())).toBe(true)
+      // The returned home is CANONICAL (assertQaHomeContainment realpaths it),
+      // so compare against the canonical TEMP root — raw os.tmpdir() may be an
+      // 8.3 short path (C:\Users\RUNNER~1\...) on CI runners.
+      const canonicalTmp = realpathSync.native(os.tmpdir())
+      expect(home.toLowerCase().startsWith(canonicalTmp.toLowerCase())).toBe(true)
     } finally {
       rmSync(home, { recursive: true, force: true })
     }
