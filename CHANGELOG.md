@@ -10,6 +10,57 @@
 
 ---
 
+## [0.4.0-alpha.12] - 2026-08-18
+
+### מה חדש (למשתמש)
+
+- **אין שינוי שמשפיע עליך בגרסה הזו.** היא נועדה כולה לתקן חובות פנימיים בכלי
+  הבנייה וההתקנה. אם הכול עבד לך בגרסה הקודמת — הוא ימשיך לעבוד בדיוק אותו דבר.
+
+### Technical
+
+**Housekeeping release: no runtime code changed.** Every entry in
+`docs/open-items.md` that was a code task is now closed, which touched
+fingerprinted release inputs (`installer/bootstrap-companion.ps1`,
+`scripts/lib/release/**`) and therefore required a version to re-bind the
+packaged evidence to. Nothing under `electron/`, `src/` or `hermes-plugin/`
+moved, so `approval` and `shared-state` evidence carried over untouched.
+
+- **`GetNewClosure()` does not carry dot-sourced functions.** It copies the
+  defining scope's variables but rebinds the block to a fresh module session
+  state, whose command lookup falls back to GLOBAL only. `-File` put the
+  `installer/lib` helpers in global by accident of entry form; `-Command
+  "& .\x.ps1"` did not, and the zip install action died on
+  `Expand-ArchiveSafely : The term ... is not recognized`. The helper now travels
+  as a captured command object. Same fix in `Resolve-LatestCompatibleRelease`;
+  the NSIS branch calls only `Start-Process` and is deliberately unchanged.
+  Regression tests spawn a real `-Command` child — the trap is invisible to a
+  suite that runs under `-File`.
+- **Opt-in GitHub authentication in the installer.** Anonymous api.github.com
+  allows 60 req/hr PER IP, and `Resolve-LatestCompatibleRelease` is a 1+N caller
+  (one list, then one source read per candidate tag), so a single resolve on a
+  shared CI runner can exhaust the budget alone. `GITHUB_TOKEN`/`GH_TOKEN` are
+  used when present; a tokenless install sends byte-identical headers.
+- **A stale installer no longer looks like a failed build.** Selection is a
+  substring match that must hit exactly one file, and `release/` is never
+  cleaned; on a collision `measureInstallers` returned nothing and three call
+  sites printed "No installer .exe under release/". The selector's reason is now
+  carried instead of discarded.
+- **Uncommitted release inputs are reported before stage 1, not after stage 11.**
+  `public`/`pilot` stop immediately — stage 12 would refuse anyway, so the build
+  is pure waste. `qa` only warns: recapturing evidence over working-tree changes
+  is that channel's purpose. Stage 12 remains authoritative because inputs can
+  change mid-run. One shared reader (`scripts/lib/release/dirty-tree.mjs`) so
+  "clean" cannot come to mean two different things.
+- **Documentation that claimed something the code does not do.**
+  `verify-release-contract.mjs` said it was the gate `package:win` runs before
+  electron-builder — it is not, and that sentence is exactly why dirty inputs
+  read as already-checked. `RELEASING` step 6 referenced `build/lock-attest.json`,
+  which nothing writes. The thin-installer recapture hint steered at the redirect
+  that yields a mixed log rather than JSON.
+
+---
+
 ## [0.4.0-alpha.11] - 2026-08-18
 
 ### מה חדש (למשתמש)
