@@ -29,6 +29,26 @@ of `pilot` everywhere below, plus a code-signing certificate
   and a version-bump commit is not evidence-only, so it invalidates ALL
   envelopes). This is expected and priced into step 3/4 below — do not "fix"
   it by holding off the bump.
+- **Touched a fingerprinted release input while a version is published? You need
+  a NEW version — the evidence cannot be recaptured in place.** Changing
+  anything in `PACKAGED_INPUTS` (`installer/bootstrap-companion.ps1`,
+  `scripts/lib/release/**`, `electron/**`, `src/**` … — even a comment) drifts
+  the `packaged-e2e` subject fingerprint, and the only thing that can re-mint
+  that envelope is a package run. Re-running it at the SAME version cannot
+  finish: the rebuild produces different installer bytes, and stage 12 refuses
+  with
+
+  ```
+  Refusing to finalize: update manifest is invalid [ledger-digest-mismatch]
+  manifest installer.sha256 … != release-ledger.json … for v<version>
+  ```
+
+  which is version immutability doing its job. The trap is that stage **11**
+  writes the envelopes BEFORE that refusal, so `verify-evidence` turns green
+  while `release/` is left holding a fresh binary beside the previous release's
+  sidecars — `verify-release-contract` then correctly reports `NOT
+  distributable` with identity/containment/binding splits. Bump the version and
+  run the pipeline once, cleanly.
 - **First pilot release ever? Bootstrap the ledger pair (step 0).** The pilot
   preflight requires an AUTHENTICATED version-immutability ledger even when no
   release exists yet — an ABSENT ledger fails closed (`version-ledger-
