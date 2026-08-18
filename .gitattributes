@@ -1,0 +1,13 @@
+# Byte-compared artifacts: git must NEVER rewrite their line endings.
+#
+# The plugin builder (scripts/build-plugin.mjs) emits byte-for-byte
+# deterministic LF output, and `verify:plugin` --check compares the committed
+# artifact against a fresh build BYTE-wise. GitHub's Windows runners ship
+# core.autocrlf=true in the image gitconfig, so without these rules a CI
+# checkout smudges the committed LF artifact to CRLF on disk and the check
+# reports it stale (found by CI run 7, 2026-08-18). `-text` opts the files out
+# of all EOL conversion everywhere.
+hermes-plugin/business-shell/plugin.js -text
+# The Hermes desktop contract snapshot is sha256-compared by
+# `verify:plugin:release` — same class of trap.
+scripts/hermes-desktop-contract.json -text
