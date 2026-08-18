@@ -30,11 +30,13 @@ emails) and `redactPaths` (home/temp/drive paths) as a backstop.
   `release_binding_digest`, `installer_sha256`). Machine-written by the
   exact-artifact stage (`scripts/e2e-exact-artifact.mjs`) from an
   `e2e-installed-isolated.mjs` run.
-- `telegram.json` — **passed** from a redacted live native-Hermes round trip.
-  It proves a valid bot, polling with no competing webhook, inbound delivery to
-  Hermes and an outbound agent reply. The wrapper owns no Telegram policy or
-  transport. The pass-proof rule enforces the no-conflict / no-mutation /
-  single-chat invariants over the scalar-only reduction.
+> **Retired category — `telegram`** (removed 2026-08-18). It attested a live
+> round trip through the NATIVE Hermes gateway — the engine's own mechanism, not
+> this wrapper's code. Since commit 88fb302 the wrapper owns no Telegram policy
+> or transport (its only surface is the guided connect flow over the official
+> `/api/messaging` endpoints, covered by unit tests), so re-proving the engine
+> contradicted the wrapper principle. A leftover `telegram.json` is rejected by
+> the verifier as an unknown category.
 
 ## Real-loader proof (opt-in, passing — no committed envelope)
 
@@ -105,8 +107,6 @@ node scripts/capture-evidence.mjs thin-installer raw-thin.json
 $env:HERMES_BUSINESS_E2E_APPROVAL = '1'
 npm run package:win:qa
 
-# telegram.json has no scripted capture: it is hand-reduced and redacted from a
-# manual live probe (never touching live config/env), then held to the same gate.
 
 # verify schema + redaction + version/commit correspondence + pass-proof gate
 npm run verify:evidence

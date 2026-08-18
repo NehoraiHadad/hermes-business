@@ -22,11 +22,11 @@ Three `--channel` values, orthogonal to the app's own SemVer
 (`docs/specs/versioning.md` D1). Grouping lives in ONE place —
 `scripts/lib/release/channel-policy.mjs` — never re-derived ad hoc:
 
-| Channel | Renderer build | Distributable? | Signing | Ledger / lock-attest / binding-chain rigor | Thin-installer + telegram |
+| Channel | Renderer build | Distributable? | Signing | Ledger / lock-attest / binding-chain rigor | Thin-installer |
 |---|---|---|---|---|---|
 | `public` | `npm run build` (real, demo stripped) | Yes | REQUIRED (approved publisher, RFC3161 timestamp) | REQUIRED | REQUIRED `passed` |
-| `pilot` | `npm run build` (real, demo stripped) — **never** `build:qa` | **Yes** (Alpha prerelease, disclosed) | Tolerated unsigned (no cert yet); SmartScreen + SHA256SUMS advisory | REQUIRED — same as public | May stay honest blockers (like qa) |
-| `qa` | `npm run build:qa` (`--mode qa`, demo transport baked in) | No (`…DO-NOT-DISTRIBUTE`) | Tolerated unsigned | Tolerated absent (`UNVERIFIED`) | May stay honest blockers |
+| `pilot` | `npm run build` (real, demo stripped) — **never** `build:qa` | **Yes** (Alpha prerelease, disclosed) | Tolerated unsigned (no cert yet); SmartScreen + SHA256SUMS advisory | REQUIRED — same as public | May stay an honest blocker (like qa) |
+| `qa` | `npm run build:qa` (`--mode qa`, demo transport baked in) | No (`…DO-NOT-DISTRIBUTE`) | Tolerated unsigned | Tolerated absent (`UNVERIFIED`) | May stay an honest blocker |
 
 `pilot` (docs/specs/versioning.md §13 stage 5) exists for one reason: hand outside
 testers a REAL build — not the qa build with fabricated demo data — while there is
@@ -127,11 +127,12 @@ non-zero unless the workspace is fully contract-clean for the channel.
 | `pilot-qa-mode-build` | Pilot only: the build attestation's `build_mode` fact is not `"production"` — a `build:qa` artifact can never pass `--channel pilot`. |
 
 Public/pilot-required evidence gates: `packaged-e2e`, `approval`, `shared-state`,
-`thin-installer`, `telegram` (public); pilot requires the first three, exactly
-like qa, and may leave the last two as honest external blockers. `version-ledger-
-unavailable` / `version-reuse` and `lock-integrity-unattested` fail closed for
-BOTH public and pilot — see `scripts/lib/release/channel-policy.mjs`
-(`requiresFullRigor`).
+`thin-installer` (public); pilot requires the first three, exactly like qa, and
+may leave `thin-installer` as an honest external blocker. (The former `telegram`
+category was retired 2026-08-18: it attested the native engine's round-trip, not
+wrapper code — see `docs/evidence/README.md`.) `version-ledger-unavailable` /
+`version-reuse` and `lock-integrity-unattested` fail closed for BOTH public and
+pilot — see `scripts/lib/release/channel-policy.mjs` (`requiresFullRigor`).
 
 ## Fingerprinted inputs
 

@@ -70,8 +70,8 @@ describe('preflightRelease — each honest failure', () => {
   it('same version, different bytes is a reuse collision (finding 5)', () => {
     expect(codes(preflightRelease(goodState({ ledger: { source: 'signed-ledger', entries: { '0.3.3': { sha256: '0'.repeat(64) } } } })))).toContain('version-reuse')
   })
-  it('public requires telegram + thin-installer passed (finding 6)', () => {
-    const v = preflightRelease(goodState({ evidence: { ...goodState().evidence, statuses: { 'packaged-e2e': 'passed', approval: 'passed', 'shared-state': 'passed', 'thin-installer': 'blocked', telegram: 'blocked' } } }))
+  it('public requires thin-installer passed (finding 6)', () => {
+    const v = preflightRelease(goodState({ evidence: { ...goodState().evidence, statuses: { 'packaged-e2e': 'passed', approval: 'passed', 'shared-state': 'passed', 'thin-installer': 'blocked' } } }))
     expect(codes(v)).toContain('evidence-not-passed')
   })
   it('a duplicate evidence category blocks (finding 6)', () => {
@@ -137,17 +137,17 @@ describe('preflightRelease — each honest failure', () => {
 
 describe('preflightRelease — QA channel is lenient but non-distributable', () => {
   it('QA tolerates no-ledger, unsigned, external blockers, no report/lock', () => {
-    const v = preflightRelease(goodState({ channel: 'qa', ledger: null, lockAttest: null, releaseReport: null, signatures: { installer: null, app: null }, signAllowlist: { subjects: [], thumbprints: [] }, evidence: { ok: true, counts: { 'packaged-e2e': 1, approval: 1, 'shared-state': 1, 'thin-installer': 1, telegram: 1 }, statuses: { 'packaged-e2e': 'passed', approval: 'passed', 'shared-state': 'passed', 'thin-installer': 'blocked', telegram: 'blocked' }, packagedBinding: { ...build, capture_method: 'machine' } } }))
+    const v = preflightRelease(goodState({ channel: 'qa', ledger: null, lockAttest: null, releaseReport: null, signatures: { installer: null, app: null }, signAllowlist: { subjects: [], thumbprints: [] }, evidence: { ok: true, counts: { 'packaged-e2e': 1, approval: 1, 'shared-state': 1, 'thin-installer': 1 }, statuses: { 'packaged-e2e': 'passed', approval: 'passed', 'shared-state': 'passed', 'thin-installer': 'blocked' }, packagedBinding: { ...build, capture_method: 'machine' } } }))
     expect(v.ok).toBe(true)
     expect(v.distributable).toBe(false)
-    expect(v.externalBlockers).toEqual(['thin-installer', 'telegram'])
+    expect(v.externalBlockers).toEqual(['thin-installer'])
   })
 })
 
 describe('preflightRelease — pilot channel: full rigor, tolerant only on signing + external gates', () => {
   // Same fully-bound facts as the public happy path (ledger/lock-attest/release
   // report/containment ALL present and proven), but unsigned and with
-  // thin-installer/telegram left as honest external blockers — exactly qa's
+  // thin-installer left as an honest external blocker — exactly qa's
   // tolerance, per docs/specs/versioning.md §13 stage 5.
   function pilotState(over = {}) {
     return goodState({
@@ -156,20 +156,20 @@ describe('preflightRelease — pilot channel: full rigor, tolerant only on signi
       signAllowlist: { subjects: [], thumbprints: [] },
       evidence: {
         ok: true,
-        counts: { 'packaged-e2e': 1, approval: 1, 'shared-state': 1, 'thin-installer': 1, telegram: 1 },
-        statuses: { 'packaged-e2e': 'passed', approval: 'passed', 'shared-state': 'passed', 'thin-installer': 'blocked', telegram: 'blocked' },
+        counts: { 'packaged-e2e': 1, approval: 1, 'shared-state': 1, 'thin-installer': 1 },
+        statuses: { 'packaged-e2e': 'passed', approval: 'passed', 'shared-state': 'passed', 'thin-installer': 'blocked' },
         packagedBinding: { ...build, capture_method: 'machine' }
       },
       ...over
     })
   }
 
-  it('a real-production-build pilot with unsigned PEs and blocked thin-installer/telegram is OK AND distributable', () => {
+  it('a real-production-build pilot with unsigned PEs and blocked thin-installer is OK AND distributable', () => {
     const v = preflightRelease(pilotState())
     expect(v.failures).toEqual([])
     expect(v.ok).toBe(true)
     expect(v.distributable).toBe(true)
-    expect(v.externalBlockers).toEqual(['thin-installer', 'telegram'])
+    expect(v.externalBlockers).toEqual(['thin-installer'])
   })
 
   it('REJECTS a qa-mode build — the attestation build_mode fact can never be forged as public', () => {

@@ -1,10 +1,9 @@
 import { afterAll, describe, expect, it } from 'vitest'
 import { buildEnvelope } from './evidence.mjs'
-import { reduceTelegram } from './evidence-reducers.mjs'
 import { verifyEvidence } from '../verify-evidence.mjs'
 import {
   scratchDir, cleanupScratch, writeEnvelope as write,
-  passingPackaged, passingApproval, passingTelegram
+  passingPackaged, passingApproval
 } from './evidence-fixtures.mjs'
 
 afterAll(cleanupScratch)
@@ -93,56 +92,18 @@ describe('anti-false-pass proof gate', () => {
   })
 })
 
-describe('telegram round-trip proof gate', () => {
-  it('reduceTelegram keeps only scalar booleans/counts/enums (no IDs or content)', () => {
-    const s = reduceTelegram(passingTelegram())
-    expect(s.diagnosis.connection_mode).toBe('polling')
-    expect(s.diagnosis.pending_update_count).toBe(0)
-    expect(s.roundtrip.other_chats_touched).toBe(0)
-    // every nested value is a scalar (string/number/boolean/null), never an object with ids
-    for (const group of [s.diagnosis, s.fix, s.roundtrip]) {
-      for (const v of Object.values(group)) expect(['string', 'number', 'boolean']).toContain(typeof v)
-    }
-  })
-
-  it('accepts a telegram pass that carries every proof boolean', () => {
+describe('retired categories stay retired', () => {
+  // Telegram is fully delegated to native Hermes; the category was removed from
+  // the contract 2026-08-18. A leftover or hand-authored telegram envelope must
+  // be REJECTED as unknown, never silently accepted back into the evidence set.
+  it('rejects a telegram envelope as an unknown category', () => {
     const dir = scratchDir()
-    write(dir, 'telegram.json', buildEnvelope('telegram', reduceTelegram(passingTelegram()), { tool: 't' }))
-    expect(verifyEvidence({ dir }).ok).toBe(true)
-  })
-
-  it('rejects a telegram pass with a webhook present (poller conflict risk)', () => {
-    const dir = scratchDir()
-    const bad = passingTelegram(); bad.diagnosis.webhook_present = true
-    write(dir, 'telegram.json', buildEnvelope('telegram', reduceTelegram(bad), { tool: 't' }))
-    expect(verifyEvidence({ dir }).errors.join()).toMatch(/webhook_present/)
-  })
-
-  it('rejects a telegram pass that mutated config or env', () => {
-    const dir = scratchDir()
-    const bad = passingTelegram(); bad.fix.config_mutated = true
-    write(dir, 'telegram.json', buildEnvelope('telegram', reduceTelegram(bad), { tool: 't' }))
-    expect(verifyEvidence({ dir }).errors.join()).toMatch(/config_mutated/)
-  })
-
-  it('rejects a telegram pass that touched another chat', () => {
-    const dir = scratchDir()
-    const bad = passingTelegram(); bad.roundtrip.other_chats_touched = 1
-    write(dir, 'telegram.json', buildEnvelope('telegram', reduceTelegram(bad), { tool: 't' }))
-    expect(verifyEvidence({ dir }).errors.join()).toMatch(/other_chats_touched/)
-  })
-
-  it('rejects a telegram pass where inbound never reached Hermes', () => {
-    const dir = scratchDir()
-    const bad = passingTelegram(); bad.diagnosis.inbound_reached_hermes = false
-    write(dir, 'telegram.json', buildEnvelope('telegram', reduceTelegram(bad), { tool: 't' }))
-    expect(verifyEvidence({ dir }).errors.join()).toMatch(/inbound_reached_hermes/)
-  })
-
-  it('rejects a telegram pass whose authorized reply was not delivered', () => {
-    const dir = scratchDir()
-    const bad = passingTelegram(); bad.roundtrip.outbound_delivered = false
-    write(dir, 'telegram.json', buildEnvelope('telegram', reduceTelegram(bad), { tool: 't' }))
-    expect(verifyEvidence({ dir }).errors.join()).toMatch(/outbound_delivered/)
+    // buildEnvelope itself fails closed on retired categories (no subject
+    // registry), so forge the category AFTER minting a valid envelope — the
+    // shape a stale on-disk telegram.json would actually have.
+    const env = buildEnvelope('shared-state', { ok: true }, { tool: 't', status: 'blocked' })
+    env.category = 'telegram'
+    write(dir, 'telegram.json', env)
+    expect(verifyEvidence({ dir }).errors.join()).toMatch(/unknown category "telegram"/)
   })
 })

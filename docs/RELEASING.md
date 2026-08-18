@@ -13,9 +13,8 @@ Read first if you haven't: `docs/release-contract.md` (the contract itself),
 
 For a **public** (signed) release, follow the same steps with `public` in place
 of `pilot` everywhere below, plus a code-signing certificate
-(`HERMES_SIGN_THUMBPRINT`, `build/sign-allowlist.json`) and a recaptured
-`telegram` envelope (public requires it `passed`; pilot may leave it an honest
-blocker, like qa).
+(`HERMES_SIGN_THUMBPRINT`, `build/sign-allowlist.json`) and a `passed`
+`thin-installer` envelope (pilot may leave it an honest blocker, like qa).
 
 ## Before you start
 
@@ -28,8 +27,8 @@ blocker, like qa).
 - **A version bump invalidates every version-bound evidence envelope**
   (`docs/specs/versioning.md` §1.5 — `package.json` is in `PACKAGED_INPUTS`,
   and a version-bump commit is not evidence-only, so it invalidates ALL
-  envelopes, including the manually-captured `telegram` one). This is expected
-  and priced into step 3/4 below — do not "fix" it by holding off the bump.
+  envelopes). This is expected and priced into step 3/4 below — do not "fix"
+  it by holding off the bump.
 - **First pilot release ever? Bootstrap the ledger pair (step 0).** The pilot
   preflight requires an AUTHENTICATED version-immutability ledger even when no
   release exists yet — an ABSENT ledger fails closed (`version-ledger-
@@ -86,13 +85,12 @@ blocker, like qa).
    treat that file as the source of truth if it and this checklist ever
    disagree.)
 
-4. **Telegram — pilot may skip; public must recapture.** Pilot inherits qa's
+4. **Thin-installer — pilot may skip; public must pass.** Pilot inherits qa's
    tolerance here (`docs/release-contract.md` "Channels" table): the
-   `thin-installer`/`telegram` evidence categories may stay honest external
-   blockers. If you ARE also cutting a public release from this version, or you
-   want pilot to carry a fresh telegram pass anyway, recapture it per
-   `docs/evidence/README.md` (`telegram` is the one manually-reduced category —
-   a live round trip, redacted by hand).
+   `thin-installer` evidence category may stay an honest external blocker.
+   (The former `telegram` category was retired 2026-08-18 — it attested the
+   native engine's round-trip, not wrapper code; see
+   `docs/evidence/README.md`.)
 
 5. **Package.** This is the expensive step — the exact-artifact stage re-runs
    the packaged E2E + a REAL denied-approval probe against the isolated runtime,
@@ -211,8 +209,8 @@ blocker, like qa).
     ```
 
     Must print `DISTRIBUTABLE` / `contract clean` with **zero** failures (the
-    only acceptable `externalBlockers` are `thin-installer`/`telegram` if you
-    chose not to recapture them in step 4 — that's honest, not a defect).
+    only acceptable `externalBlocker` is `thin-installer` if you chose not to
+    recapture it in step 4 — that's honest, not a defect).
     Sanity-check that a previous companion install's update check
     (`SupportUpdatePanel` → "בדוק עדכון") now surfaces `<version>` as
     available, once its release channel eligibility (D1 — a prerelease

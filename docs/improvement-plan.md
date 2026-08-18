@@ -136,4 +136,5 @@ plugins+shared). העיקרון: הליבות הטהורות מצוינות; ה�
    שהורדו — לכן מקומית לא רואים אזהרה), ‏manifest ב-GitHub Releases (כתובות
    קבועות, חינם, immutable), ‏Google OAuth — ‏per-עסק credentials זו הארכיטקטורה
    הנכונה ל-local-first; ‏verification נדרש רק לאפליקציה מרכזית מרובת-עסקים.
-5. ‏telegram evidence — ‏round-trip חי (דורש אישור משתמש — שולח הודעות אמיתיות).
+5. ~~telegram evidence — round-trip חי~~ — ירד מהפרק: הקטגוריה נפרשה מחוזה
+   ה־release‏ (2026-08-18) כי היא הוכיחה מנגנון של Hermes עצמו, לא קוד עטיפה.

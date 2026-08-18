@@ -224,8 +224,7 @@ export const EVIDENCE_SUBJECTS = {
   'packaged-e2e': PACKAGED_INPUTS,
   approval: [...ELECTRON_RUNTIME, ...HERMES_PLUGIN, ...PLUGIN_CONTRACT],
   'shared-state': [...ELECTRON_RUNTIME, ...HERMES_PLUGIN, ...PLUGIN_CONTRACT],
-  'thin-installer': [...THIN_INSTALLER_INPUTS, ...HERMES_PLUGIN],
-  telegram: [...HERMES_PLUGIN]
+  'thin-installer': [...THIN_INSTALLER_INPUTS, ...HERMES_PLUGIN]
 }
 
 /** One-line recapture hint per category, surfaced by the verifier when a passed
@@ -235,8 +234,7 @@ export const RECAPTURE = {
   'packaged-e2e': 'recapture via the package pipeline (HERMES_BUSINESS_E2E_APPROVAL=1 npm run package:win:qa) — its exact-artifact stage (scripts/e2e-exact-artifact.mjs) machine-writes the bound envelope; a plain e2e-installed-isolated pipe lacks build_nonce/release_binding_digest/installer_sha256 and requirePassProof rejects it',
   approval: 'recapture via the same package pipeline run (HERMES_BUSINESS_E2E_APPROVAL=1 npm run package:win:qa) — the exact-artifact stage machine-writes approval alongside packaged-e2e from the isolated denial probe',
   'shared-state': 'node scripts/e2e-hermes-shared-state.mjs then node scripts/capture-evidence.mjs shared-state <raw>',
-  'thin-installer': 'npm run package:thin-installer:qa then node scripts/capture-evidence.mjs thin-installer <raw>',
-  telegram: 're-run the redacted live Telegram probe and hand-reduce a fresh telegram.json (see docs/evidence/README.md)'
+  'thin-installer': 'npm run package:thin-installer:qa then node scripts/capture-evidence.mjs thin-installer <raw>'
 }
 
 export const CATEGORIES = Object.keys(EVIDENCE_SUBJECTS)

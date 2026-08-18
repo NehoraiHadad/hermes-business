@@ -65,23 +65,3 @@ export const passingApproval = () => ({
     renderer_modal_faked: false
   }
 })
-
-// A raw live Telegram round-trip probe result (pre-reduction).
-export const passingTelegram = () => ({
-  diagnosis: {
-    connection_mode: 'polling', webhook_present: false, sole_poller_owner: true,
-    external_owner_conflict: false, bot_token_valid: true, is_bot: true,
-    inbound_reached_hermes: true, prior_no_reply_cause: 'sender_not_authorized_at_prior_send_time',
-    allowlist_now_authorizes_sender: true, pending_update_count: 0
-  },
-  fix: {
-    method: 'no_mutation_needed', config_mutated: false, env_mutated: false,
-    whatsapp_untouched: true, google_untouched: true, gateway_restarted: false, gateway_alive: true
-  },
-  roundtrip: {
-    outbound_delivered: true, target_home_channel: true, other_chats_touched: 0,
-    official_mechanism: 'hermes_send_cli', agent_originated_inbound: false,
-    inbound_historically_processed: true, inbound_path_ready: true, identifies_as_connectivity_test: true
-  },
-  runtime_state: 'connected', gateway_running: true
-})

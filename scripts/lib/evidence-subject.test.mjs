@@ -103,7 +103,7 @@ describe('subject freshness — anti-masquerade & scope', () => {
   it('blocked / skipped envelopes are NOT held to a subject fingerprint', () => {
     const root = tmpRoot({}) // no subjects present at all
     for (const status of ['blocked', 'skipped']) {
-      expect(collect({ category: 'telegram', status }, root, compute)).toEqual([])
+      expect(collect({ category: 'thin-installer', status }, root, compute)).toEqual([])
     }
   })
 })
@@ -129,7 +129,7 @@ describe('subject freshness — end-to-end through verifyEvidence over the real 
   })
 
   it('real per-category fingerprints are deterministic 64-hex digests', () => {
-    for (const c of ['packaged-e2e', 'approval', 'shared-state', 'thin-installer', 'telegram']) {
+    for (const c of ['packaged-e2e', 'approval', 'shared-state', 'thin-installer']) {
       const a = subjectFingerprint(process.cwd(), c)
       const b = subjectFingerprint(process.cwd(), c)
       expect(a.fingerprint).toBe(b.fingerprint)

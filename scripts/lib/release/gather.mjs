@@ -131,7 +131,7 @@ function evidenceFacts(root) {
 
 function currentEvidenceDigests(root) {
   const out = {}
-  for (const cat of ['packaged-e2e', 'approval', 'shared-state', 'thin-installer', 'telegram']) {
+  for (const cat of ['packaged-e2e', 'approval', 'shared-state', 'thin-installer']) {
     try { out[cat] = subjectFingerprint(root, cat).fingerprint } catch { /* missing subject */ }
   }
   return out

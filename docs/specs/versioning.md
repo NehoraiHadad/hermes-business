@@ -49,9 +49,9 @@ export const UPDATE_METADATA_RE = /^(latest(-[a-z0-9]+)?\.yml|app-update\.yml)$/
 "Version bumps invalidate version-bound evidence envelopes" — מאומת משני כיוונים:
 
 - **Subject fingerprint**: `package.json` נמצא ב־`PACKAGED_INPUTS` (`scripts/lib/subject-registry.mjs:64` — `PACKAGING_CONFIG = [{ file: 'package.json' }]`), ולכן bump מפסיל את `packaged-e2e` (`EVIDENCE_SUBJECTS['packaged-e2e'] = PACKAGED_INPUTS`, שורה 196).
-- **כלל ה־provenance** (`docs/evidence/README.md:158-166`): מעטפה `committed` נשארת תקפה רק אם כל הקומיטים מאז `git_head` נוגעים **אך ורק** ב־`docs/evidence/*.json`. קומיט של bump גרסה מפסיל אפוא את **כל** המעטפות — כולל `telegram` (שנלכדת ידנית!).
+- **כלל ה־provenance** (`docs/evidence/README.md:158-166`): מעטפה `committed` נשארת תקפה רק אם כל הקומיטים מאז `git_head` נוגעים **אך ורק** ב־`docs/evidence/*.json`. קומיט של bump גרסה מפסיל אפוא את **כל** המעטפות.
 
-**עלות מלאה של release ציבורי**: הרצת `package:win` מלאה (לוכדת מחדש `packaged-e2e` + `approval` בשלב exact-artifact), recapture של `shared-state` ו־`thin-installer` (סקריפטים, `RECAPTURE` ב־`subject-registry.mjs:206-212`), ו־recapture ידני של `telegram`. זו עלות מובנית ומכוונת — האפיון לא עוקף אותה אלא מתמחר אותה ב־checklist (§5.4) וממליץ **לצרף שינויים ל־releases מרוכזים** במקום bumps תכופים.
+**עלות מלאה של release ציבורי**: הרצת `package:win` מלאה (לוכדת מחדש `packaged-e2e` + `approval` בשלב exact-artifact) ו־recapture של `shared-state` ו־`thin-installer` (סקריפטים, `RECAPTURE` ב־`subject-registry.mjs`). (קטגוריית `telegram` הידנית הוסרה מהחוזה ב־2026-08-18 — היא הוכיחה מנגנון של המנוע, לא קוד של העטיפה.) זו עלות מובנית ומכוונת — האפיון לא עוקף אותה אלא מתמחר אותה ב־checklist (§5.4) וממליץ **לצרף שינויים ל־releases מרוכזים** במקום bumps תכופים.
 
 ---
 
@@ -153,14 +153,13 @@ package.json "version"                                (מקור אמת — קי�
 
 1. ריכוז שינויים; עדכון `CHANGELOG.md` (עברית + אנגלית).
 2. bump `version` ב־`package.json` — **מרגע זה כל מעטפות הראיות פסולות** (§1.5).
-3. recapture זול: `shared-state`, `thin-installer` (פקודות ב־`docs/evidence/README.md:90-96`).
-4. recapture ידני: `telegram` (public בלבד; qa רשאי להשאירו חסם כן — `release-contract.md:97-99`).
-5. `npm run package:win` (public) — 12 השלבים; exact-artifact לוכד `packaged-e2e`+`approval` כבולים ל־build; promotion אחרון. כל כשל ⇒ עצירה, אין artifact.
-6. קומיט של המעטפות (מותר — evidence-only לא מפסיל, `README.md:160-163`).
-7. `git tag -a v<version> -m "תכל'ס <version>"` על קומיט ה־release; `git push --tags`.
-8. יצירת GitHub Release (draft ⇒ publish) עם ה־assets מ־`release/`.
-9. עדכון `release-ledger.json` (`github-asset`, sha256 מ־`SHA256SUMS.txt`), קומיט.
-10. אימות סגירה: `node scripts/verify-release-contract.mjs --channel public` נקי, ובדיקת עדכון מתוך התקנה קודמת מזהה את הגרסה.
+3. recapture זול: `shared-state`, `thin-installer` (פקודות ב־`docs/evidence/README.md:90-96`; ל־public נדרש `thin-installer` = `passed`, qa/pilot רשאים להשאירו חסם כן).
+4. `npm run package:win` (public) — 12 השלבים; exact-artifact לוכד `packaged-e2e`+`approval` כבולים ל־build; promotion אחרון. כל כשל ⇒ עצירה, אין artifact.
+5. קומיט של המעטפות (מותר — evidence-only לא מפסיל, `README.md:160-163`).
+6. `git tag -a v<version> -m "תכל'ס <version>"` על קומיט ה־release; `git push --tags`.
+7. יצירת GitHub Release (draft ⇒ publish) עם ה־assets מ־`release/`.
+8. עדכון `release-ledger.json` (`github-asset`, sha256 מ־`SHA256SUMS.txt`), קומיט.
+9. אימות סגירה: `node scripts/verify-release-contract.mjs --channel public` נקי, ובדיקת עדכון מתוך התקנה קודמת מזהה את הגרסה.
 
 ---
 
@@ -337,7 +336,7 @@ Toast חד־פעמי ברמת `info` (לא `error`): `גרסה חדשה של ת�
 | R1 | משתמשים מריצים installer מזויף מקישור זר | גבוהה | קישור יחיד מאומת־prefix; הוראת אימות SHA-256 בכל דף release ובאפליקציה; לטווח ארוך — חתימה (Phase 5) |
 | R2 | GitHub מנרמל שם asset עברי | בינונית | D3 (שם ASCII); בדיקת עשן לפני ה־release הראשון |
 | R3 | Prompt-injection דרך release notes | בינונית | notes = טקסט מקוטע בלבד; אין markdown; אין פתיחת URL מהתוכן; ה־notes לעולם אינם קלט לשום לוגיקה |
-| R4 | עלות recapture הופכת releases לנדירים ובומים גדולים | בינונית | מתומחר ב־checklist; ריכוז שינויים; qa רשאי חסמים כנים (telegram/thin-installer) |
+| R4 | עלות recapture הופכת releases לנדירים ובומים גדולים | בינונית | מתומחר ב־checklist; ריכוז שינויים; qa רשאי חסם כן (thin-installer) |
 | R5 | rate-limit של GitHub בהתקנות מאחורי NAT משותף | נמוכה | throttle 24h + cache; כשל ⇒ unknown, לא שגיאה |
 | R6 | בלבול משתמש בין גרסת Hermes לגרסת תכל'ס | נמוכה | הפרדה ויזואלית בפאנל + ניסוח "תכל'ס (האפליקציה)" מול "Hermes Agent" |
 | R7 | ה־E2E הארוז נהיה תלוי־רשת | בינונית | נטרול הבדיקה הפסיבית תחת qa sentinel + env flag (§6.5) |

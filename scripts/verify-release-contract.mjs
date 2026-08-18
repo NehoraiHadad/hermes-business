@@ -53,7 +53,7 @@ export function runVerifier({ root = repoRoot(), channel = 'public', probe = tru
   }
   if (verdict.externalBlockers.length) {
     log.log(`\n  external blockers (honest, not faked): ${verdict.externalBlockers.join(', ')}`)
-    log.log('   qa may leave thin-installer/telegram blocked; public REQUIRES them passed.')
+    log.log('   qa may leave thin-installer blocked; public REQUIRES it passed.')
   }
   log.log(`\n${verdict.distributable ? 'DISTRIBUTABLE' : 'NOT distributable'} — ${verdict.ok ? 'contract clean' : 'contract failed'}`)
   return { state, verdict, binding }

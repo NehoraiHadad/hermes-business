@@ -822,9 +822,11 @@ reducer אירועי הצ׳אט, חוזה התאימות, אימות הגיבו�
   של Hermes: לוג ה־gateway הראה `business_whatsapp_read_only`; מסד הנתונים הראה
   0 tokens, ‏0 API/Tool Calls ו־0 delivery obligations, ולכן המופע הזה לא שלח תשובה.
   אין לכך בדיקה אוטומטית עצמאית — הכיסוי האוטומטי הוא מדיניות וonboarding UI.
-- Telegram: הכיסוי מאמת את הכרטיס מול `/api/messaging/platforms`, וראיה מכונתית
-  (`docs/evidence/telegram.json`, ב־verify:evidence) מתעדת Bot תקף, polling ללא
-  webhook מתחרה ושני סבבים חיים של הודעה נכנסת → סוכן → תשובה דרך Hermes בלבד.
+- Telegram: הכיסוי מאמת את הכרטיס מול `/api/messaging/platforms`. (בעבר נשמרה
+  גם ראיה מכונתית `docs/evidence/telegram.json` של סבב חי; הקטגוריה הוסרה
+  מחוזה ה־release ב־2026-08-18 — היא הוכיחה את מנגנון המנוע, לא קוד עטיפה.
+  התצפית החיה המקורית — Bot תקף, polling ללא webhook מתחרה, סבב הודעה נכנסת →
+  סוכן → תשובה דרך Hermes בלבד — נותרה נכונה כתיעוד היסטורי.)
 - Skill ו־Scheduled Task עברו מול APIs הרשמיים. פער ה־paused של `cron.manage`
   הפעיל־בלבד נסגר דרך ה־plugin backend הקריא־בלבד (`plugin_api.py` →
   `list_jobs(include_disabled=True)`), והוכח cross-door מול Hermes חי ב־home מבודד.
@@ -871,8 +873,9 @@ provider `openai-codex`, ו־inference + Streaming עברו — הפעלה ו־i
 Google נבדק גם במסלול כשל בטוח, וזהו המסלול המכוסה אוטומטית
 (`scripts/lib/probes/installed/connections.mjs`): קובץ client secret חסר נדחה,
 וסטטוס האימות נשאר ללא שינוי. השלמת consent אמיתי עדיין דורשת קובץ Google של
-המשתמש. אבחון Telegram והסבב החי המלא מתועדים בראיה מכונתית מעורפלת
-(`docs/evidence/telegram.json`, נאכפת ב־verify:evidence).
+המשתמש. אבחון Telegram והסבב החי המלא בוצעו ותועדו בזמנו בראיה מכונתית
+מעורפלת (`docs/evidence/telegram.json` — הוסרה עם פרישת הקטגוריה מחוזה
+ה־release ב־2026-08-18; התצפיות עצמן נותרו נכונות כתיעוד היסטורי).
 
 ## מטריצת קבלה
 
@@ -881,7 +884,7 @@ Google נבדק גם במסלול כשל בטוח, וזהו המסלול המכ�
 | התקנה בלי Terminal | עבר | clean bootstrap ל־Hermes Home ריק + NSIS מותקן exit 0 |
 | חיבור Provider | עבר (אוטומטי: קריאת מצב) | הבדיקה קוראת `logged_in` ומאמתת UI; activation + inference חיים = תצפית ידנית |
 | היכרות עם המשתמש והעסק | עבר | `business-bootstrap` הפעיל `clarify.request/respond` |
-| חיבור שירות חיצוני | עבר (אוטומטי: כרטיס+דיאלוג+ראיה מכונתית) | Telegram: אימות כרטיס מול `/api/messaging/platforms` + דיאלוג חיבור + `telegram.json` (polling תקין, bot תקף, מאזין יחיד ללא webhook, inbound היסטורי הגיע ונחסם בהיעדר הרשאה, allowlist נוכחי מאשר, הודעת בדיקה אחת נשלחה); סבב טרי מלא לאחר הרשאה = תצפית ידנית; Google: כשל בטוח אוטומטי, ממתין ל־consent |
+| חיבור שירות חיצוני | עבר (אוטומטי: כרטיס+דיאלוג) | Telegram: אימות כרטיס מול `/api/messaging/platforms` + דיאלוג חיבור; הסבב החי (polling תקין, bot תקף, מאזין יחיד, inbound → סוכן → תשובה) תועד בזמנו בראיה שהוסרה עם פרישת קטגוריית telegram מהחוזה (2026-08-18); Google: כשל בטוח אוטומטי, ממתין ל־consent |
 | שיחה ו־Streaming | עבר | `message.delta`, Stop ו־`message.complete` בבינארי המותקן |
 | הצגת ואישור פעולות | עבר | מצב manual זמני; destructive delete נדחה והמצב הוחזר ל־smart |
 | משימה מתוזמנת | עבר | create, list, pause ו־cleanup דרך Cron API; המשימה המושהית גלויה גם ב־REST/דיסק וגם דרך ה־plugin backend door הקריא־בלבד (`list_jobs(include_disabled=True)`), ונעדרת מ־`cron.manage` הפעיל־בלבד — scheduler אחד ללא cache |

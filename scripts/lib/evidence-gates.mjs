@@ -7,7 +7,12 @@ import { SCHEMA_VERSION, redactDeep } from './evidence.mjs'
 import { classifyProvenance } from './git-provenance.mjs'
 import { checkSubjectFreshness } from './evidence-subject.mjs'
 
-export const CATEGORIES = new Set(['packaged-e2e', 'thin-installer', 'shared-state', 'approval', 'telegram'])
+// `telegram` was removed 2026-08-18: since commit 88fb302 Telegram is fully
+// delegated to native Hermes (our only surface is a thin connect flow over the
+// official /api/messaging endpoints, covered by unit tests). A live round-trip
+// gate proved the ENGINE's mechanism, not ours — contrary to the wrapper
+// principle ("Hermes does it → Tachles does not re-prove it").
+export const CATEGORIES = new Set(['packaged-e2e', 'thin-installer', 'shared-state', 'approval'])
 export const STATUSES = new Set(['passed', 'blocked', 'skipped'])
 export const REQUIRED = [
   'schema_version', 'category', 'status', 'app_version', 'hermes_range',
@@ -40,16 +45,7 @@ export const PASS_PROOF = {
     'live_ui_denial_probe.no_side_effect', 'wiring.delegates_to_official'
   ],
   'shared-state': ['ok'],
-  'thin-installer': ['all_cases_green'],
-  // A live Telegram round-trip pass must prove: a valid bot owned solely by this
-  // gateway (polling, no webhook), that inbound updates actually reached Hermes,
-  // and that ONE authorized reply was delivered as a self-identified test.
-  telegram: [
-    'diagnosis.bot_token_valid', 'diagnosis.sole_poller_owner',
-    'diagnosis.inbound_reached_hermes', 'roundtrip.outbound_delivered',
-    'roundtrip.identifies_as_connectivity_test', 'fix.whatsapp_untouched',
-    'fix.google_untouched'
-  ]
+  'thin-installer': ['all_cases_green']
 }
 
 function dig(obj, dotted) {
@@ -137,18 +133,6 @@ export function requirePassProof(env, fail) {
   // A denial probe that "passed" must never be a faked renderer modal.
   if (env.category === 'approval' && s.live_ui_denial_probe?.renderer_modal_faked !== false) {
     fail('status=passed approval but renderer_modal_faked is not false')
-  }
-  // A telegram pass must be single-owner, mutation-free, and confined to the one
-  // authorized chat — asserted as concrete negatives so a pass can never hide a
-  // webhook/poller conflict, a config edit, or a stray extra send.
-  if (env.category === 'telegram') {
-    if (s.diagnosis?.webhook_present !== false) fail('status=passed telegram but webhook_present is not false')
-    if (s.diagnosis?.external_owner_conflict !== false) fail('status=passed telegram but external_owner_conflict is not false')
-    if (s.fix?.config_mutated !== false) fail('status=passed telegram but config_mutated is not false')
-    if (s.fix?.env_mutated !== false) fail('status=passed telegram but env_mutated is not false')
-    if (s.roundtrip?.other_chats_touched !== 0) {
-      fail(`status=passed telegram but other_chats_touched is ${JSON.stringify(s.roundtrip?.other_chats_touched)} (must be 0)`)
-    }
   }
 }
 

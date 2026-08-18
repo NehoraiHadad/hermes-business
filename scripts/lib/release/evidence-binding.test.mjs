@@ -1,15 +1,18 @@
 import { describe, expect, it } from 'vitest'
 import { checkCardinality, checkGateStatuses, checkPackagedBinding } from './evidence-binding.mjs'
 
-const ALL_ONE = { 'packaged-e2e': 1, approval: 1, 'shared-state': 1, 'thin-installer': 1, telegram: 1 }
+const ALL_ONE = { 'packaged-e2e': 1, approval: 1, 'shared-state': 1, 'thin-installer': 1 }
 
 describe('evidence cardinality (finding 6)', () => {
   it('exactly one per declared category passes', () => {
     expect(checkCardinality(ALL_ONE)).toEqual([])
   })
   it('an ABSENT category blocks', () => {
-    const e = checkCardinality({ ...ALL_ONE, telegram: 0 })
+    const e = checkCardinality({ ...ALL_ONE, 'thin-installer': 0 })
     expect(e.map(x => x.code)).toContain('evidence-category-absent')
+  })
+  it('a RETIRED category (telegram) is no longer declared, so its absence is clean', () => {
+    expect(checkCardinality(ALL_ONE).map(x => x.detail).join()).not.toMatch(/telegram/)
   })
   it('a DUPLICATE category blocks (silent-overwrite guard)', () => {
     const e = checkCardinality({ ...ALL_ONE, approval: 2 })
@@ -18,27 +21,32 @@ describe('evidence cardinality (finding 6)', () => {
 })
 
 describe('external gates by channel (finding 6)', () => {
-  const passed = { 'packaged-e2e': 'passed', approval: 'passed', 'shared-state': 'passed', 'thin-installer': 'passed', telegram: 'passed' }
-  it('PUBLIC requires thin-installer AND telegram passed', () => {
-    const r = checkGateStatuses('public', { ...passed, telegram: 'blocked' })
+  const passed = { 'packaged-e2e': 'passed', approval: 'passed', 'shared-state': 'passed', 'thin-installer': 'passed' }
+  it('PUBLIC requires thin-installer passed', () => {
+    const r = checkGateStatuses('public', { ...passed, 'thin-installer': 'blocked' })
     expect(r.failures.map(f => f.code)).toContain('evidence-not-passed')
   })
-  it('PUBLIC with all five passed is clean', () => {
+  it('PUBLIC with all four passed is clean', () => {
     expect(checkGateStatuses('public', passed).failures).toEqual([])
   })
-  it('QA MAY leave thin-installer/telegram blocked (surfaced, not failed)', () => {
-    const r = checkGateStatuses('qa', { ...passed, telegram: 'blocked', 'thin-installer': 'blocked' })
+  it('QA MAY leave thin-installer blocked (surfaced, not failed)', () => {
+    const r = checkGateStatuses('qa', { ...passed, 'thin-installer': 'blocked' })
     expect(r.failures).toEqual([])
-    expect(r.externalBlockers).toEqual(['thin-installer', 'telegram'])
+    expect(r.externalBlockers).toEqual(['thin-installer'])
   })
   it('PILOT requires packaged-e2e/approval/shared-state passed, like qa', () => {
     const missing = checkGateStatuses('pilot', { ...passed, approval: 'blocked' })
     expect(missing.failures.map(f => f.code)).toContain('evidence-not-passed')
   })
-  it('PILOT MAY leave thin-installer/telegram blocked, exactly like qa', () => {
-    const r = checkGateStatuses('pilot', { ...passed, telegram: 'blocked', 'thin-installer': 'blocked' })
+  it('PILOT MAY leave thin-installer blocked, exactly like qa', () => {
+    const r = checkGateStatuses('pilot', { ...passed, 'thin-installer': 'blocked' })
     expect(r.failures).toEqual([])
-    expect(r.externalBlockers).toEqual(['thin-installer', 'telegram'])
+    expect(r.externalBlockers).toEqual(['thin-installer'])
+  })
+  it('a stray telegram status neither gates nor surfaces (category retired)', () => {
+    const r = checkGateStatuses('public', { ...passed, telegram: 'blocked' })
+    expect(r.failures).toEqual([])
+    expect(r.externalBlockers).toEqual([])
   })
 })
 

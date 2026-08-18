@@ -97,7 +97,7 @@ Durable facts about those artifacts:
   `demo-data`/`demo-api`/`demo-rpc` are tree-shaken out and **absent** from the
   shipped bundle, not merely unreachable. Fully signed by an approved publisher
   (`signtool verify /pa /tw`), full binding-chain/ledger/lock-integrity rigor,
-  every evidence gate (incl. thin-installer + telegram) required `passed`.
+  every evidence gate (incl. thin-installer) required `passed`.
 - **Pilot companion** (`npm run package:win:pilot`, `--channel pilot`;
   docs/specs/versioning.md §13 stage 5) — the SAME NSIS installer as production,
   built from the SAME real `npm run build` (demo fixtures physically stripped —
@@ -106,8 +106,8 @@ Durable facts about those artifacts:
   evidence. The two differences from production, both disclosed rather than
   hidden: (1) **unsigned** — no code-signing certificate exists yet, so Windows
   SmartScreen warns on install; users are expected to verify the published
-  `SHA256SUMS.txt`; (2) the two hosted-service external gates (thin-installer,
-  telegram) may stay honest blockers instead of `passed`, exactly like qa. Pilot
+  `SHA256SUMS.txt`; (2) the hosted-service external gate (thin-installer)
+  may stay an honest blocker instead of `passed`, exactly like qa. Pilot
   **IS distributable** — an Alpha prerelease for outside testers, named
   `Tachles-Setup-<version>.exe` with no `DO-NOT-DISTRIBUTE` marker — published as
   a GitHub prerelease per `docs/RELEASING.md`. The build attestation
@@ -464,14 +464,12 @@ tokens (`sk-xxxx…`, `ghp_xxxx…`) and is out of scope like everything ignored
 
 - **Live:** Google `--check` + `--check-live` (real profile, real API call);
   Hermes release-channel probe (real GitHub release selection + blob integrity);
-  packaged-app E2Es driving the **real** context-isolated Electron binaries;
-  Telegram live diagnosis (redacted `docs/evidence/telegram.json`, gated by
-  `npm run verify:evidence`): official polling healthy, bot token valid, sole
-  poller with no webhook conflict, a historical inbound update that reached
-  Hermes (blocked because the sender was not authorized at that time; the current
-  allowlist authorizes the sender), and exactly one benign connectivity-test
-  reply confirmed via the official Hermes send. A fresh post-authorization
-  user→agent→reply round trip remains the honest manual step.
+  packaged-app E2Es driving the **real** context-isolated Electron binaries.
+  (Telegram live diagnosis was an evidence category until 2026-08-18; it was
+  retired because it attested the NATIVE Hermes gateway's round-trip — the
+  engine's mechanism, not wrapper code. The wrapper's only Telegram surface is
+  the guided connect flow over the official `/api/messaging` endpoints, covered
+  by unit tests — see `docs/evidence/README.md`.)
 - **Deterministic/mocked (by design):** QA demo transport (in-memory fixtures);
   bootstrap HTTP/integrity/rollback unit gates; the WhatsApp contract
   (policy asserted, **no** live messages); partner-sandbox degraded guard

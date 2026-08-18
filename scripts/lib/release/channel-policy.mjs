@@ -11,8 +11,8 @@
 //              carries the SAME binding-chain/ledger/lock-integrity rigor as
 //              public. The only things it tolerates, exactly like qa, are: no
 //              code-signing certificate yet (unsigned PEs, SmartScreen expected)
-//              and the two hosted-service external gates (thin-installer,
-//              telegram) staying honest blockers rather than passed.
+//              and the hosted-service external gate (thin-installer) staying an
+//              honest blocker rather than passed.
 //   'qa'     — internal/dev build: demo transport baked in, unsigned, ledger and
 //              lock-attest tolerated too. Never distributed
 //              (release/qa-thin-installer-DO-NOT-DISTRIBUTE is the precedent).
@@ -35,8 +35,8 @@ export { CHANNELS }
 export const FULL_RIGOR_CHANNELS = new Set(['public', 'pilot'])
 
 // Channels that may ship an installer whose EXEs are not Authenticode-signed,
-// and whose thin-installer/telegram evidence may stay an honest external
-// blocker instead of `passed`.
+// and whose thin-installer evidence may stay an honest external blocker
+// instead of `passed`.
 export const SIGNING_TOLERANT_CHANNELS = new Set(['qa', 'pilot'])
 
 /** An unrecognized channel string must never fall through to ANY grouping —
@@ -56,7 +56,7 @@ export function requiresFullRigor(channel) {
   return FULL_RIGOR_CHANNELS.has(channel)
 }
 
-/** May `channel` ship unsigned PEs / leave thin-installer+telegram blocked? */
+/** May `channel` ship unsigned PEs / leave thin-installer blocked? */
 export function isSigningTolerant(channel) {
   assertKnownChannel(channel)
   return SIGNING_TOLERANT_CHANNELS.has(channel)

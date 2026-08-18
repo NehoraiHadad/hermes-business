@@ -4,9 +4,11 @@
 //   * cardinality (finding 6): EXACTLY one envelope per declared category. An
 //     absent category OR a duplicate (two files claiming the same category) blocks
 //     — a duplicate previously overwrote silently in a name→status map.
-//   * external gates (finding 6): for the PUBLIC/full product, thin-installer AND
-//     telegram must be `passed`, not merely "surfaced as blockers". For qa they may
-//     remain honest external blockers.
+//   * external gate (finding 6): for the PUBLIC/full product, thin-installer must
+//     be `passed`, not merely "surfaced as a blocker". For qa it may remain an
+//     honest external blocker. (`telegram` was a category here until 2026-08-18;
+//     it attested the native engine's round-trip, not our code — see
+//     evidence-gates.mjs CATEGORIES for the rationale.)
 //   * packaged-e2e build binding (finding 4): a passed packaged-e2e envelope must
 //     carry the tested build's nonce + release_binding_digest + installer hash set,
 //     and they must MATCH the artifact being released — an envelope captured
@@ -14,15 +16,15 @@
 
 import { assertKnownChannel, isSigningTolerant } from './channel-policy.mjs'
 
-export const DECLARED_CATEGORIES = ['packaged-e2e', 'approval', 'shared-state', 'thin-installer', 'telegram']
-export const PUBLIC_REQUIRED = ['packaged-e2e', 'approval', 'shared-state', 'thin-installer', 'telegram']
+export const DECLARED_CATEGORIES = ['packaged-e2e', 'approval', 'shared-state', 'thin-installer']
+export const PUBLIC_REQUIRED = ['packaged-e2e', 'approval', 'shared-state', 'thin-installer']
 export const QA_REQUIRED = ['packaged-e2e', 'approval', 'shared-state']
 // pilot requires the SAME machine-bound packaged-e2e + approval (+ shared-state)
 // evidence as qa — the exact-artifact stage that produces them already runs
 // against the real production transport (no demo/VITE_ALLOW_DEMO dependency; see
 // scripts/e2e-exact-artifact.mjs / scripts/e2e-installed-isolated.mjs), so pilot
-// gets no exemption there. It DOES get qa's tolerance on the two hosted-service
-// external gates (thin-installer, telegram) — see channel-policy.mjs.
+// gets no exemption there. It DOES get qa's tolerance on the hosted-service
+// external gate (thin-installer) — see channel-policy.mjs.
 export const PILOT_REQUIRED = QA_REQUIRED
 export const REQUIRED_BY_CHANNEL = { public: PUBLIC_REQUIRED, qa: QA_REQUIRED, pilot: PILOT_REQUIRED }
 
@@ -49,10 +51,10 @@ export function checkGateStatuses(channel, statuses = {}) {
       failures.push({ code: 'evidence-not-passed', detail: `required gate "${cat}" is ${statuses[cat] || 'absent'} (must be passed for ${channel})` })
     }
   }
-  // Signing-tolerant channels (qa, pilot) may leave the two hosted-service gates
-  // non-passed: report them honestly. For public they are hard failures above.
+  // Signing-tolerant channels (qa, pilot) may leave the hosted-service gate
+  // non-passed: report it honestly. For public it is a hard failure above.
   const externalBlockers = isSigningTolerant(channel)
-    ? ['thin-installer', 'telegram'].filter(c => statuses[c] && statuses[c] !== 'passed')
+    ? ['thin-installer'].filter(c => statuses[c] && statuses[c] !== 'passed')
     : []
   return { failures, externalBlockers }
 }

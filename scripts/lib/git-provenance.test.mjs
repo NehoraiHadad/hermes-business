@@ -120,7 +120,7 @@ describe('memoizeProvenance', () => {
 
 describe('EVIDENCE_ARTIFACT_RE', () => {
   it('matches only top-level docs/evidence JSON envelopes', () => {
-    expect(EVIDENCE_ARTIFACT_RE.test('docs/evidence/telegram.json')).toBe(true)
+    expect(EVIDENCE_ARTIFACT_RE.test('docs/evidence/shared-state.json')).toBe(true)
     expect(EVIDENCE_ARTIFACT_RE.test('docs/evidence/schema.json')).toBe(true)
     expect(EVIDENCE_ARTIFACT_RE.test('docs/evidence/README.md')).toBe(false)
     expect(EVIDENCE_ARTIFACT_RE.test('docs/evidence/forensics/x.json')).toBe(false)

@@ -64,7 +64,7 @@ describe('registry-driven membership (finding 7)', () => {
   })
 
   it('a docs/evidence/test edit is NOT release-dirty', () => {
-    expect(isReleaseDirtyInput('docs/evidence/telegram.json')).toBe(false)
+    expect(isReleaseDirtyInput('docs/evidence/shared-state.json')).toBe(false)
     expect(isReleaseDirtyInput('electron/main.test.cjs')).toBe(false)
     expect(isReleaseDirtyInput('README.md')).toBe(false)
   })
