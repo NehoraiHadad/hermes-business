@@ -185,6 +185,38 @@ of `pilot` everywhere below, plus a code-signing certificate
      re-extract, and `lock-attest.json` is written by stage 8 and read by the
      gate. Both are rewritten by a run; never touch either during one.
 
+   Second, MOVE `docs/evidence/packaged-e2e.json` and
+   `docs/evidence/approval.json` out of the tree before you start. This is a
+   genuine circular dependency in the pipeline, not a quirk, and it costs a full
+   run every time it is rediscovered:
+
+   - stage 1 is `npm run verify:release`, which runs `test:evidence`, which
+     REFUSES to pass while any `passed` envelope is stale — and a version bump
+     stales these two on both counts at once (`app_version 0.4.0-alpha.N !=
+     current 0.4.0-alpha.N+1`, plus subject drift);
+   - but stage 11 (`scripts/e2e-exact-artifact.mjs`) is the ONLY thing that can
+     regenerate them, because they must be machine-bound to the candidate
+     installer (`installer_sha256` + `build_nonce` + `release_binding_digest`,
+     which `requirePassProof` demands).
+
+   So the gate that blocks the run is waiting on a later stage of the same run.
+   Moving the two files aside makes the tree honestly "pre-capture" — the
+   evidence test treats an absent envelope as not-yet-captured rather than as a
+   failed one — and stage 11 then writes fresh, bound envelopes:
+
+   ```powershell
+   New-Item -ItemType Directory -Force $env:TEMP\ev-hold | Out-Null
+   Move-Item docs\evidence\packaged-e2e.json, docs\evidence\approval.json $env:TEMP\ev-hold
+   ```
+
+   Do NOT delete them outright: if the run fails before stage 11 you want the
+   previous release's envelopes back. Discard the held copies only once stage 11
+   has written new ones.
+
+   The other two envelopes are NOT part of this — `shared-state` and
+   `thin-installer` are captured by hand in step 3 and must already be fresh, or
+   stage 1 fails on them for the ordinary reason.
+
    Then package. This is the expensive step — the exact-artifact stage re-runs
    the packaged E2E + a REAL denied-approval probe against the isolated runtime,
    machine-binding `packaged-e2e` + `approval` to this exact build:
@@ -341,8 +373,15 @@ of `pilot` everywhere below, plus a code-signing certificate
 
     Commit them together:
 
+    Update `site/index.html`'s static download href to the new version IN THE SAME
+    COMMIT. It is pinned by `site/download-link.test.mjs` to the newest ledger
+    entry, so adding one here turns that test red until the site follows. That is
+    deliberate: the static href is what a visitor gets when GitHub is unreachable
+    or rate-limited, and a fallback one version behind is how it quietly stops
+    being current.
+
     ```powershell
-    git add release-ledger.json build/trust-roots.json
+    git add release-ledger.json build/trust-roots.json site/index.html
     git commit -m "chore(release): record v<version> pilot asset in the release ledger"
     ```
 
