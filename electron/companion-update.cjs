@@ -11,6 +11,7 @@ const {
   sanitizeReleaseNotes,
   sanitizeDownloadUrl
 } = require('./companion-update-core.cjs')
+const { appVersion } = require('./app-version.cjs')
 const { selectUpdateAssets } = require('./companion-download-core.cjs')
 
 // Impure wiring for the תכל'ס (companion) self-update CHECK — the ONLY module
@@ -42,10 +43,6 @@ const STATE_FILE_NAME = 'companion-update-state.json'
 // `getVersion`/`stateDir` directly.
 function electronApp() {
   return require('electron').app
-}
-
-function defaultGetVersion() {
-  return electronApp().getVersion()
 }
 
 function defaultStateDir() {
@@ -237,7 +234,7 @@ let memoryCache = null
 async function checkCompanionUpdate({ force = false } = {}, deps = {}) {
   const {
     fetch: fetchImpl = fetch,
-    getVersion = defaultGetVersion,
+    getVersion = appVersion,
     stateDir = defaultStateDir,
     now = () => Date.now()
   } = deps

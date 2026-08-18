@@ -7,6 +7,7 @@ const { downloadCompanionUpdate } = require('./companion-download.cjs')
 const { applyCompanionUpdate } = require('./companion-apply.cjs')
 const { readCompanionJournal } = require('./companion-update-journal.cjs')
 const { compareSemver } = require('./companion-update-core.cjs')
+const { appVersion } = require('./app-version.cjs')
 const { resolveRollbackOffer, downloadCompanionRollback } = require('./companion-rollback.cjs')
 
 // IPC surface for the CONSENTED תכל'ס (companion) one-click update
@@ -184,11 +185,11 @@ async function handleApply() {
  */
 function handleState() {
   const record = readCompanionJournal({})
-  if (!record) return { phase: null, targetVersion: null, currentVersion: app.getVersion(), direction: null }
+  if (!record) return { phase: null, targetVersion: null, currentVersion: appVersion(), direction: null }
   return {
     phase: record.phase || null,
     targetVersion: record.targetVersion || null,
-    currentVersion: app.getVersion(),
+    currentVersion: appVersion(),
     // Which WAY a pending record points, decided here rather than in the
     // renderer: the ONE SemVer implementation lives in main
     // (companion-update-core.cjs), and a renderer-side string comparison would be

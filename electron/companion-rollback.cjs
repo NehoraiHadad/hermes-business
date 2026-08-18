@@ -1,11 +1,11 @@
 const nodeFs = require('node:fs')
-const { app } = require('electron')
 const { rememberLog } = require('./logs.cjs')
 const { fetchReleases } = require('./companion-update.cjs')
 const { downloadCompanionUpdate } = require('./companion-download.cjs')
 const { selectUpdateAssets } = require('./companion-download-core.cjs')
 const journalModule = require('./companion-update-journal.cjs')
 const core = require('./companion-rollback-core.cjs')
+const { appVersion } = require('./app-version.cjs')
 
 // IMPURE half of the rollback (F5): read the durable journal, locate the older
 // release, and hand the ordinary download engine a target with
@@ -32,14 +32,6 @@ const core = require('./companion-rollback-core.cjs')
 
 const ROLLBACK_HISTORY_OUTCOME = 'applied-unhealthy'
 
-function defaultGetVersion() {
-  try {
-    return app.getVersion()
-  } catch {
-    return null
-  }
-}
-
 function readHistoryEntries(read) {
   try {
     const parsed = read()
@@ -57,7 +49,7 @@ function readHistoryEntries(read) {
  * code, message }` — so the renderer branches on the same codes the tests do.
  */
 function resolveRollbackOffer({
-  getVersion = defaultGetVersion,
+  getVersion = appVersion,
   readJournal = () => journalModule.readCompanionJournal({}),
   readHistory = null
 } = {}) {
@@ -82,7 +74,7 @@ async function downloadCompanionRollback(request = {}, deps = {}) {
   const {
     log = rememberLog,
     fetchImpl = fetch,
-    getVersion = defaultGetVersion,
+    getVersion = appVersion,
     resolveOffer = resolveRollbackOffer,
     fetchReleaseList = fetchReleases,
     selectRelease = core.selectRollbackRelease,
@@ -171,7 +163,15 @@ async function downloadCompanionRollback(request = {}, deps = {}) {
       direction: 'rollback',
       signal
     },
-    { onProgress }
+    // `getVersion` is threaded through DELIBERATELY rather than left to the
+    // engine's own default. The offer above was decided against THIS reading of
+    // the running version, and the engine uses its reading to write the journal's
+    // `currentVersion` — the very field a FUTURE rollback offer reads back. Two
+    // independent sources for one value is a seam where the recorded history can
+    // disagree with the decision that produced it, so there is only one source.
+    // (It also makes the module drivable outside Electron, which is how the crash
+    // that exposed this was found.)
+    { onProgress, getVersion, log }
   )
   if (!result.ok) return result
   return { ...result, rollback: true, from: offer.from, message: `הגרסה ${target} הורדה ואומתה` }

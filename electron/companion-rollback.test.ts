@@ -144,6 +144,19 @@ describe('downloadCompanionRollback', () => {
     expect(await downloadCompanionRollback({}, h.deps)).toEqual(failure)
   })
 
+  it('drives the engine with the SAME getVersion the offer was decided against', async () => {
+    // Found live: the rollback crashed outside Electron because getVersion was
+    // not threaded through. The crash was harness-only, but the seam it exposed
+    // is real — the engine writes the journal's `currentVersion` from ITS reading
+    // of the running version, and that field is exactly what a future rollback
+    // offer reads back. Two sources for one value can disagree; there is one.
+    const getVersion = () => RUNNING
+    const h = harness({ getVersion })
+    await downloadCompanionRollback({}, h.deps)
+    expect(h.download.mock.calls[0][1].getVersion).toBe(getVersion)
+    expect(h.download.mock.calls[0][1].getVersion()).toBe(RUNNING)
+  })
+
   it('forwards the abort signal so a rollback download can be cancelled like any other', async () => {
     const h = harness()
     const controller = new AbortController()

@@ -8,6 +8,7 @@ const { isPassiveUpdateCheckDisabled } = require('./companion-update.cjs')
 const { UPDATE_TRUST_KEYS, verifyManifestSignature } = require('./update-trust.cjs')
 const { verifyUpdateManifest } = require('./update-manifest-verify.cjs')
 const core = require('./companion-download-core.cjs')
+const { appVersion } = require('./app-version.cjs')
 
 // IMPURE half of the managed תכל'ס (companion) update: fetch the signed
 // manifest, authenticate it, stream the installer to disk while hashing it, and
@@ -61,12 +62,9 @@ const STALL_TIMEOUT_MS = 120_000
 const PROGRESS_THRESHOLD_BYTES = 512 * 1024
 const USER_AGENT = 'tachles-companion'
 
-// electron is required LAZILY (inside the default-dep function, never at module
-// load) so this module stays importable from vitest without a live Electron
-// runtime — same idiom as companion-update.cjs.
-function defaultGetVersion() {
-  return require('electron').app.getVersion()
-}
+// The running version comes from the ONE reader (app-version.cjs). It used to be
+// a private copy here; see that module for why three copies of this single fact
+// was a correctness seam and not just duplication.
 
 /**
  * Where a downloaded installer lives: `<hermesHome>/business-state/updates/`.
@@ -242,7 +240,7 @@ async function downloadCompanionUpdate(request = {}, deps = {}) {
     fetch: fetchImpl = fetch,
     fs: fsImpl = nodeFs,
     createHash = nodeCreateHash,
-    getVersion = defaultGetVersion,
+    getVersion = appVersion,
     updatesDir = defaultUpdatesDir,
     journal = null,
     keys = UPDATE_TRUST_KEYS,
