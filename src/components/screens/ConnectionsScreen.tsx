@@ -78,8 +78,12 @@ export function ConnectionsScreen({
       <section className="panel connections-panel">
         <div className="panel__title">
           <h3>חיבורים זמינים</h3>
-          {/* No disconnect control exists yet — only ConnectionModal's connect/reconfigure
-              flow. Promising "ניתוק" here would be a UI promise with no matching control. */}
+          {/* Deliberately no disconnect control, and no agent tool either. The
+              authoritative off-switch is WhatsApp's own linked-devices logout on the
+              phone: it removes the device on WhatsApp's side (deleting local creds
+              does not — the phone keeps listing us), and it works when this app is
+              broken, which is exactly when someone wants to cut the connection. We
+              point at it instead of shadowing it. */}
           <span>בחר את השירות שמתאים לעסק; אפשר לפתוח ולנהל כל חיבור פעיל בכל רגע</span>
         </div>
         {loadError ? (
@@ -101,7 +105,7 @@ export function ConnectionsScreen({
 
       <div className="privacy-note">
         <ShieldCheck size={19} />
-        <div><strong>השליטה נשארת אצלך</strong><p>הרשאות וחיבורים נשמרים במנגנונים של Hermes, ולא בתוך השיחה.</p></div>
+        <div><strong>השליטה נשארת אצלך</strong><p>רוצים לנתק? עושים את זה מהטלפון: וואטסאפ ← מכשירים מקושרים ← התנתקות.</p></div>
       </div>
     </main>
   )

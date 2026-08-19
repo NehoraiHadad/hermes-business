@@ -57,9 +57,15 @@ describe('ConnectionsScreen — accessible, honest controls', () => {
     expect(onConnect).toHaveBeenCalledWith(expect.objectContaining({ id: 'telegram' }))
   })
 
-  it('never claims a disconnect control that does not exist', () => {
+  // Disconnecting is real, but it is not ours: WhatsApp's linked-devices logout on
+  // the phone is the authoritative off-switch. So the screen may TELL you where it
+  // is; what it must never do is offer a control of its own, which would be a
+  // promise with nothing behind it.
+  it('points at the phone off-switch without offering a disconnect control', () => {
     render(<ConnectionsScreen connections={connections()} onConnect={vi.fn()} />)
-    expect(screen.queryByText(/לנתק/)).not.toBeInTheDocument()
+    expect(screen.getByText(/מכשירים מקושרים/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /לנתק|ניתוק/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /לנתק|ניתוק/ })).not.toBeInTheDocument()
   })
 
   it('shows the third-party WhatsApp risk warning for the unofficial connection only, ahead of its description', () => {
