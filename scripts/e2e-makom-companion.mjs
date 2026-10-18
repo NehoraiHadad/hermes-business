@@ -72,6 +72,10 @@ try {
   console.log('Companion Makom connect, live verification and disconnect passed through native IPC.')
 } catch (error) {
   console.error(error)
+  if (page) {
+    const logs = await page.evaluate(() => window.hermesDesktop.getRecentLogs()).catch(() => null)
+    writeFileSync('.artifacts/makom/companion-runtime-log.json', JSON.stringify(logs, null, 2))
+  }
   if (page) await page.screenshot({ path: '.artifacts/makom/companion-failure.png', fullPage: true }).catch(() => {})
   throw error
 } finally {

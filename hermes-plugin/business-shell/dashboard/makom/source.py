@@ -3,17 +3,20 @@ from contextlib import asynccontextmanager
 from copy import deepcopy
 import asyncio
 import httpx
-import httpx2
-from mcp import ClientSession
-from mcp.client.streamable_http import streamable_http_client
 from .contract import TOOLS, check_host, parse_link
 
 
 @asynccontextmanager
 async def upstream(binding):
+    from mcp import ClientSession
+    from mcp.client.streamable_http import streamable_http_client
+    from tools.mcp_tool import sdk_httpx
     await asyncio.to_thread(check_host, binding["origin"])
-    async with httpx2.AsyncClient(timeout=8, follow_redirects=False, trust_env=False) as http, \
-            streamable_http_client(binding["origin"] + "/mcp", http_client=http) as (read, write):
+    # Official Hermes supports both installed SDK generations. Its resolver owns
+    # which HTTP client ABI the SDK requires (httpx in 1.x, httpx2 in 2.x).
+    async with sdk_httpx().AsyncClient(timeout=8, follow_redirects=False, trust_env=False) as http, \
+            streamable_http_client(binding["origin"] + "/mcp", http_client=http) as streams:
+        read, write = streams[:2]
         async with ClientSession(read, write) as session:
             await session.initialize()
             yield session
@@ -39,7 +42,7 @@ async def resolve(link):
         if not TOOLS.issubset({tool.name for tool in tools}):
             raise ValueError("באתר חסרים כלי הקריאה הנדרשים למקום")
         result = await session.call_tool("list_public_prayer_calendars", {"communitySlug": binding["communitySlug"]})
-        if result.is_error:
+        if result.model_dump(by_alias=True).get("isError"):
             raise ValueError("לא ניתן לקרוא כרגע את מידע הקהילה")
     return {**binding, "name": community["name"][:200]}
 
@@ -52,12 +55,13 @@ async def bound_tools(binding):
         if original.name not in TOOLS:
             continue
         tool = original.model_copy(deep=True)
-        schema = deepcopy(tool.input_schema)
+        wire = tool.model_dump(by_alias=True)
+        schema = deepcopy(wire["inputSchema"])
         schema.get("properties", {}).pop("communitySlug", None)
         schema["required"] = [name for name in schema.get("required", []) if name != "communitySlug"]
         schema["additionalProperties"] = False
-        tool.input_schema = schema
-        tools.append(tool)
+        wire["inputSchema"] = schema
+        tools.append(type(tool).model_validate(wire))
     if len(tools) != len(TOOLS):
         raise ValueError("חסרים כלי קריאה")
     return tools

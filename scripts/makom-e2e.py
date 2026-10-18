@@ -36,22 +36,22 @@ async def exercise(home, link):
             await client.initialize()
             tools = (await client.list_tools()).tools
             assert len(tools) == 6
-            assert all("communitySlug" not in tool.input_schema["properties"] for tool in tools)
+            assert all("communitySlug" not in tool.model_dump(by_alias=True)["inputSchema"]["properties"] for tool in tools)
             calendars = await client.call_tool("list_public_prayer_calendars", {})
-            assert not calendars.is_error
-            data = calendars.structured_content
+            assert not calendars.model_dump(by_alias=True).get("isError", False)
+            data = calendars.model_dump(by_alias=True)["structuredContent"]
             assert data["community"]["slug"] == resolved["communitySlug"]
             calendar = next(row for row in data["items"] if row["kind"] == "prayer-minyans")
             prayer = await client.call_tool("get_public_prayer_day", {"localDate": datetime.now(ZoneInfo("Asia/Jerusalem")).date().isoformat(), "calendarId": calendar["publicId"]})
-            assert not prayer.is_error
-            assert prayer.structured_content["community"]["slug"] == resolved["communitySlug"]
-            assert prayer.structured_content["asOf"]
+            assert not prayer.model_dump(by_alias=True).get("isError", False)
+            assert prayer.model_dump(by_alias=True)["structuredContent"]["community"]["slug"] == resolved["communitySlug"]
+            assert prayer.model_dump(by_alias=True)["structuredContent"]["asOf"]
             forbidden = await client.call_tool("list_public_prayer_calendars", {"communitySlug": "another-community"})
-            assert forbidden.is_error
+            assert forbidden.model_dump(by_alias=True).get("isError", False)
             report.update({"tools": len(tools), "liveRead": True, "prayerRead": True, "communityOverrideDenied": True})
             await asyncio.to_thread(store.apply, ["residents"], None)
             revoked = await client.call_tool("list_public_prayer_calendars", {})
-            assert revoked.is_error
+            assert revoked.model_dump(by_alias=True).get("isError", False)
             report["runningProcessRevoked"] = True
     assert not store.skill_path(store.profile_home("residents")).exists()
     assert name not in store.read_config(store.profile_home("residents")).get("mcp_servers", {})
