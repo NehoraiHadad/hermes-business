@@ -229,27 +229,19 @@ Streaming נבנה מ־`message.delta` ומסתיים ב־`message.complete`. St
 
 ## Clarify ואישורים
 
-שאלות מובנות משתמשות ב:
+הלקוח מצהיר בכל חיבור על `client.capabilities {server_requests:true}`.
+Hermes שולח בקשות JSON-RPC מסוג `clarify` ו־`approval` עם מזהה בקשה.
+התשובה היא frame עם אותו `id` ו־`result`: בחירה באישור, או מפת תשובות
+לכל שאלות ההבהרה. בקשות שלא נתמכות מקבלות שגיאת method-not-found.
 
-```text
-clarify.request
-clarify.respond
-clarify.expire
-```
+המתאם המשותף `shared/server-requests.js` מציג את הבקשות בכרטיסים הקיימים,
+משחזר `open_requests` אחרי חידוש session ומסיר כרטיסים לפי `request.cancel`.
+האירועים `approval.request` ו־`clarify.request` בתוך ה־UI הם מודל כרטיסים
+פנימי; הם אינם פרוטוקול השרת. התשובות נשלחות לפי מזהה הבקשה המקורי.
 
-ה־Companion מציג בחירה יחידה, multi-select או טקסט חופשי ומחזיר את התשובה
-לאותו request/session.
-
-אישורים משתמשים ב:
-
-```text
-approval.request
-approval.respond
-```
-
-לא נבנה מנגנון אישורים מקביל. בבדיקה חיה `approvals.mode` הועבר זמנית
-מ־`smart` ל־`manual`; כרטיס אישור הופיע, הפעולה נדחתה והקובץ לא נמחק.
-ההגדרה הוחזרה ב־`finally` ל־`smart`.
+בדיקת ההפצה משתמשת באותו מתאם מול בקשת אישור אמיתית של Hermes,
+שולחת דחייה ומוודאת שקובץ הבדיקה לא נוצר. התצורה והאימות נשמרים
+רק בסביבת הבדיקה, והמצב המקורי של המשתמש נבדק בסיומה.
 
 ## Profile, Memory ו־Workspace
 

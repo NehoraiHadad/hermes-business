@@ -50,18 +50,18 @@ if (category === 'shared-state') {
   envelope = buildEnvelope('thin-installer', summary, { tool: 'e2e-thin-network-installer.ps1', status: summary.all_cases_green ? 'passed' : 'blocked', capturedAt: nowIso })
 } else if (category === 'approval') {
   // Prefer the real isolated-runtime denial probe when its raw is supplied; the
-  // wiring facts (the companion wrapper delegates to the official approval.respond
+  // wiring facts (the companion wrapper delegates to the official JSON-RPC approval response
   // with no competing engine) are code invariants asserted by the unit suite.
   const isoRaw = flags.isolated ? readRaw(flags.isolated) : (raw?.approval ? raw : null)
   if (isoRaw) {
     const probe = reduceIsolatedApproval(isoRaw)
     const summary = {
-      wiring: { official_method: 'approval.respond', competing_engine: false, delegates_to_official: true },
+      wiring: { official_method: 'JSON-RPC approval response', competing_engine: false, delegates_to_official: true },
       unit_coverage: true,
       live_ui_denial_probe: probe
     }
     envelope = buildEnvelope('approval', summary, {
-      tool: 'e2e-installed-isolated.mjs (real gateway approval.request/respond)',
+      tool: 'e2e-installed-isolated.mjs (real gateway approval server request/response)',
       status: probe.status,
       capturedAt: nowIso
     })

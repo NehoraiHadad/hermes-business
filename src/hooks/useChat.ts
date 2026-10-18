@@ -203,8 +203,8 @@ export function useChat({
       if (!approval || approvalInFlight.current) return false
       approvalInFlight.current = true
       try {
-        await hermesClient.respondApproval(approval.sessionId, choice)
-        setApproval(null)
+        await hermesClient.respondApproval(approval.id, choice)
+        setApproval(current => current?.id === approval.id ? null : current)
         setToast(choice === 'once' ? 'הפעולה אושרה' : 'הפעולה נדחתה')
         return true
       } catch {

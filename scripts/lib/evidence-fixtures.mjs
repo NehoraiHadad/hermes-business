@@ -51,7 +51,7 @@ export const passingPackaged = () => ({
 
 // An approval summary whose live denial probe traversed the real event path.
 export const passingApproval = () => ({
-  wiring: { official_method: 'approval.respond', competing_engine: false, delegates_to_official: true },
+  wiring: { official_method: 'JSON-RPC approval response', competing_engine: false, delegates_to_official: true },
   unit_coverage: true,
   live_ui_denial_probe: {
     status: 'passed',

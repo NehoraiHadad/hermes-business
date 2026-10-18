@@ -133,7 +133,7 @@ describe('handleGatewayEvent', () => {
     h.emit({
       type: 'approval.request',
       session_id: 's1',
-      payload: { command: 'gmail send', choices: ['once', 'deny'] }
+      payload: { request_id: 'srq-approval', command: 'gmail send', choices: ['once', 'deny'] }
     })
     expect(h.state.approval).toMatchObject({ sessionId: 's1', command: 'gmail send', choices: ['once', 'deny'] })
   })
@@ -147,9 +147,9 @@ describe('handleGatewayEvent', () => {
     })
     expect(h.state.clarify).toMatchObject({ requestId: 'c1', question: 'לאיזה לקוח?', multiSelect: true })
 
-    h.emit({ type: 'clarify.expire', session_id: 's1', payload: { request_id: 'other' } })
+    h.emit({ type: 'request.cancel', session_id: 's1', payload: { id: 'other' } })
     expect(h.state.clarify).not.toBeNull()
-    h.emit({ type: 'clarify.expire', session_id: 's1', payload: { request_id: 'c1' } })
+    h.emit({ type: 'request.cancel', session_id: 's1', payload: { id: 'c1' } })
     expect(h.state.clarify).toBeNull()
   })
 

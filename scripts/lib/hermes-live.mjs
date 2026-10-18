@@ -5,6 +5,7 @@
 import { spawnSync } from 'node:child_process'
 import { spawnCommand as spawn } from '../../electron/hermes-command.cjs'
 import { sanitize } from './e2e-harness.mjs'
+import { HermesServerRequests } from '../../shared/server-requests.js'
 
 /** Collapse an arbitrarily nested skills payload into a flat list of names. */
 export function flattenSkillNames(value) {
@@ -29,6 +30,7 @@ export function createHermesHarness({ hermes, hermesHome, port, token, wsUrl, ex
   const pending = new Map()
   const events = []
   const serverOutput = []
+  const requests = new HermesServerRequests(frame => socket.send(JSON.stringify(frame)), event => events.push(event))
 
   function stage(message) {
     console.error(`[e2e] ${message}`)
@@ -59,6 +61,7 @@ export function createHermesHarness({ hermes, hermesHome, port, token, wsUrl, ex
         'open',
         () => {
           clearTimeout(timer)
+          requests.advertise()
           resolve()
         },
         { once: true }
@@ -73,16 +76,20 @@ export function createHermesHarness({ hermes, hermesHome, port, token, wsUrl, ex
       )
       socket.addEventListener('message', message => {
         const frame = JSON.parse(String(message.data))
+        if (frame.id != null && frame.method) { requests.accept(frame); return }
         if (frame.id != null) {
           const request = pending.get(String(frame.id))
           if (!request) return
           clearTimeout(request.timer)
           pending.delete(String(frame.id))
           if (frame.error) request.reject(new Error(frame.error.message || 'Hermes RPC failed'))
-          else request.resolve(frame.result)
+          else { request.resolve(frame.result); requests.replay(frame.result) }
           return
         }
-        if (frame.method === 'event' && frame.params?.type) events.push(frame.params)
+        if (frame.method === 'event' && frame.params?.type) {
+          if (frame.params.type === 'request.cancel') requests.cancel(frame.params.payload || {})
+          else events.push(frame.params)
+        }
       })
     })
     return socket
@@ -136,6 +143,7 @@ export function createHermesHarness({ hermes, hermesHome, port, token, wsUrl, ex
       request.reject(new Error('E2E test shut down'))
     }
     pending.clear()
+    requests.reset()
     socket?.close()
     stopServer()
   }
@@ -153,6 +161,7 @@ export function createHermesHarness({ hermes, hermesHome, port, token, wsUrl, ex
     startServer,
     connectSocket,
     rpc,
+    respondRequest: (id, result) => requests.respond(id, result),
     waitForEvent,
     stopServer,
     shutdown

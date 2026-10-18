@@ -74,7 +74,7 @@ export async function runClarifyProbe(harness, runtimeSessionId) {
   const clarifyEvent = await requestEvent
   const requestId = String(clarifyEvent.payload?.request_id || '')
   if (!requestId) throw new Error(`clarify.request has no request_id: ${JSON.stringify(clarifyEvent)}`)
-  await rpc('clarify.respond', { request_id: requestId, answer: 'POC Business' })
+  harness.respondRequest(requestId, { answer: 'POC Business' })
   const probe = {
     request_id_present: true,
     question: clarifyEvent.payload?.question,

@@ -49,7 +49,7 @@ async function openLatest() {
 }
 
 function sentIds(socket: FakeWebSocket): string[] {
-  return socket.sent.map(frame => JSON.parse(frame).id as string)
+  return socket.sent.map(frame => JSON.parse(frame)).filter(frame => frame.id != null).map(frame => frame.id as string)
 }
 
 describe('HermesTransport', () => {

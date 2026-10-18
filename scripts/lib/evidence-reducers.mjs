@@ -100,11 +100,11 @@ export function reduceIsolatedApproval(r) {
     qa_namespace_applied: bool(r.qa_namespace_applied),
     isolated_runtime: r.isolation?.runtime_mode === 'qa-isolated',
     via_real_event_path: bool(a.via_real_event_path),
-    official_method: a.official_method || 'approval.respond',
+    official_method: a.official_method || 'JSON-RPC approval response',
     requested,
     request_command_present: bool(a.request_command_present),
     denied,
-    deny_resolved_count: a.deny_resolved_count ?? null,
+    response_sent: bool(a.response_sent),
     no_side_effect: noSideEffect,
     renderer_modal_faked: bool(a.renderer_modal_faked)
   }

@@ -64,7 +64,7 @@ describe('HermesClient connection surface', () => {
 
     const socket = FakeWebSocket.instances.at(-1)!
     const call = client.rpc<{ sessions: [] }>('session.list')
-    const id = JSON.parse(socket.sent[0]).id as string
+    const id = socket.sent.map(frame => JSON.parse(frame)).find(frame => frame.method === 'session.list').id as string
     socket.deliver({ jsonrpc: '2.0', id, result: { sessions: [] } })
     await expect(call).resolves.toEqual({ sessions: [] })
   })

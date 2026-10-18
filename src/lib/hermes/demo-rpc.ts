@@ -38,7 +38,7 @@ export function createDemoRpc(state: DemoState) {
       const name = String(params.name || '')
       return { type: 'skill', name, message: String(params.arg || ''), display: `/${name}` } as T
     }
-    if (method === 'approval.respond') return respondDemoApproval(state, params, emit) as Promise<T>
+    if (method === 'request.respond') return respondDemoApproval(state, { ...(params.result as object), session_id: state.activeSession }, emit) as Promise<T>
     if (method === 'prompt.submit') return submitDemoPrompt(state, params, emit) as Promise<T>
     return { ok: true } as T
   }
@@ -52,6 +52,7 @@ function play(events: DemoScheduledEvent[], emit: DemoEmit) {
 
 async function submitDemoPrompt(state: DemoState, params: Record<string, unknown>, emit: DemoEmit) {
   const sessionId = String(params.session_id || state.activeSession || 'weekly-leads')
+  state.activeSession = sessionId
   const scenario = matchDemoScenario(String(params.text || ''))
   state.pendingApproval = scenario.approval ? scenario.id : null
   play(buildScenarioEvents(scenario, sessionId), emit)

@@ -91,8 +91,8 @@ export async function collectSharedStateReport(input) {
     plugin_shared_state: pluginShared,
     live_transport: liveTransport,
     approval_mapping: {
-      official_method: 'approval.respond',
-      wrapper_delegates_via: 'src/lib/hermes/session.ts respondApproval -> approval.respond',
+      official_method: 'JSON-RPC approval response',
+      wrapper_delegates_via: 'src/lib/hermes/session.ts respondApproval -> JSON-RPC approval response',
       competing_engine: false
     }
   }

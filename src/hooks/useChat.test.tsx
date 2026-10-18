@@ -3,6 +3,7 @@ import '../test/setup-dom'
 import { act, renderHook } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { useChat } from './useChat'
+import type { GatewayEvent } from '../types'
 
 // stop() must never *lie* about a turn being over. Before this fix it fired
 // hermesClient.interrupt() and immediately set busy=false regardless of the
@@ -17,7 +18,8 @@ import { useChat } from './useChat'
 
 const mocks = vi.hoisted(() => ({
   interrupt: vi.fn<(sessionId: string) => Promise<unknown>>(),
-  onEvent: vi.fn(() => () => {}),
+  onEvent: vi.fn<(listener: (event: GatewayEvent) => void) => () => void>(() => () => {}),
+  respondApproval: vi.fn<(id: string, choice: 'once' | 'deny') => Promise<unknown>>(async () => ({ sent: true })),
   onConnectionChange: vi.fn(() => () => {}),
   createSession: vi.fn(async () => ({ session_id: 'sess-1', stored_session_id: 'sess-1' })),
   submit: vi.fn(async () => ({ status: 'ok' }))
@@ -37,6 +39,8 @@ function heldInterrupt() {
 
 afterEach(() => {
   mocks.interrupt.mockReset()
+  mocks.onEvent.mockClear()
+  mocks.respondApproval.mockClear()
   mocks.createSession.mockClear()
   mocks.submit.mockClear()
 })
@@ -130,4 +134,23 @@ describe('useChat — stop()', () => {
       secondHeld.resolve()
     })
   })
+})
+
+
+it('answers the native request id and preserves a newer card while the previous answer completes', async () => {
+  const { result } = await renderBusyChat()
+  const listener = mocks.onEvent.mock.calls.at(-1)![0]
+  const emit = (id: string) => act(() => listener({ type: 'approval.request', session_id: 'sess-1',
+    payload: { request_id: id, command: 'test', choices: ['once', 'deny'] } }))
+  emit('srq-first')
+  const held = heldInterrupt()
+  mocks.respondApproval.mockReturnValueOnce(held.promise)
+  let answer: Promise<boolean | void>
+  act(() => { answer = result.current.respondApproval('deny') })
+  expect(mocks.respondApproval).toHaveBeenCalledWith('srq-first', 'deny')
+  emit('srq-next')
+  await act(async () => { held.resolve(); await answer })
+  expect(result.current.approval?.id).toBe('srq-next')
+  act(() => listener({ type: 'request.cancel', session_id: 'sess-1', payload: { id: 'srq-next' } }))
+  expect(result.current.approval).toBeNull()
 })

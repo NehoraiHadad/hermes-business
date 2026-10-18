@@ -12,6 +12,8 @@ import { createSandbox, removeOwnedDir } from './lib/probes/hermes/real-loader-f
 import { buildChildEnv } from './lib/probes/hermes/real-loader-env.mjs'
 import { verifyMakomUi } from './lib/probes/hermes/makom-ui.mjs'
 import { reapProcessTree } from '../electron/process-util.cjs'
+import { runApprovalCase } from './lib/isolated-e2e/approval-case.mjs'
+import { defaultLiveHome } from '../electron/runtime-mode.cjs'
 import { snapshotLoginItem, verifyAndRestoreLoginItem } from './lib/isolated-e2e/login-item-guard.mjs'
 const root = process.cwd()
 const runtime = JSON.parse(readFileSync('.artifacts/makom/runtime.json', 'utf8'))
@@ -37,6 +39,7 @@ Object.assign(env, {
 })
 let app, vite, page
 const errors = []
+const approvalBackup = new Map()
 try {
   // Dev Companion has one canonical dev URL. Refuse to collide with a server
   // owned by another task; never stop or replace an existing listener.
@@ -69,6 +72,18 @@ try {
   assert.deepEqual(errors, [])
   writeFileSync('.artifacts/makom/companion.json', JSON.stringify({ ...result, nativeIpc: true, isolated: true, pageErrors: errors }, null, 2))
   console.log('Companion Makom connect, live verification and disconnect passed through native IPC.')
+  if (process.env.HERMES_MAKOM_TEST_APPROVAL === '1') {
+    for (const name of ['auth.json', 'config.yaml']) {
+      const file = path.join(installedHome, name)
+      assert.ok(existsSync(file), 'The test installation must already own its fixture files')
+      approvalBackup.set(file, readFileSync(file))
+    }
+    const approval = await runApprovalCase({ page, liveHome: defaultLiveHome(), tempHome: installedHome,
+      probePath: path.join(sandbox.root, 'denied-probe.txt') })
+    writeFileSync('.artifacts/makom/source-approval.json', JSON.stringify(approval, null, 2))
+    assert.ok(approval.requested && approval.denied && approval.no_side_effect, JSON.stringify(approval))
+    console.log('Real native approval delivered and denied through the shared product protocol.')
+  }
 } catch (error) {
   console.error(error)
   if (app) {
@@ -91,6 +106,7 @@ try {
     await app.close().catch(() => {})
     reapProcessTree(child)
   }
+  for (const [file, bytes] of approvalBackup) writeFileSync(file, bytes)
   if (vite) await new Promise(resolve => vite.close(resolve))
   removeOwnedDir(sandbox.root)
   const loginItem = verifyAndRestoreLoginItem(loginItemBefore)

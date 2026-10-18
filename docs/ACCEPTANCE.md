@@ -272,8 +272,8 @@ Proven in one real run (`docs/evidence/packaged-e2e.json`, `approval.json`, both
 - **real approval deny** — under `HERMES_BUSINESS_E2E_APPROVAL=1` the harness drives
   a genuine turn over the official gateway: `session.create` → `prompt.submit` asks
   the agent to run a guarded local `terminal` command → the official
-  **`approval.request`** event fires → the harness denies with the official
-  **`approval.respond {choice:'deny'}`** (`resolved:1`) → the target probe file is
+  **`approval`** server request arrives → the shared product adapter replies with
+  **the same JSON-RPC id and `result:{choice:'deny'}`** → the target probe file is
   **never created**. This traverses the real Hermes approval RPC/event path; it is
   **not** a faked renderer modal.
 - **clean teardown** — the temp home is deleted, the isolated port is free, the
@@ -319,7 +319,7 @@ and REST via `src/lib/hermes/rest-*.ts`.
 | Session created via wrapper RPC is visible on official surfaces | `session.create` (wrapper RPC) → `GET /api/sessions` (official REST) **and** `session.list` (official RPC) both return the stored id | `session_shared_state.{visible_via_rest, visible_via_rpc_list}=true` |
 | Streaming event parsing (official behavior) | `prompt.submit` → real `message.delta` stream + `message.complete`; marker persisted and returned by `session.resume` | `live_transport.streaming.delta_events` (6–10), `marker_streamed_and_persisted=true` |
 | Stop/cancel (official behavior) | `session.interrupt` on an in-flight reply | `live_transport.interrupt.status="interrupted"` |
-| Tool activity mapped, no competing approval engine | `tool.start`/`tool.complete` (matching `tool_id`) from the official todo tool; wrapper's `respondApproval` delegates to official `approval.respond` (no second engine) | `live_transport.tool.{start_received,complete_received,same_tool_id}=true`; `approval_mapping.competing_engine=false` |
+| Tool activity mapped, no competing approval engine | `tool.start`/`tool.complete` (matching `tool_id`) from the official todo tool; wrapper's `respondApproval` answers the native server-request id (no second engine) | `live_transport.tool.{start_received,complete_received,same_tool_id}=true`; `approval_mapping.competing_engine=false` |
 | Skill created via one surface visible via the other | `POST /api/skills` (same `_create_skill` write path as the agent's skill tool) → `skills.manage list` (official RPC) **and** on-disk `skills/business/<name>/SKILL.md` under the isolated home | `skill_shared_state.{visible_via_rpc=true, on_disk_path}`, `skill_count=62` |
 | Scheduled task via wrapper REST in official cron state, removable | `POST /api/cron/jobs` (wrapper REST) → `cron.manage list` (official RPC) **and** on-disk `cron/jobs.json` → `DELETE /api/cron/jobs/{id}` → absent in all three | `cron_shared_state.{visible_via_rpc,visible_on_disk,removed}=true`, `disk_file` |
 | plugin/profile/memory/workspace paths identical, with evidence | resolved dirs asserted under the isolated home | `path_evidence.paths.*` + `present.{memories,skills,sessions,cron,workspace_db}=true` (all under `%TEMP%\hermes-e2e-home-*`) |

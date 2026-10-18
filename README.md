@@ -19,10 +19,10 @@ MVP/Alpha מקומי ל־Windows (מוכן לפיילוט, אך עדיין לא 
   של OpenAI Codex תואם ל־UI; הפעלת provider ו־inference חיים נצפו ידנית על מחשב
   הבדיקה ואינם משוחזרים בבדיקה אוטומטית עצמאית.
 - onboarding שמתחיל Skill אמיתי בשם `business-bootstrap`.
-- הסוכן שואל שאלות דרך `clarify.request`; התשובה חוזרת ב־`clarify.respond`.
+- הסוכן שואל שאלות בבקשת שרת `clarify`; התשובות מוחזרות לפי מזהה הבקשה ב־JSON-RPC.
 - רשימת Sessions משותפת וחיפוש בסיסי.
 - Streaming, Stop, קבצים מצורפים ופעילות כלי בשפה פשוטה.
-- אישורים דרך `approval.request` / `approval.respond`, כולל דחייה שנבדקה בפועל.
+- אישורים דרך בקשת שרת `approval` ותשובת JSON-RPC תואמת, כולל דחייה שנבדקה בפועל.
 - Google Workspace דרך ה־Skill הרשמי של Hermes.
 - Telegram דרך Messaging API הרשמי של Hermes בלבד. המעטפת מגדירה Token ומזהה
   משתמש; Hermes הוא הבעלים היחיד של allowlist, polling, dispatch ושליחה. סבבי

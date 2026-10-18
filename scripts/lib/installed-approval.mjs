@@ -1,3 +1,5 @@
+import { HermesServerRequests } from '../../shared/server-requests.js'
+
 // Real, denied-approval driver for the installed-companion E2E. Kept apart from
 // the read-only gateway RPCs because the whole body runs in the renderer's
 // browser context via page.evaluate as ONE serialized function.
@@ -6,13 +8,18 @@
  * Drive a real, denied approval end-to-end over the gateway's JSON-RPC/event
  * path from inside the renderer — NOT a synthetic renderer modal. Creates a
  * session, forces manual approval, submits a prompt that asks the agent to run a
- * guarded local command, waits for the official `approval.request` event, denies
- * it via `approval.respond {choice:'deny'}`, then interrupts the turn. Returns a
+ * guarded local command, waits for the native `approval` server request, replies
+ * with the same JSON-RPC id and `{choice:'deny'}`, then interrupts the turn. Returns a
  * trace of exactly what the gateway did.
  */
 export async function elicitAndDenyApproval(page, { text, timeoutMs = 180_000 } = {}) {
-  return page.evaluate(
-    async req =>
+  // Embed the product's self-contained class in the serialized browser function;
+  // no second protocol implementation and no browser eval/CSP exception.
+  const drive = new Function('req', `return (${rendererApproval.toString()})(req, ${HermesServerRequests.toString()})`)
+  return page.evaluate(drive, { text, timeoutMs })
+}
+
+const rendererApproval = async (req, RequestChannel) =>
       new Promise(resolve => {
         const trace = {
           connected: false,
@@ -22,7 +29,7 @@ export async function elicitAndDenyApproval(page, { text, timeoutMs = 180_000 } 
           requestCommandPresent: false,
           choices: null,
           denied: false,
-          denyResolvedCount: null,
+          responseSent: false,
           events: [],
           error: null
         }
@@ -51,46 +58,36 @@ export async function elicitAndDenyApproval(page, { text, timeoutMs = 180_000 } 
             trace.error = trace.error || 'timed out waiting for approval.request'
             finish()
           }, req.timeoutMs)
-          ws.addEventListener('message', async event => {
-            let frame
+          const channel = new RequestChannel(frame => ws.send(JSON.stringify(frame)), async event => {
+            trace.events.push(event.type)
+            if (event.type !== 'approval.request' || approvalSeen) return
+            approvalSeen = true
+            trace.requested = true
+            trace.requestCommandPresent = Boolean(event.payload.command)
+            trace.choices = event.payload.choices || null
             try {
-              frame = JSON.parse(String(event.data))
-            } catch {
-              return
-            }
+              channel.respond(event.payload.request_id, { choice: 'deny' })
+              trace.responseSent = true
+              // Responses have no JSON-RPC acknowledgement. A subsequent RPC on
+              // this socket proves the ordered connection remains usable.
+              await call('session.interrupt', { session_id: trace.sessionId })
+              trace.denied = true
+            } catch (error) { trace.error = `deny failed: ${error.message}` }
+            window.clearTimeout(deadline)
+            finish()
+          })
+          ws.addEventListener('message', event => {
+            let frame
+            try { frame = JSON.parse(String(event.data)) } catch { return }
+            if (frame.id != null && frame.method) { channel.accept(frame); return }
             if (frame.id != null && pending.has(frame.id)) {
-              const p = pending.get(frame.id)
+              const entry = pending.get(frame.id)
               pending.delete(frame.id)
-              if (frame.error) p.rej(new Error(frame.error.message || 'rpc error'))
-              else p.res(frame.result)
-              return
-            }
-            if (frame.method === 'event' && frame.params && frame.params.type) {
+              if (frame.error) entry.rej(new Error(frame.error.message || 'rpc error'))
+              else entry.res(frame.result)
+            } else if (frame.method === 'event' && frame.params?.type) {
               trace.events.push(frame.params.type)
-              if (frame.params.type === 'approval.request' && !approvalSeen) {
-                approvalSeen = true
-                trace.requested = true
-                const payload = frame.params.payload || {}
-                trace.requestCommandPresent = Boolean(payload.command)
-                trace.choices = payload.choices || null
-                try {
-                  const result = await call('approval.respond', {
-                    session_id: trace.sessionId,
-                    choice: 'deny'
-                  })
-                  trace.denied = true
-                  trace.denyResolvedCount = result && typeof result.resolved === 'number' ? result.resolved : null
-                } catch (e) {
-                  trace.error = `deny failed: ${e.message}`
-                }
-                try {
-                  await call('session.interrupt', { session_id: trace.sessionId })
-                } catch {
-                  /* best effort */
-                }
-                window.clearTimeout(deadline)
-                finish()
-              }
+              if (frame.params.type === 'request.cancel') channel.cancel(frame.params.payload || {})
             }
           })
           ws.addEventListener('error', () => {
@@ -101,6 +98,7 @@ export async function elicitAndDenyApproval(page, { text, timeoutMs = 180_000 } 
           ws.addEventListener('open', async () => {
             trace.connected = true
             try {
+              channel.advertise()
               const created = await call('session.create', { source: 'desktop', cols: 96 })
               trace.sessionId = created.session_id
               await call('config.set', { key: 'approvals.mode', value: 'manual' })
@@ -116,7 +114,4 @@ export async function elicitAndDenyApproval(page, { text, timeoutMs = 180_000 } 
           trace.error = trace.error || String(e.message || e)
           finish()
         })
-      }),
-    { text, timeoutMs }
-  )
-}
+      })

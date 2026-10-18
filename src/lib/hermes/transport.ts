@@ -1,4 +1,5 @@
 import type { GatewayEvent } from '../../types'
+import { HermesServerRequests } from '../../../shared/server-requests.js'
 import { HermesRpcError } from './core'
 
 export type EventListener = (event: GatewayEvent) => void
@@ -78,6 +79,10 @@ export class HermesTransport {
   private connectionListeners = new Set<ConnectionListener>()
   private pending = new Map<string, Pending>()
   private nextId = 0
+  private requests = new HermesServerRequests(frame => {
+    if (!this.connected) throw new HermesConnectionClosedError()
+    this.socket!.send(JSON.stringify(frame))
+  }, event => this.emit(event))
 
   private url: string | null = null
   private connecting: Promise<void> | null = null
@@ -115,8 +120,8 @@ export class HermesTransport {
     }
   }
 
-  // Dedicated connection-state callback rather than a synthetic GatewayEvent:
-  // GatewayEvent is the gateway's own wire vocabulary and must not be forged.
+  // Connection lifecycle stays separate from native conversation events and
+  // the server-request adapter's normalized card events.
   onConnectionChange(listener: ConnectionListener) {
     this.connectionListeners.add(listener)
     return () => {
@@ -161,6 +166,7 @@ export class HermesTransport {
       }
       const onOpen = () => {
         cleanup()
+        this.requests.advertise()
         this.armed = true
         this.reconnectAttempt = 0
         this.setState('open')
@@ -252,6 +258,11 @@ export class HermesTransport {
     })
   }
 
+  async respondServerRequest(id: string, result: Record<string, unknown>) {
+    this.requests.respond(id, result)
+    return { sent: true }
+  }
+
   // --- internals ----------------------------------------------------------
 
   private attachHandlers(socket: WebSocket) {
@@ -259,7 +270,9 @@ export class HermesTransport {
       if (socket !== this.socket) return
       try {
         const frame = JSON.parse(String(message.data))
-        if (frame.id != null) {
+        if (frame.method && frame.id != null) {
+          this.requests.accept(frame)
+        } else if (frame.id != null) {
           const pending = this.pending.get(String(frame.id))
           if (!pending) return
           this.timers.clearTimeout(pending.timer)
@@ -271,9 +284,13 @@ export class HermesTransport {
                 typeof frame.error.code === 'number' ? frame.error.code : 0
               )
             )
-          else pending.resolve(frame.result)
+          else {
+            pending.resolve(frame.result)
+            this.requests.replay(frame.result)
+          }
         } else if (frame.method === 'event' && frame.params?.type) {
-          this.emit(frame.params)
+          if (frame.params.type === 'request.cancel') this.requests.cancel(frame.params.payload || {})
+          else this.emit(frame.params)
         }
       } catch {
         // Ignore malformed frames from unrelated dev tooling.
@@ -281,6 +298,7 @@ export class HermesTransport {
     })
     socket.addEventListener('close', () => {
       if (socket !== this.socket) return
+      this.requests.reset()
       this.socket = null
       this.connecting = null
       // Everything in flight died with the socket: reject now instead of
@@ -340,6 +358,7 @@ export class HermesTransport {
   private discardSocket(only?: WebSocket) {
     const socket = this.socket
     if (!socket || (only && socket !== only)) return
+    this.requests.reset()
     this.socket = null
     this.connecting = null
     try {

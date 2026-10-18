@@ -84,6 +84,8 @@ export type Connection = {
   icon: 'google' | 'telegram' | 'whatsapp' | 'makom'
 }
 
+// Native stream events plus normalized approval/clarify card events from the
+// shared server-request adapter. Card names are an internal UI contract.
 export type GatewayEvent = {
   type: string
   session_id?: string

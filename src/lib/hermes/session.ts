@@ -49,13 +49,13 @@ export interface HermesSessions {
     pdf: { path?: string; contentBase64?: string; filename?: string }
   ): Promise<HermesPdfAttachment>
   interrupt(sessionId: string): Promise<unknown>
-  respondApproval(sessionId: string, choice: 'once' | 'session' | 'always' | 'deny'): Promise<unknown>
+  respondApproval(requestId: string, choice: 'once' | 'session' | 'always' | 'deny'): Promise<unknown>
   respondClarify(requestId: string, answer: string): Promise<unknown>
 }
 
 // Session and prompt operations expressed over the RPC transport. Grouped
 // together because they share the interactive conversation lifecycle.
-export function createHermesSessions(rpc: RpcFn): HermesSessions {
+export function createHermesSessions(rpc: RpcFn, respond: (id: string, result: Record<string, unknown>) => Promise<unknown>): HermesSessions {
   return {
     async listSessions() {
       const result = await rpc<{ sessions: Session[] }>('session.list', { limit: 100 })
@@ -105,11 +105,11 @@ export function createHermesSessions(rpc: RpcFn): HermesSessions {
     interrupt(sessionId) {
       return rpc('session.interrupt', { session_id: sessionId })
     },
-    respondApproval(sessionId, choice) {
-      return rpc('approval.respond', { session_id: sessionId, choice })
+    respondApproval(requestId, choice) {
+      return respond(requestId, { choice })
     },
     respondClarify(requestId, answer) {
-      return rpc('clarify.respond', { request_id: requestId, answer })
+      return respond(requestId, { answer })
     }
   }
 }

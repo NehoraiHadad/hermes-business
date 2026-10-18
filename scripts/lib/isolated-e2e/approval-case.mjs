@@ -11,7 +11,7 @@ import { elicitAndDenyApproval, waitForRuntimeRunning } from '../installed-app.m
 /**
  * Seed the model credential into the isolated home so the REAL agent can run one
  * local turn, restart the runtime to pick it up, then submit a prompt that must
- * elicit an approval — which we DENY over `approval.respond`. The QA emptiness
+ * elicit an approval — which we DENY over `JSON-RPC approval response`. The QA emptiness
  * check already validated the home at first boot (memoized), so seeding here does
  * not weaken the contract: it operates only on our own temp dir.
  * Returns the scalar approval report block.
@@ -44,12 +44,12 @@ export async function runApprovalCase({ page, liveHome, tempHome, probePath }) {
   return {
     enabled: true,
     creds_seeded: seeded.length > 0,
-    official_method: 'approval.respond',
+    official_method: 'JSON-RPC approval response',
     via_real_event_path: trace.requested && trace.events.includes('approval.request'),
     requested: trace.requested,
     request_command_present: trace.requestCommandPresent,
     denied: trace.denied,
-    deny_resolved_count: trace.denyResolvedCount,
+    response_sent: trace.responseSent,
     no_side_effect: noSideEffect,
     renderer_modal_faked: false,
     error: trace.error || null

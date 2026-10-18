@@ -168,10 +168,10 @@ export function handleGatewayEvent(event: GatewayEvent, runtimeSession: string, 
       ])
     }
   }
-  if (event.type === 'approval.request') {
+  if (event.type === 'approval.request' && typeof payload.request_id === 'string') {
     const copy = approvalCopy(payload)
     setApproval({
-      id: `approval-${Date.now()}`,
+      id: payload.request_id,
       sessionId: event.session_id || runtimeSession,
       title: copy.title,
       description: copy.description,
@@ -188,8 +188,10 @@ export function handleGatewayEvent(event: GatewayEvent, runtimeSession: string, 
       multiSelect: Boolean(payload.multi_select)
     })
   }
-  if (event.type === 'clarify.expire') {
-    setClarify(current => (current?.requestId === String(payload.request_id || '') ? null : current))
+  if (event.type === 'request.cancel') {
+    const id = String(payload.id || '')
+    setApproval(current => current?.id === id ? null : current)
+    setClarify(current => current?.requestId.split(':')[0] === id ? null : current)
   }
   if (event.type === 'error') {
     setBusy(false)

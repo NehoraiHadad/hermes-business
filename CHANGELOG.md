@@ -59,6 +59,9 @@
   the native CMD bootstrap without shell interpretation and use Hermes’ YAML facade
   in the installer, retaining the active pre-PM installation contract. Launch
   Makom MCP workers through the native runtime bootstrap instead of bare store Python.
+- Negotiate native server requests and answer approval/clarification frames by id;
+  restore pending cards on reconnect and dismiss cancelled requests. Reuse the
+  product protocol adapter in the exact-artifact denial probe.
 - Await native plugin enablement asynchronously, coalesce concurrent requests and
   hold runtime starts behind preparation. Use Playwright's official ready-event
   handshake for explicit Electron binaries instead of a manual CDP workaround.

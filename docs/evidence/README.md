@@ -19,7 +19,7 @@ emails) and `redactPaths` (home/temp/drive paths) as a backstop.
   (`e2e-thin-network-installer.ps1`): download → SHA-256 → safe-extract.
 - `approval.json` — **passed** against the current attested packaged build. It proves
   the approval wiring (the
-  companion wrapper delegates to the official `approval.respond`; no competing
+  companion wrapper delegates to the native JSON-RPC server-request response; no competing
   engine) **and** the live denial probe against the isolated packaged runtime.
   Machine-written by the exact-artifact stage (`scripts/e2e-exact-artifact.mjs`)
   from an `e2e-installed-isolated.mjs` run.

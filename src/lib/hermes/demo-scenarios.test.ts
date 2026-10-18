@@ -144,7 +144,7 @@ describe('demo rpc approval state machine', () => {
     expect(emitted.map(event => event.type)).toContain('approval.request')
 
     emitted.length = 0
-    await rpc('approval.respond', { session_id: 's1', choice: 'once' }, emit)
+    await rpc('request.respond', { result: { choice: 'once' } }, emit)
     vi.advanceTimersByTime(5_000)
     expect(state.pendingApproval).toBeNull()
     expect(emitted.map(event => event.type)).toEqual([
@@ -163,13 +163,13 @@ describe('demo rpc approval state machine', () => {
     vi.advanceTimersByTime(5_000)
     emitted.length = 0
 
-    await rpc('approval.respond', { session_id: 's1', choice: 'deny' }, emit)
+    await rpc('request.respond', { result: { choice: 'deny' } }, emit)
     vi.advanceTimersByTime(5_000)
     expect(emitted.map(event => String(event.payload?.text || '')).join('')).toContain('לא שלחתי כלום')
 
     // A second answer has no pending scenario left and must stay silent.
     emitted.length = 0
-    await expect(rpc('approval.respond', { session_id: 's1', choice: 'once' }, emit)).resolves.toEqual({ ok: true })
+    await expect(rpc('request.respond', { result: { choice: 'once' } }, emit)).resolves.toEqual({ ok: true })
     vi.advanceTimersByTime(5_000)
     expect(emitted).toEqual([])
     expect(state.pendingApproval).toBeNull()
@@ -184,7 +184,7 @@ describe('demo rpc approval state machine', () => {
     expect(state.pendingApproval).toBeNull()
 
     emitted.length = 0
-    await expect(rpc('approval.respond', { session_id: 's1', choice: 'once' }, emit)).resolves.toEqual({ ok: true })
+    await expect(rpc('request.respond', { result: { choice: 'once' } }, emit)).resolves.toEqual({ ok: true })
     vi.advanceTimersByTime(5_000)
     expect(emitted.filter(event => event.type === 'message.start')).toEqual([])
   })

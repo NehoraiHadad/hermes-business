@@ -40,7 +40,8 @@ export class HermesClient {
     if (this.demo) this.demoBackend = createDemoBackend()
     Object.assign(
       this,
-      createHermesSessions((method, params) => this.rpc(method, params)),
+      createHermesSessions((method, params) => this.rpc(method, params), (id, result) =>
+        this.demo ? this.rpc('request.respond', { request_id: id, result }) : this.transport.respondServerRequest(id, result)),
       createHermesCommands((method, params) => this.rpc(method, params)),
       createHermesRest(
         (endpoint, init) => this.api(endpoint, init),

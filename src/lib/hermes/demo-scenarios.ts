@@ -172,7 +172,7 @@ function streamedEvents(
   if (options.approval) {
     events.push({
       delay: lastChunkAt + APPROVAL_GAP,
-      event: { type: 'approval.request', session_id: sessionId, payload: { ...options.approval } }
+      event: { type: 'approval.request', session_id: sessionId, payload: { ...options.approval, request_id: `demo-approval-${sessionId}` } }
     })
   }
   events.push({
