@@ -80,7 +80,7 @@ function clearIfSafe() {
 }
 
 async function activateWhatsappGuard(options = {}) {
-  const install = (options.install || installWhatsappPolicyPlugin)()
+  const install = await (options.install || installWhatsappPolicyPlugin)()
   const expectedVersion = (options.installedVersion || installedPluginVersion)()
   const restart = options.restart || officialGatewayRestart
 

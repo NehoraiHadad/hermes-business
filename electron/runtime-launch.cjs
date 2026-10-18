@@ -15,7 +15,9 @@ const {
   patchRuntimeState,
   setRuntimePort,
   getHermesProcess,
-  setHermesProcess
+  setHermesProcess,
+  isRuntimePreparing,
+  waitForRuntimePreparation
 } = require('./runtime-state.cjs')
 
 // The runtime LAUNCH concern: refresh installed/compat status and spawn the
@@ -26,20 +28,23 @@ const {
 function refreshRuntimeInstalled() {
   const runtimeConfig = getRuntimeMode()
   const command = findHermes()
-  const version = getHermesVersion(command)
+  const preparing = isRuntimePreparing()
+  const version = preparing ? getRuntimeState().version : getHermesVersion(command)
   // Startup compatibility surfacing: an unsupported runtime is flagged (never
   // auto-updated). The version still runs; the update flow enforces the range.
-  return patchRuntimeState({
+  const state = patchRuntimeState({
     installed: Boolean(command),
     version,
     mode: runtimeConfig.mode,
     isolated: runtimeConfig.isolated,
     hermesHome: runtimeConfig.hermesHome,
-    compatible: command ? isVersionSupported(version) : true
+    compatible: preparing ? getRuntimeState().compatible : command ? isVersionSupported(version) : true
   })
+  return { ...state, starting: state.starting || preparing }
 }
 
 async function startHermes() {
+  await waitForRuntimePreparation()
   const state = getRuntimeState()
   if (state.running) return state
   if (state.starting) {

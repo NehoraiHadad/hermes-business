@@ -13,6 +13,17 @@ const SESSION_TOKEN = randomBytes(32).toString('base64url')
 
 let runtimePort = PREFERRED_PORT
 let hermesProcess = null
+let preparation = null
+
+function setRuntimePreparation(task) {
+  const pending = Promise.resolve(task).finally(() => {
+    if (preparation === pending) preparation = null
+  })
+  preparation = pending
+  return pending
+}
+const isRuntimePreparing = () => preparation !== null
+const waitForRuntimePreparation = () => preparation || Promise.resolve()
 
 const baseUrl = () => `http://127.0.0.1:${runtimePort}`
 // Loopback WS auth is the `?token=` query param ONLY — the single-use `?ticket=`
@@ -73,5 +84,8 @@ module.exports = {
   getRuntimePort,
   setRuntimePort,
   getHermesProcess,
-  setHermesProcess
+  setHermesProcess,
+  setRuntimePreparation,
+  isRuntimePreparing,
+  waitForRuntimePreparation
 }

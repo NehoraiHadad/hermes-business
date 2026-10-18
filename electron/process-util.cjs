@@ -19,7 +19,7 @@ function runCaptured(command, args, timeout = 120_000, extraEnv = {}) {
     let stdout = ''
     let stderr = ''
     const timer = setTimeout(() => {
-      child.kill()
+      reapProcessTree(child)
       reject(new Error('The setup step timed out'))
     }, timeout)
     child.stdout.on('data', chunk => {

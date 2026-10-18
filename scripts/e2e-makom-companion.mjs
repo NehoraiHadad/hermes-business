@@ -4,10 +4,9 @@ import assert from 'node:assert/strict'
 import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 import path from 'node:path'
 import { tmpdir } from 'node:os'
-import { seedCompanionContext, serveCompanionBuild, openCompanionDocument } from './lib/makom-companion-fixture.mjs'
-import { chromium } from 'playwright-core'
-import { spawn } from 'node:child_process'
-import net from 'node:net'
+import { seedCompanionContext, serveCompanionBuild } from './lib/makom-companion-fixture.mjs'
+import { electronDriverArgs } from './lib/electron-driver.mjs'
+import { _electron as electron } from 'playwright-core'
 import { createSandbox, removeOwnedDir } from './lib/probes/hermes/real-loader-fs.mjs'
 import { buildChildEnv } from './lib/probes/hermes/real-loader-env.mjs'
 import { verifyMakomUi } from './lib/probes/hermes/makom-ui.mjs'
@@ -33,7 +32,7 @@ Object.assign(env, {
   HERMES_BUSINESS_DEV_PORT: '19179',
   HERMES_NO_UPDATE_CHECK: '1', HERMES_DISABLE_UPDATE_CHECK: '1', DO_NOT_TRACK: '1'
 })
-let app, vite, browser, page
+let app, vite, page
 const errors = []
 try {
   // Dev Companion has one canonical dev URL. Refuse to collide with a server
@@ -43,27 +42,16 @@ try {
   await seedCompanionContext(root, sandbox)
   vite = await serveCompanionBuild(root)
   console.log('Launching the isolated Companion with the runtime Hermes CLI.')
-  const debugPort = await new Promise(resolve => { const probe = net.createServer().listen(0, '127.0.0.1', () => { const port = probe.address().port; probe.close(() => resolve(port)) }) })
-  app = spawn(path.join(root, 'node_modules/electron/dist/electron.exe'), [root, '--remote-debugging-port=' + debugPort], { cwd: root, env, windowsHide: true, stdio: 'ignore' })
-  let debugReady = false
-  for (let i = 0; i < 180; i++) {
-    debugReady = await fetch(`http://127.0.0.1:${debugPort}/json/version`, { signal: AbortSignal.timeout(1000) }).then(r => r.ok).catch(() => false)
-    if (debugReady) break
-    if (app.exitCode !== null) throw Error('Companion exited before rendering')
-    await new Promise(resolve => setTimeout(resolve, 500))
-  }
-  assert.ok(debugReady, 'The isolated Companion must expose its test debugger')
-  const attaching = chromium.connectOverCDP(`http://127.0.0.1:${debugPort}`, { timeout: 180000 })
-  attaching.catch(() => {})
-  await openCompanionDocument(`http://127.0.0.1:${debugPort}`)
-  browser = await attaching
-  console.log('Companion launched.')
-  const context = browser.contexts()[0]
-  page = context.pages()[0] || await context.waitForEvent('page')
+  app = await electron.launch({
+    executablePath: path.join(root, 'node_modules/electron/dist/electron.exe'),
+    args: electronDriverArgs([root]), cwd: root, env, timeout: 120000
+  })
+  console.log('Companion launched through the native Electron driver.')
+  page = await app.firstWindow()
   page.setDefaultTimeout(60000)
   page.on('pageerror', error => errors.push(error.message))
   let running = false
-  for (let i = 0; i < 240; i++) {
+  for (let i = 0; i < 1200; i++) {
     running = await page.evaluate(async () => Boolean(window.hermesDesktop && (await window.hermesDesktop.getRuntime()).running))
     if (running) break
     await new Promise(resolve => setTimeout(resolve, 500))
@@ -88,8 +76,9 @@ try {
   throw error
 } finally {
   if (app) {
-    if (browser) await browser.close().catch(() => {})
-    reapProcessTree(app)
+    const child = app.process()
+    await app.close().catch(() => {})
+    reapProcessTree(child)
   }
   if (vite) await new Promise(resolve => vite.close(resolve))
   removeOwnedDir(sandbox.root)

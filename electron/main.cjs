@@ -4,7 +4,7 @@ const lifecycle = require('./lifecycle-state.cjs')
 const { rememberLog } = require('./logs.cjs')
 const { loadWindowPreferences, createWindow, createTray, showAssistant, getMainWindow } = require('./windows.cjs')
 const { startHermes, stopHermes, hasRunningProcess } = require('./runtime.cjs')
-const { patchRuntimeState } = require('./runtime-state.cjs')
+const { patchRuntimeState, setRuntimePreparation } = require('./runtime-state.cjs')
 const { installDesktopPlugin } = require('./plugin-install.cjs')
 const { installWhatsappPolicyPlugin } = require('./whatsapp-plugin-install.cjs')
 const { activateWhatsappGuard } = require('./whatsapp-guard-activation.cjs')
@@ -219,6 +219,8 @@ app.whenReady().then(async () => {
   loadWindowPreferences()
   registerIpc()
   installDesktopPlugin()
+  createWindow()
+  createTray()
   // Capture the AUTHORITATIVE official gateway process state (running/stopped/unknown) BEFORE
   // the plugin is installed and BEFORE the gateway is ensured. This is the only moment a
   // still-running OLD-code gateway is distinguishable from a newly launched post-install one —
@@ -230,15 +232,15 @@ app.whenReady().then(async () => {
   // transaction so we never double-install (a second install would reset `changed` to false).
   let policyPlugin = null
   try {
-    policyPlugin = installWhatsappPolicyPlugin()
+    // Native PM may build a new dependency generation. Keep the window/IPC
+    // responsive and serialize runtime starts behind the same preparation.
+    policyPlugin = await setRuntimePreparation(installWhatsappPolicyPlugin())
     if (!policyPlugin.ok || !policyPlugin.enabled) {
       rememberLog(`WhatsApp policy plugin not fully active: ${policyPlugin.error || policyPlugin.reason || 'unknown'}`)
     }
   } catch (error) {
     rememberLog(`WhatsApp policy plugin install failed: ${error.message || error}`)
   }
-  createWindow()
-  createTray()
   // ensureGatewayBackground reports whether it actually STARTED a fresh gateway (which would
   // have loaded the just-installed plugin) vs found one already running.
   let gatewayStartedFresh = false

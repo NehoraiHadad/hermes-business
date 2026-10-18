@@ -8,7 +8,7 @@ const require = createRequire(import.meta.url)
 const repoRoot = path.resolve(process.cwd())
 
 type InstallModule = {
-  installWhatsappPolicyPlugin: (options: Record<string, unknown>) => Record<string, unknown>
+  installWhatsappPolicyPlugin: (options: Record<string, unknown>) => Promise<Record<string, unknown>>
 }
 type PathsModule = {
   whatsappPolicyPluginSource: () => string
@@ -80,9 +80,24 @@ describe('WhatsApp policy plugin payload', () => {
 })
 
 describe('installWhatsappPolicyPlugin', () => {
-  it('copies the payload and enables via the official CLI, then writes a receipt', () => {
+  it('coalesces concurrent requests and writes enablement only after native completion', async () => {
+    let complete!: (result: object) => void
+    const runner = vi.fn(() => new Promise(resolve => { complete = resolve }))
+    const first = install.installWhatsappPolicyPlugin({ home, hermesCommand: 'hermes', runner })
+    const second = install.installWhatsappPolicyPlugin({ home, hermesCommand: 'hermes', runner })
+    expect(first).toBe(second)
+    await new Promise(resolve => setTimeout(resolve, 0))
+    const receipt = path.join(home, 'plugins', paths.WHATSAPP_POLICY_PLUGIN_ID, 'install-receipt.json')
+    expect(existsSync(receipt)).toBe(false)
+    expect(runner).toHaveBeenCalledTimes(1)
+    complete({ status: 0 })
+    expect((await first).enabled).toBe(true)
+    expect(JSON.parse(readFileSync(receipt, 'utf8')).enabled).toBe(true)
+  })
+
+  it('copies the payload and enables via the official CLI, then writes a receipt', async () => {
     const runner = vi.fn(() => ({ status: 0, stdout: '', stderr: '' }))
-    const result = install.installWhatsappPolicyPlugin({
+    const result = await install.installWhatsappPolicyPlugin({
       home,
       hermesCommand: 'hermes',
       runner
@@ -105,12 +120,12 @@ describe('installWhatsappPolicyPlugin', () => {
     expect(receipt).toMatchObject({ id: 'business-whatsapp-policy', enabled: true })
   })
 
-  it('prunes obsolete Telegram guard modules from an existing install', () => {
+  it('prunes obsolete Telegram guard modules from an existing install', async () => {
     const target = path.join(home, 'plugins', paths.WHATSAPP_POLICY_PLUGIN_ID)
     const stale = path.join(target, paths.WHATSAPP_POLICY_PLUGIN_OBSOLETE_FILES[0])
     require('node:fs').mkdirSync(target, { recursive: true })
     require('node:fs').writeFileSync(stale, 'stale')
-    install.installWhatsappPolicyPlugin({
+    await install.installWhatsappPolicyPlugin({
       home,
       hermesCommand: 'hermes',
       runner: () => ({ status: 0, stdout: '', stderr: '' })
@@ -118,15 +133,15 @@ describe('installWhatsappPolicyPlugin', () => {
     expect(existsSync(stale)).toBe(false)
   })
 
-  it('re-checks enablement even when the payload receipt is unchanged', () => {
+  it('re-checks enablement even when the payload receipt is unchanged', async () => {
     const runner = vi.fn(() => ({ status: 0, stdout: '', stderr: '' }))
-    install.installWhatsappPolicyPlugin({ home, hermesCommand: 'hermes', runner })
-    install.installWhatsappPolicyPlugin({ home, hermesCommand: 'hermes', runner })
+    await install.installWhatsappPolicyPlugin({ home, hermesCommand: 'hermes', runner })
+    await install.installWhatsappPolicyPlugin({ home, hermesCommand: 'hermes', runner })
     expect(runner).toHaveBeenCalledTimes(2)
   })
 
-  it('still copies files but reports not-enabled when Hermes is absent', () => {
-    const result = install.installWhatsappPolicyPlugin({ home, hermesCommand: null })
+  it('still copies files but reports not-enabled when Hermes is absent', async () => {
+    const result = await install.installWhatsappPolicyPlugin({ home, hermesCommand: null })
     expect(result.ok).toBe(true)
     expect(result.enabled).toBe(false)
     expect(result.reason).toBe('hermes-not-found')

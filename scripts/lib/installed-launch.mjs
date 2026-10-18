@@ -6,6 +6,7 @@ import path from 'node:path'
 import { _electron as electron } from 'playwright-core'
 import { sanitize } from './e2e-harness.mjs'
 import { assertSafeInstalledE2E } from './e2e-safety.mjs'
+import { electronDriverArgs } from './electron-driver.mjs'
 
 /** A fresh, unique user-data dir under the OS temp folder. */
 export function tempUserDataDir(prefix = 'hermes-business-e2e') {
@@ -26,7 +27,7 @@ export function launchInstalledApp({ executablePath, appDirectory = '', userData
   assertSafeInstalledE2E(safetyEnv || env || process.env)
   return electron.launch({
     executablePath,
-    args: [...(appDirectory ? [appDirectory] : []), `--user-data-dir=${userDataDir}`],
+    args: electronDriverArgs([...(appDirectory ? [appDirectory] : []), `--user-data-dir=${userDataDir}`]),
     timeout,
     ...(env ? { env } : {})
   })

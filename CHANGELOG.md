@@ -29,6 +29,8 @@
 - **איסוף קהילתי לבחירה.** תוסף נפרד יכול לשמור הודעות מקבוצות מאושרות גם ללא
   אזכור הבוט, בלי להפעיל אותו. ההודעות נשמרות כמקורות עם פרטי שולח וזמן;
   האיסוף כבוי כברירת מחדל ואינו משלים היסטוריה שהגשר לא קיבל.
+- **חלון מגיב בזמן הכנת Hermes.** הכנת תוספים ותלויות מתבצעת ברקע;
+  השרת ממתין להשלמתה והחלון מציג מצב טעינה.
 
 ### Technical
 
@@ -53,6 +55,9 @@
   the native WhatsApp platform registry. Keep deduplicated evidence in a plugin-owned
   SQLite archive, import approved legacy history read-only, preserve native mention
   filtering, and verify durability with the actual adapter and a fresh process.
+- Await native plugin enablement asynchronously, coalesce concurrent requests and
+  hold runtime starts behind preparation. Use Playwright's official ready-event
+  handshake for explicit Electron binaries instead of a manual CDP workaround.
 - Honor an explicit engine selection in the isolated packaged-test runtime, so
   release verification uses the reviewed compatible engine without changing the
   operator's active installation or falling back after a missing selection.

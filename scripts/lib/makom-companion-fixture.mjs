@@ -45,37 +45,3 @@ export async function serveCompanionBuild(root) {
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(5173, '127.0.0.1', resolve) })
   return server
 }
-
-// A development Electron window can expose its debugger before its first
-// navigation commits. Open the same trusted app URL before attaching Playwright;
-// this seeds no application state and keeps the real preload/IPC transport.
-export async function openCompanionDocument(origin) {
-  let target
-  for (let i = 0; i < 180; i++) {
-    const targets = await (await fetch(origin + '/json/list', { signal: AbortSignal.timeout(1000) })).json()
-    target = targets.find(row => row.type === 'page')
-    if (target?.attached) break
-    await new Promise(resolve => setTimeout(resolve, 500))
-  }
-  if (!target) throw Error('Companion did not create a window')
-  await new Promise((resolve, reject) => {
-    const socket = new WebSocket(target.webSocketDebuggerUrl)
-    const timer = setTimeout(() => { socket.close(); reject(Error('Companion navigation timed out')) }, 15000)
-    socket.onopen = () => socket.send(JSON.stringify({ id: 0, method: 'Runtime.runIfWaitingForDebugger' }))
-    socket.onerror = () => { clearTimeout(timer); reject(Error('Companion debugger disconnected')) }
-    socket.onmessage = event => {
-      const message = JSON.parse(event.data)
-      if (message.id === 0) {
-        if (!target.url || target.url === 'about:blank') {
-          socket.send(JSON.stringify({ id: 1, method: 'Page.navigate', params: { url: 'http://127.0.0.1:5173/' } }))
-          return
-        }
-        clearTimeout(timer); socket.close(); resolve(); return
-      }
-      if (message.id !== 1) return
-      clearTimeout(timer); socket.close()
-      if (message.error || message.result?.errorText) reject(Error('Companion navigation failed'))
-      else resolve()
-    }
-  })
-}

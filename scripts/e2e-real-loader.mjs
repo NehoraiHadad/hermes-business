@@ -24,6 +24,7 @@ import { existsSync, realpathSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import { _electron as electron } from 'playwright-core'
+import { electronDriverArgs } from './lib/electron-driver.mjs'
 import { HERMES_COMPAT_RANGE } from './plugin-sdk-contract.mjs'
 import { readInstalledVersion, resolveContractHome, versionInRange } from './lib/hermes-desktop-contract.mjs'
 import { safeJson } from './lib/e2e-harness.mjs'
@@ -195,7 +196,7 @@ async function run({ cliBin, desktopExe, desktopApp }) {
     const env = buildChildEnv({ base: process.env, sandbox, cliBin })
     electronApp = await electron.launch({
       executablePath: desktopExe,
-      args: [...(desktopApp ? [desktopApp] : []), `--user-data-dir=${sandbox.userData}`],
+      args: electronDriverArgs([...(desktopApp ? [desktopApp] : []), `--user-data-dir=${sandbox.userData}`]),
       cwd: sandbox.cwd,
       env,
       timeout: 180_000

@@ -17,8 +17,8 @@ a POC, and not a signed production release.
 
 - **Product:** תכל'ס — Hermes is described honestly as the engine with full
   access; the product name is **תכל'ס**.
-- **Version line:** 0.4.x Alpha (current build: 0.4.0-alpha.2).
-- **Toolchain (reference):** Node 22 · Python 3.13 · Electron 43 ·
+- **Version line:** 0.4.x Alpha (current build: 0.4.0-alpha.13).
+- **Toolchain (reference):** Node 24 · Hermes Python 3.14 (Python 3.13 test harness) · Electron 43 ·
   electron-builder 26 · Vite 6 · Vitest 4. Exact patch versions and the git HEAD
   at each acceptance run are recorded in the local `release/ACCEPTANCE.md`.
 - **Platform:** Windows 11 x64.

@@ -126,7 +126,9 @@ try {
   const { page } = await openFirstWindow(electronApp)
   await verifyBoot({ page, consoleMessages: [], pageErrors: [], screenshotPath: path.join(os.tmpdir(), `hermes-iso-boot-${process.pid}.png`) })
 
-  const runtime = await waitForRuntimeRunning(page)
+  // A fresh home can require native PM dependency preparation. Window startup
+  // must stay fast; allow the separate, observable setup phase its own budget.
+  const runtime = await waitForRuntimeRunning(page, { timeoutMs: 600_000 })
   // The gateway tree exists NOW (venv launcher + python, possibly already
   // detached from Electron) and the profile-owned PID record is written —
   // refresh the identity snapshot to cover both roots.

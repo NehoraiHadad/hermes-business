@@ -1,4 +1,4 @@
-const { spawnSync } = require('node:child_process')
+const { runCaptured } = require('./process-util.cjs')
 const { createHash } = require('node:crypto')
 const fs = require('node:fs')
 const path = require('node:path')
@@ -47,9 +47,9 @@ function readReceipt(targetDir) {
   }
 }
 
-function enablePlugin(hermesCommand, home, runner) {
+async function enablePlugin(hermesCommand, home, runner) {
   if (!hermesCommand) return { enabled: false, reason: 'hermes-not-found' }
-  const result = runner(
+  const result = await runner(
     hermesCommand,
     ['plugins', 'enable', WHATSAPP_POLICY_PLUGIN_ID, '--no-allow-tool-override'],
     {
@@ -65,11 +65,31 @@ function enablePlugin(hermesCommand, home, runner) {
   return { enabled: true }
 }
 
+const pendingInstalls = new Map()
+
 function installWhatsappPolicyPlugin(options = {}) {
+  const home = options.home || hermesHome()
+  const resolved = path.resolve(home)
+  const key = process.platform === 'win32' ? resolved.toLowerCase() : resolved
+  if (pendingInstalls.has(key)) return pendingInstalls.get(key)
+  const task = performInstall({ ...options, home }).finally(() => {
+    if (pendingInstalls.get(key) === task) pendingInstalls.delete(key)
+  })
+  pendingInstalls.set(key, task)
+  return task
+}
+
+async function performInstall(options) {
   const sourceDir = options.sourceDir || whatsappPolicyPluginSource()
   const home = options.home || hermesHome()
   const hermesCommand = options.hermesCommand !== undefined ? options.hermesCommand : findHermes()
-  const runner = options.runner || spawnSync
+  const runner = options.runner || (async (command, args, settings) => {
+    try {
+      return { status: 0, ...await runCaptured(command, args, 600_000, settings.env) }
+    } catch (error) {
+      return { status: 1, stderr: error.message || String(error) }
+    }
+  })
   const targetDir = pluginTargetDir(home)
 
   let integrity
@@ -83,7 +103,7 @@ function installWhatsappPolicyPlugin(options = {}) {
   // not hide that an operator (or an update) disabled the safety plugin.
   const previous = readReceipt(targetDir)
   const unchanged = Boolean(previous && previous.integrity === integrity)
-  const enableResult = enablePlugin(hermesCommand, home, runner)
+  const enableResult = await enablePlugin(hermesCommand, home, runner)
 
   const receipt = {
     id: WHATSAPP_POLICY_PLUGIN_ID,
