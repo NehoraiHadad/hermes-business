@@ -73,8 +73,14 @@ subprocess.run([str(python), str(engine / "scripts/write_install_stamp.py"),
                 "--update-mechanism", "external"], cwd=engine, env=env, check=True)
 
 
-bin_dir = engine / ".hermes/bin"
-subprocess.run([sys.executable, "-m", "hermes_cli._launchers", str(bin_dir)],
+bin_dir = root / "test-bin"
+bin_dir.mkdir()
+# Native bootstrap with PM's own venv interpreter: disposable homes have no PM
+# selection record. A store-only source launcher requires one in each home.
+subprocess.run([sys.executable, "-c",
+    "from pathlib import Path; from hermes_cli._launchers import mint_launcher; "
+    "import sys; mint_launcher('hermes', Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3]), None)",
+    str(engine), str(bin_dir), str(python)],
                cwd=engine, env={**env, "PYTHONPATH": str(engine)}, check=True)
 if not (bin_dir / "hermes.exe").is_file():
     raise RuntimeError("Native Windows launcher needs distlib or pip in the test helper's Python")
