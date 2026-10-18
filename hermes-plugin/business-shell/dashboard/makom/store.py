@@ -9,7 +9,9 @@ from pathlib import Path
 import os
 import tempfile
 import uuid
+from hashlib import sha256
 from .contract import server_name, SKILL
+from .skills import skill_path, render_skill, owns
 
 
 @contextmanager
@@ -79,13 +81,6 @@ def server_config(home, binding):
         "enabled": True, "timeout": 18, "connect_timeout": 20}
 
 
-def skill_path(home):
-    target = home / "skills" / "community" / SKILL / "SKILL.md"
-    if not target.resolve().is_relative_to(home):
-        raise ValueError("תיקיית הסקיל נמצאת מחוץ למרחב שנבחר")
-    return target
-
-
 def configured(name):
     home = profile_home(name)
     cfg = read_config(home)
@@ -99,11 +94,6 @@ def configured(name):
         and all(not isinstance(tools, list) or "mcp-" + binding["serverName"] in tools for tools in cfg.get("platform_toolsets", {}).values()))
 
 
-def render_skill(binding):
-    template = Path(__file__).with_name("SKILL.md").read_text(encoding="utf-8")
-    return (template.rstrip() + "\n\nחיבור המרחב: `" + binding["serverName"] + "`.\n").encode("utf-8")
-
-
 def planned(config, home, binding):
     result = deepcopy(config)
     servers = result.setdefault("mcp_servers", {})
@@ -114,6 +104,8 @@ def planned(config, home, binding):
     if old_name in servers and servers[old_name] != server_config(home, previous):
         raise ValueError("הגדרת שרת מקום שונתה ידנית; היא לא תוחלף")
     next_binding = {**binding, "serverName": server_name(home, binding)} if binding else None
+    if next_binding:
+        next_binding["skillDigest"] = sha256(render_skill(next_binding)).hexdigest()
     if next_binding and next_binding["serverName"] in servers and next_binding["serverName"] != old_name:
         raise ValueError("קיים חיבור ידני באותו שם; הוא לא יוחלף")
     if old_name:
@@ -166,7 +158,7 @@ def apply(selection, binding):
             before = skill.read_bytes() if skill.exists() else None
             if before is not None and not config.get("tachles_makom"):
                 raise ValueError("במרחב קיים סקיל אחר בשם מקום; הוא לא יוחלף")
-            if before is not None and before != render_skill(config["tachles_makom"]):
+            if before is not None and not owns(before, config["tachles_makom"]):
                 raise ValueError("הסקיל של מקום השתנה ידנית; הוא לא יוחלף")
             target = home / "config.yaml"
             snapshots.append((target, target.read_bytes() if target.exists() else None, skill, before))

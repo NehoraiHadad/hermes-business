@@ -11,8 +11,10 @@ import hermes_yaml as yaml
 from mcp import types
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
-from .contract import server_name, bound_arguments
+from .contract import server_name
 from .source import bound_tools, upstream
+from .reads import read as read_information
+from .skills import refresh
 
 
 def live_binding(home, revision):
@@ -26,14 +28,18 @@ def live_binding(home, revision):
 
 async def run(home, revision):
     async def tools():
-        return await bound_tools(live_binding(home, revision))
+        binding = live_binding(home, revision)
+        # A probe has no installed skill; user-edited skills stay user-owned.
+        refresh(Path(home), binding)
+        return await bound_tools(binding)
 
     async def call(name, arguments):
         try:
             binding = live_binding(home, revision)
-            args = bound_arguments(binding, name, arguments or {})
             async with asyncio.timeout(12), upstream(binding) as session:
-                result = await session.call_tool(name, args)
+                value = await read_information(session, binding, name, arguments or {})
+                result = types.CallToolResult.model_validate({"structuredContent": value,
+                    "content": [{"type": "text", "text": json.dumps(value, ensure_ascii=False)}]})
             # Never substitute cached or successful empty data after a failure.
             if len(result.model_dump_json().encode()) > 262144:
                 raise ValueError("תשובת המקור גדולה מדי; צמצמו את הבקשה")

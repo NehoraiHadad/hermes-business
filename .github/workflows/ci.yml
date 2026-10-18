@@ -116,8 +116,8 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-      - name: Provide native Hermes configuration parser
-        run: pip install pyyaml
+      - name: Provide native Hermes configuration and timezone dependencies
+        run: pip install pyyaml tzdata jsonschema
       - name: WhatsApp policy suite
         run: python -m unittest discover -s hermes-plugin/business-whatsapp-policy/tests -p "test_*.py" -v
       - name: Companion dashboard backend suite

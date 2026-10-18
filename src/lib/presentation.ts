@@ -33,6 +33,14 @@ function readableToolName(name: string) {
 export function humanizeTool(name: string, payload: ToolPayload = {}): string {
   const normalized = name.toLowerCase()
   const args = toolArguments(payload)
+  if (normalized === 'tool_call' && Array.isArray(args.calls)) {
+    const labels = args.calls.flatMap(call => {
+      if (!call || typeof call !== 'object' || typeof call.name !== 'string') return []
+      const described = describeTool(call.name)
+      return described ? [described] : []
+    })
+    if (labels.length && labels.every(label => label === labels[0])) return labels[0]
+  }
   const action = String(payload.action || args.action || normalized).toLowerCase()
   const command = String(payload.command || args.command || args.cmd || args.script || '')
 

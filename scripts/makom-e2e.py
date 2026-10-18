@@ -38,7 +38,7 @@ async def exercise(home, link):
             assert len(tools) == 6
             assert all("communitySlug" not in tool.model_dump(by_alias=True)["inputSchema"]["properties"] for tool in tools)
             calendars = await client.call_tool("list_public_prayer_calendars", {})
-            assert not calendars.model_dump(by_alias=True).get("isError", False)
+            assert not calendars.model_dump(by_alias=True).get("isError", False), calendars
             data = calendars.model_dump(by_alias=True)["structuredContent"]
             assert data["community"]["slug"] == resolved["communitySlug"]
             calendar = next(row for row in data["items"] if row["kind"] == "prayer-minyans")
@@ -46,9 +46,15 @@ async def exercise(home, link):
             assert not prayer.model_dump(by_alias=True).get("isError", False)
             assert prayer.model_dump(by_alias=True)["structuredContent"]["community"]["slug"] == resolved["communitySlug"]
             assert prayer.model_dump(by_alias=True)["structuredContent"]["asOf"]
+            today = await client.call_tool("get_public_prayer_day", {})
+            today_data = today.model_dump(by_alias=True)["structuredContent"]
+            assert today_data["localDate"] == today_data["clock"]["localDate"]
+            assert today_data["clock"]["checkedAtLocal"]
+            assert len(today_data["calendars"]) >= 1
             forbidden = await client.call_tool("list_public_prayer_calendars", {"communitySlug": "another-community"})
             assert forbidden.model_dump(by_alias=True).get("isError", False)
-            report.update({"tools": len(tools), "liveRead": True, "prayerRead": True, "communityOverrideDenied": True})
+            report.update({"tools": len(tools), "liveRead": True, "prayerRead": True,
+                "defaultTodayWithLocalClock": True, "communityOverrideDenied": True})
             await asyncio.to_thread(store.apply, ["residents"], None)
             revoked = await client.call_tool("list_public_prayer_calendars", {})
             assert revoked.model_dump(by_alias=True).get("isError", False)

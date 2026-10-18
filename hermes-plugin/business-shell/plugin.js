@@ -181,6 +181,11 @@ function terminalActivity(command) {
 // caller has no action at all. The 'terminal' category is special-cased: its
 // activity depends on the shell COMMAND, not an action verb.
 const CATEGORY_RULES = [
+  { category: 'makom_prayer', test: /mcp__makom_.*__(?:get_public_prayer_day|list_public_prayer_calendars)$/, actions: [], fallback: 'בודק את לוח התפילות במקום' },
+  { category: 'makom_hours', test: /mcp__makom_.*__get_public_service_hours$/, actions: [], fallback: 'בודק שעות פתיחה במקום' },
+  { category: 'makom_events', test: /mcp__makom_.*__get_public_event_timetable$/, actions: [], fallback: 'בודק את פרטי האירוע במקום' },
+  { category: 'makom_information', test: /mcp__makom_.*__(?:search_public_information|get_public_resource)$/, actions: [], fallback: 'בודק מידע מהקהילה במקום' },
+  { category: 'discovery', test: /^tool_(?:search|describe)$/, actions: [], fallback: 'מכין את החיבור למידע' },
   {
     category: 'calendar',
     test: /google.*calendar|calendar/,
@@ -255,6 +260,10 @@ function describeTool(name, action = '', command = '') {
 // both src/lib/presentation.test.ts and
 // hermes-plugin/business-shell/src/tool-copy.test.js.
 const TOOL_COPY_CASES = [
+  { label: 'Makom prayer calendars precede generic calendar', name: 'mcp__makom_123__list_public_prayer_calendars', action: '', command: '', text: 'בודק את לוח התפילות במקום' },
+  { label: 'Makom prayer day', name: 'mcp__makom_123__get_public_prayer_day', action: '', command: '', text: 'בודק את לוח התפילות במקום' },
+  { label: 'Makom service', name: 'mcp__makom_123__get_public_service_hours', action: '', command: '', text: 'בודק שעות פתיחה במקום' },
+  { label: 'Makom event', name: 'mcp__makom_123__get_public_event_timetable', action: '', command: '', text: 'בודק את פרטי האירוע במקום' },
   { label: 'calendar, no recognised action → category default', name: 'google_calendar.list_events', action: '', command: '', text: 'בודק אירועים ביומן' },
   { label: 'calendar create', name: 'google_calendar', action: 'create', command: '', text: 'יוצר אירוע ביומן' },
   { label: 'calendar delete', name: 'google_calendar', action: 'cancel', command: '', text: 'מסיר אירוע מהיומן' },

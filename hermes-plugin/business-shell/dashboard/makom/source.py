@@ -1,9 +1,9 @@
 """Bounded live reads; MCP negotiation stays with the official Python SDK."""
 from contextlib import asynccontextmanager
-from copy import deepcopy
 import asyncio
 import httpx
 from .contract import TOOLS, check_host, parse_link
+from .tool_schema import adapt
 
 
 @asynccontextmanager
@@ -55,12 +55,7 @@ async def bound_tools(binding):
         if original.name not in TOOLS:
             continue
         tool = original.model_copy(deep=True)
-        wire = tool.model_dump(by_alias=True)
-        schema = deepcopy(wire["inputSchema"])
-        schema.get("properties", {}).pop("communitySlug", None)
-        schema["required"] = [name for name in schema.get("required", []) if name != "communitySlug"]
-        schema["additionalProperties"] = False
-        wire["inputSchema"] = schema
+        wire = adapt(tool.model_dump(by_alias=True))
         tools.append(type(tool).model_validate(wire))
     if len(tools) != len(TOOLS):
         raise ValueError("חסרים כלי קריאה")

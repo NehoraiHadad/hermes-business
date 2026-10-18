@@ -29,6 +29,11 @@ describe('timeAgo — shared relative-time copy (curator + partner feed)', () =>
 })
 
 describe('business presentation mapping', () => {
+  it('describes the actual Makom read inside a deferred tool call', () => {
+    expect(humanizeTool('tool_call', { arguments: { calls: [
+      { name: 'mcp__makom_123__get_public_prayer_day', arguments: {} }
+    ] } })).toBe('בודק את לוח התפילות במקום')
+  })
   it('turns internal tool names into plain-language activity', () => {
     expect(humanizeTool('google_calendar.list_events')).toBe('בודק אירועים ביומן')
     expect(humanizeTool('gmail.send_message')).toBe('שולח אימייל')

@@ -10,6 +10,24 @@
 
 ---
 
+## [0.4.0-alpha.14] - 2026-10-18
+
+### מה חדש (למשתמש)
+
+- שאלות על תפילות מתייחסות להיום כברירת מחדל, בלי בקשה מוקדמת לתאריך.
+- חיבור מקום מחזיר לוחות ושעה מקומית יחד; אין צורך בפקודות מחשב לבדיקת השעה.
+- שאלות על שעות פתיחה, אירועים ופרסומים מגיעות למקור לפי שם. כשיש כמה התאמות,
+  העוזר מברר במקום לבחור שרירותית. מידע חסר וביטולים נשארים מפורשים.
+- הסקיל מתעדכן גם בחיבורים קיימים, ותוויות הפעילות מציינות איזה מידע נבדק במקום.
+
+### Technical
+
+- Adapt the six existing read-only MCP tools without changing Makom production:
+  Israel-local prayer date defaults, local source timestamps and bounded name resolution.
+- Expose exact bound tool names and argument examples to avoid repeated tool discovery.
+- Upgrade only receipt-owned or exact alpha.13 skills; preserve manual edits and rollback
+  a skill update if saving its receipt fails. Keep community/profile revocation fences.
+
 ## [0.4.0-alpha.13] - 2026-10-18
 
 ### מה חדש (למשתמש)

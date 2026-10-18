@@ -52,6 +52,9 @@ const DESKTOP_BACKEND_FILES = Object.freeze([
   'makom/source.py',
   'makom/store.py',
   'makom/bridge.py',
+  'makom/reads.py',
+  'makom/tool_schema.py',
+  'makom/skills.py',
   'makom/SKILL.md'
 ])
 

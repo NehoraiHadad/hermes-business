@@ -33,7 +33,7 @@ Copy-Item -LiteralPath (Join-Path $root 'installer\bootstrap-companion.ps1') `
 # enabled inside the business-shell transaction by the bootstrap.
 $dashboardPayload = Join-Path $payloadRoot 'dashboard'
 New-Item -ItemType Directory -Force -Path $dashboardPayload | Out-Null
-foreach ($backendFile in @('manifest.json', 'plugin_api.py', 'makom_bridge.py', 'makom/__init__.py', 'makom/api.py', 'makom/contract.py', 'makom/source.py', 'makom/store.py', 'makom/bridge.py', 'makom/SKILL.md')) {
+foreach ($backendFile in @('manifest.json', 'plugin_api.py', 'makom_bridge.py', 'makom/__init__.py', 'makom/api.py', 'makom/contract.py', 'makom/source.py', 'makom/store.py', 'makom/bridge.py', 'makom/reads.py', 'makom/tool_schema.py', 'makom/skills.py', 'makom/SKILL.md')) {
   New-Item -ItemType Directory -Force -Path (Split-Path (Join-Path $dashboardPayload $backendFile)) | Out-Null
   Copy-Item -LiteralPath (Join-Path $root "hermes-plugin\business-shell\dashboard\$backendFile") `
     -Destination (Join-Path $dashboardPayload $backendFile)
