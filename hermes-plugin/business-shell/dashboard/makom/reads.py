@@ -63,16 +63,13 @@ async def read(session, binding, name, arguments, at=None):
         query = args.pop("query")
         if "publicId" in args or not isinstance(query, str) or not 1 <= len(query.strip()) <= 120:
             raise ValueError("Choose a publication id or a short search query")
-        search = {"communitySlug": binding["communitySlug"], "q": query.strip(), "limit": 5}
+        search = {"communitySlug": binding["communitySlug"], "q": name_query(query.strip()), "limit": 5}
         if RESOLVABLE[name]:
             search["kind"] = RESOLVABLE[name]
         if RESOLVABLE[name] == "event":
             # Named cancellations/past events remain searchable while published.
             search["period"] = "all"
         matches = payload(await session.call_tool("search_public_information", search))
-        variant = name_query(query.strip())
-        if not matches["items"] and not matches.get("nextCursor") and variant != search["q"]:
-            matches = payload(await session.call_tool("search_public_information", {**search, "q": variant}))
         items = matches["items"]
         if len(items) != 1 or matches.get("nextCursor"):
             value = {**matches, "status": "needs_selection" if items or matches.get("nextCursor") else "not_found"}

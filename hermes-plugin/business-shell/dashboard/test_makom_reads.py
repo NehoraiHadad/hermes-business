@@ -85,13 +85,12 @@ class LiveReadTests(IsolatedAsyncioTestCase):
             self.assertEqual(session.call_tool.await_count, 1)
 
     async def test_hebrew_construct_names_are_found_without_silently_picking_a_clinic(self):
-        empty = {**self.envelope, "items": [], "nextCursor": None}
         clinics = {**self.envelope, "items": [{"publicId": "nurse", "title": "אחות — מרפאת היישוב"},
             {"publicId": "doctor", "title": "רופא — מרפאת היישוב"}], "nextCursor": None}
-        session = SimpleNamespace(call_tool=AsyncMock(side_effect=[response(empty), response(clinics)]))
+        session = SimpleNamespace(call_tool=AsyncMock(return_value=response(clinics)))
         value = await read(session, self.binding, "get_public_service_hours", {"query": "המרפאה"}, self.at)
-        self.assertEqual(session.call_tool.await_args_list[1].args[1]["q"], "מרפא")
-        self.assertEqual(session.call_tool.await_count, 2)
+        self.assertEqual(session.call_tool.await_args.args[1]["q"], "מרפא")
+        self.assertEqual(session.call_tool.await_count, 1)
         self.assertEqual(value["status"], "needs_selection")
 
     async def test_explicit_id_preserves_date_range_and_only_reads_once(self):

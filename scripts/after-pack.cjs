@@ -1,6 +1,6 @@
 const path = require('node:path')
 
-// CRITICAL 2 — afterPack embeds ONLY the app icon, and never signs.
+// CRITICAL 2 — afterPack checks runtime completeness, embeds the icon, and never signs.
 //
 // Root cause of the earlier missing-icon/branding bug: `win.signAndEditExecutable:false`
 // disabled electron-builder's native resedit pass entirely. The fix is `win.signExecutable:false`,
@@ -18,6 +18,21 @@ const path = require('node:path')
 // scripts/lib/release/sign-phase.mjs.
 exports.default = async function afterPack(context) {
   if (context.electronPlatformName !== 'win32') return
+  const { listPackage } = require('@electron/asar')
+  const fs = require('node:fs')
+  const { DESKTOP_BACKEND_FILES } = require('../electron/paths.cjs')
+  const resources = path.join(context.appOutDir, 'resources')
+  const shipped = new Set(listPackage(path.join(resources, 'app.asar')).map(file => file.replaceAll('\\', '/')))
+  const required = ['/node_modules/js-yaml/index.js', '/node_modules/js-yaml/lib/loader.js',
+    ...DESKTOP_BACKEND_FILES.map(file => '/hermes-plugin/business-shell/dashboard/' + file)]
+  for (const file of required) {
+    if (!shipped.has(file)) throw new Error(`Packaged backend runtime missing: ${file}`)
+  }
+  for (const file of DESKTOP_BACKEND_FILES) {
+    if (!fs.existsSync(path.join(resources, 'business-bootstrap', 'dashboard', file))) {
+      throw new Error(`Packaged repair payload missing: ${file}`)
+    }
+  }
   const { rcedit } = await import('rcedit')
   const executable = path.join(
     context.appOutDir,

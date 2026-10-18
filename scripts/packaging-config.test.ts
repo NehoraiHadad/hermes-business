@@ -38,6 +38,10 @@ function commentKeys(value: unknown, path = 'build'): string[] {
 }
 
 describe('electron-builder packaging config', () => {
+  it('ships the YAML parser required to install and upgrade the backend in production', () => {
+    expect(pkg.dependencies['js-yaml']).toBeTruthy()
+    expect(pkg.devDependencies['js-yaml']).toBeUndefined()
+  })
   it('validates against electron-builder’s schema (root forbids unknown props)', () => {
     const ajv = new Ajv({ allErrors: true, strict: false })
     const validate = ajv.compile(scheme)

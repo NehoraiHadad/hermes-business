@@ -10,6 +10,24 @@
 
 ---
 
+## [0.4.0-alpha.15] - 2026-10-18
+
+### מה חדש (למשתמש)
+
+- עדכון האפליקציה מתקין אוטומטית גם את חיבור מקום המעודכן במנוע הקיים.
+- חיפוש שמות שירותים מטפל בה׳ הידיעה ובצורות כמו מרפאה/מרפאת באותה קריאה.
+- חיפוש שירות ואירוע מקבל תקציב זמן מתאים לבדיקת הפרטים, בלי פקודות עזר.
+
+### Technical
+
+- Ship js-yaml as a production dependency, fixing packaged backend installation
+  that previously degraded silently when development dependencies were stripped.
+- Fail the packaging hook when the actual ASAR lacks the YAML runtime or any
+  companion backend file, or when the repair payload is incomplete.
+- Normalize Hebrew names before the first bounded search, eliminating a redundant
+  source read. Bound complete lookup/detail reads to 15 seconds within the native
+  18-second tool budget, and log only exception classes for unavailable reads.
+
 ## [0.4.0-alpha.14] - 2026-10-18
 
 ### מה חדש (למשתמש)

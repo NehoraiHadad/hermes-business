@@ -68,6 +68,7 @@
   },
   "dependencies": {
     "adm-zip": "0.6.0",
+    "js-yaml": "4.3.0",
     "lucide-react": "^0.468.0",
     "qrcode.react": "4.2.0",
     "react": "^19.0.0",
@@ -86,7 +87,6 @@
     "@vitejs/plugin-react": "^4.3.4",
     "electron": "43.2.0",
     "electron-builder": "26.15.3",
-    "js-yaml": "4.3.0",
     "jsdom": "^27.4.0",
     "playwright-core": "^1.54.1",
     "rcedit": "^5.0.2",
