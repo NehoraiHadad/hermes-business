@@ -28,6 +28,7 @@ import {
   fileSha256,
   readContractSources,
   readInstalledVersion,
+  resolveContractHome,
   versionInRange
 } from './lib/hermes-desktop-contract.mjs'
 
@@ -35,7 +36,7 @@ const require = createRequire(import.meta.url)
 const repoRoot = path.resolve(fileURLToPath(new URL('..', import.meta.url)))
 const { hermesHome } = require(path.join(repoRoot, 'electron', 'paths.cjs'))
 
-const home = hermesHome()
+const home = resolveContractHome(hermesHome())
 const version = readInstalledVersion(home)
 if (!version) {
   console.error(`No installed Hermes found under ${home}; cannot generate a real-source contract.`)

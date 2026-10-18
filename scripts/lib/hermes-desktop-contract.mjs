@@ -18,6 +18,13 @@ import path from 'node:path'
 export const SCHEME_VERSION = 1
 export const REPOSITORY = 'NousResearch/hermes-agent'
 
+/** Read-only source selection, independent of the application's data/runtime home. */
+export function resolveContractHome(defaultHome, env = process.env) {
+  const selected = String(env.HERMES_PLUGIN_CONTRACT_HOME || '').trim()
+  if (selected && !path.isAbsolute(selected)) throw new Error('HERMES_PLUGIN_CONTRACT_HOME must be absolute')
+  return selected || defaultHome
+}
+
 // The four git-tracked Desktop source files the plugin's runtime behaviour rests
 // on, relative to the installed Hermes checkout root (<hermesHome>/hermes-agent).
 export const CONTRACT_FILES = Object.freeze({

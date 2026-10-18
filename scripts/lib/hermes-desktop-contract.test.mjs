@@ -7,6 +7,7 @@ import {
   DISCOVERY,
   checkRequirements,
   extractPluginRequirements,
+  resolveContractHome,
   versionInRange
 } from './hermes-desktop-contract.mjs'
 
@@ -14,6 +15,12 @@ const repoRoot = path.resolve(fileURLToPath(new URL('../..', import.meta.url)))
 const read = rel => readFileSync(path.join(repoRoot, rel), 'utf8')
 const pluginSource = read('hermes-plugin/business-shell/plugin.js')
 const snapshot = JSON.parse(read('scripts/hermes-desktop-contract.json'))
+
+it('selects reviewed contract source without changing application runtime selection', () => {
+  expect(resolveContractHome(repoRoot, {})).toBe(repoRoot)
+  expect(resolveContractHome('unused', { HERMES_PLUGIN_CONTRACT_HOME: repoRoot })).toBe(repoRoot)
+  expect(() => resolveContractHome(repoRoot, { HERMES_PLUGIN_CONTRACT_HOME: 'relative' })).toThrow(/absolute/)
+})
 
 describe('extractPluginRequirements', () => {
   const req = extractPluginRequirements(pluginSource)

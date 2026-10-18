@@ -29,6 +29,7 @@ import {
   fileSha256,
   readContractSources,
   readInstalledVersion,
+  resolveContractHome,
   versionInRange
 } from './lib/hermes-desktop-contract.mjs'
 
@@ -104,7 +105,7 @@ for (const symbol of req.sdkSymbols) {
 }
 
 // ---- 3. Installed real Hermes source (authoritative when present) -----------
-const home = hermesHome()
+const home = resolveContractHome(hermesHome())
 const version = readInstalledVersion(home)
 if (version) {
   if (!versionInRange(version, HERMES_COMPAT_RANGE)) {
