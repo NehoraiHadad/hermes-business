@@ -14,7 +14,11 @@ async def upstream(binding):
     await asyncio.to_thread(check_host, binding["origin"])
     # Official Hermes supports both installed SDK generations. Its resolver owns
     # which HTTP client ABI the SDK requires (httpx in 1.x, httpx2 in 2.x).
-    async with sdk_httpx().AsyncClient(timeout=8, follow_redirects=False, trust_env=False) as http, \
+    transport = sdk_httpx()
+    # MCP can keep an SSE response open between tool results. Its read deadline
+    # must outlive the facade's operation budget; connect/write/pool stay short.
+    timeout = transport.Timeout(8, read=30)
+    async with transport.AsyncClient(timeout=timeout, follow_redirects=False, trust_env=False) as http, \
             streamable_http_client(binding["origin"] + "/mcp", http_client=http) as streams:
         read, write = streams[:2]
         async with ClientSession(read, write) as session:
