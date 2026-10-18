@@ -73,7 +73,8 @@ def result(value, at):
 def local_times(value):
     """Mirror precise source times in Israel time, preserving nulls and indexes."""
     if isinstance(value, list):
-        return [local_times(item) for item in value]
+        converted = [local_times(item) for item in value]
+        return converted if any(converted) else []
     times = {}
     for key, item in value.items():
         if key in ("startsAt", "endsAt", "nextTransitionAt", "instant"):
