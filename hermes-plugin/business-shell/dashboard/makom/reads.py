@@ -67,4 +67,25 @@ async def read(session, binding, name, arguments, at=None):
 
 
 def result(value, at):
-    return {**value, "clock": clock(at, value["asOf"])}
+    return {**value, "clock": clock(at, value["asOf"]), "localTimes": local_times(value)}
+
+
+def local_times(value):
+    """Mirror precise source times in Israel time, preserving nulls and indexes."""
+    if isinstance(value, list):
+        return [local_times(item) for item in value]
+    times = {}
+    for key, item in value.items():
+        if key in ("startsAt", "endsAt", "nextTransitionAt", "instant"):
+            if item is None:
+                times[key] = None
+            else:
+                instant = datetime.fromisoformat(item.replace("Z", "+00:00"))
+                if instant.tzinfo is None:
+                    raise ValueError("Source instant must include an offset")
+                times[key] = instant.astimezone(ZONE).isoformat(timespec="seconds")
+        elif isinstance(item, (dict, list)):
+            converted = local_times(item)
+            if converted:
+                times[key] = converted
+    return times

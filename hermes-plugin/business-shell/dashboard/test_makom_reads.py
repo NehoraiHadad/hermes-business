@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from unittest import IsolatedAsyncioTestCase, TestCase
 from unittest.mock import AsyncMock
 from zoneinfo import ZoneInfo
-from makom.reads import read, prayer_arguments
+from makom.reads import read, prayer_arguments, local_times
 from makom.tool_schema import adapt
 
 
@@ -13,6 +13,18 @@ def response(value, error=False):
 
 
 class DateTests(TestCase):
+    def test_source_times_convert_across_dst_without_inventing_missing_ends(self):
+        value = {"nextTransitionAt": "2026-10-25T05:00:00Z", "entries": [
+            {"startsAt": "2026-10-24T15:00:00Z", "endsAt": None},
+            {"startsAt": "2026-10-25T15:00:00Z", "endsAt": "2026-10-25T16:00:00Z"}]}
+        converted = local_times(value)
+        self.assertEqual(converted["nextTransitionAt"], "2026-10-25T07:00:00+02:00")
+        self.assertEqual(converted["entries"][0], {"startsAt": "2026-10-24T18:00:00+03:00", "endsAt": None})
+        self.assertEqual(converted["entries"][1]["startsAt"], "2026-10-25T17:00:00+02:00")
+        self.assertEqual(value["entries"][0]["startsAt"], "2026-10-24T15:00:00Z")
+        with self.assertRaises(ValueError):
+            local_times({"startsAt": "2026-10-24T18:00:00"})
+
     def test_defaults_and_tomorrow_use_israel_date_across_midnight_and_dst(self):
         for utc, day, tomorrow in [("2026-10-18T22:30:00+00:00", "2026-10-19", "2026-10-20"),
                                    ("2026-10-24T22:30:00+00:00", "2026-10-25", "2026-10-26")]:
