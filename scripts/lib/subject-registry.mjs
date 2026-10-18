@@ -28,7 +28,7 @@
 // folded into every fingerprint, so old fingerprints stop matching and force an
 // honest recapture rather than silently comparing across schemes.
 
-export const SUBJECT_SCHEME = 4
+export const SUBJECT_SCHEME = 5
 
 // Tests, caches and compiled Python never run in the shipped app, so a change to
 // them must not invalidate an artifact — excluded from every SHIPPED directory walk.
@@ -86,7 +86,7 @@ const COMMUNITY_RUNTIME = [
 
 // Packaged icons/assets and the manifest that carries version + build config.
 const ASSETS = [{ file: 'build/icon.png' }, { file: 'build/icon.ico' }]
-const PACKAGING_CONFIG = [{ file: 'package.json' }]
+const PACKAGING_CONFIG = [{ file: 'package.json' }, { file: 'hermes-compat.json' }]
 
 /** Sources that actually ship inside the artifact. */
 export const APP_RUNTIME_INPUTS = [

@@ -25,7 +25,7 @@ import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import { _electron as electron } from 'playwright-core'
 import { HERMES_COMPAT_RANGE } from './plugin-sdk-contract.mjs'
-import { readInstalledVersion, versionInRange } from './lib/hermes-desktop-contract.mjs'
+import { readInstalledVersion, resolveContractHome, versionInRange } from './lib/hermes-desktop-contract.mjs'
 import { safeJson } from './lib/e2e-harness.mjs'
 import {
   installBusinessShell,
@@ -96,7 +96,7 @@ async function main() {
     ])
   }
   const liveHome = hermesHome()
-  const version = readInstalledVersion(liveHome)
+  const version = readInstalledVersion(resolveContractHome(liveHome))
   const cliBin = process.env.HERMES_DESKTOP_HERMES || findHermes()
   const desktopExe =
     process.env.HERMES_BUSINESS_DESKTOP_EXE ||

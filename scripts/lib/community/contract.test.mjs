@@ -51,6 +51,17 @@ function expectSingleError(raw, pattern, fileExists = allExist) {
   expect(verdict.errors.some(e => pattern.test(e)), verdict.errors.join('\n')).toBe(true)
 }
 
+describe('optional passive community capture', () => {
+  it('defaults off and accepts explicit operator opt-in', () => {
+    expect(validate(validRaw()).contract.observeMessages).toBe(false)
+    const raw = validRaw()
+    raw.community.observe_messages = true
+    expect(validate(raw).contract.observeMessages).toBe(true)
+    raw.community.observe_messages = 'true'
+    expect(validate(raw).ok).toBe(false)
+  })
+})
+
 describe('parseContract', () => {
   it('rejects invalid YAML with a ContractError', () => {
     expect(() => parseContract('a: [unclosed')).toThrow(ContractError)

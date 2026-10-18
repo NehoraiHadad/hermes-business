@@ -4,13 +4,9 @@
 //   node scripts/community-provision.mjs plan   --contract <community.yaml> [--home <HERMES_HOME>]
 //   node scripts/community-provision.mjs apply  --contract <community.yaml> [--home <HERMES_HOME>]
 //   node scripts/community-provision.mjs verify --contract <community.yaml> [--home <HERMES_HOME>]
-//   optional: --engine-dir <dir> --engine-repo <url> --engine-ref <tag> --engine-sha <40-char-sha>
-//
-// `--home` defaults to %HERMES_HOME% and then %LOCALAPPDATA%\hermes — the
-// official install this capability is added to. Nothing is cloned and no venv
-// is created: the plan gates on the official editable install, overlays the
-// reviewed engine SHA (temporary until upstream PR #85490 merges), creates the
-// space profiles via Hermes' own `profile create`, and applies the generator.
+//   optional: --engine-dir <dir>
+// Uses the existing official Hermes install. Only native profiles, configuration
+// and skills are added; engine files, dependencies and update policy stay native.
 //
 // plan:   print the step plan with each step's current check status. No effects.
 // apply:  execute unsatisfied steps in order (fail-closed on the first nonzero
@@ -34,7 +30,6 @@ import {
   applyPlan,
   assertSafeDeploymentPaths,
   buildPlan,
-  discoverTool,
   normalizeDeployment,
   verifyDeployment,
   windowsCommandLine
@@ -43,7 +38,7 @@ import {
 function usage(message) {
   if (message) console.error(`community-provision: ${message}`)
   console.error(
-    'usage: node scripts/community-provision.mjs <plan|apply|verify> --contract <community.yaml> [--home <HERMES_HOME>] [--engine-dir <dir>] [--engine-repo <url>] [--engine-ref <ref>] [--engine-sha <40-char-sha>]'
+    'usage: node scripts/community-provision.mjs <plan|apply|verify> --contract <community.yaml> [--home <HERMES_HOME>] [--engine-dir <dir>]'
   )
   process.exit(2)
 }
@@ -66,9 +61,6 @@ function parseArgs(argv) {
     if (arg === '--contract') opts.contract = rest[++i]
     else if (arg === '--home') opts.home = rest[++i]
     else if (arg === '--engine-dir') opts.engineDir = rest[++i]
-    else if (arg === '--engine-repo') opts.engineRepo = rest[++i]
-    else if (arg === '--engine-ref') opts.engineRef = rest[++i]
-    else if (arg === '--engine-sha') opts.engineSha = rest[++i]
     else usage(`unknown argument ${JSON.stringify(arg)}`)
   }
   if (!opts.contract) usage('--contract <community.yaml> is required')
@@ -140,33 +132,6 @@ const realIo = {
 // Tool discovery with actionable failures
 // ---------------------------------------------------------------------------
 
-function discoverTools(deployment) {
-  const probe = spec => spawnSpec(spec, { capture: true })
-  const missing = []
-  // git is the only REQUIRED external tool: python lives in the official
-  // install's venv, and the generator runs under this same node.
-  const git = discoverTool(probe, 'git')
-  if (!git) missing.push('git — install from https://git-scm.com/download/win, then re-run')
-  // uv is PREFERRED for engine-deps (the official installer's own command; it
-  // honors [tool.uv] override-dependencies, plain pip cannot). The official
-  // install ships it in <home>\bin; fall back to PATH, then to venv pip.
-  let uv = null
-  const homeUv = path.join(deployment.homeDir, 'bin', process.platform === 'win32' ? 'uv.exe' : 'uv')
-  if (realIo.isFile(homeUv)) {
-    const r = probe({ argv: [homeUv, '--version'] })
-    if (r.code === 0) uv = { argv: [homeUv] }
-  }
-  if (!uv) uv = discoverTool(probe, 'uv')
-  return {
-    missing,
-    tools: {
-      git: git?.argv ?? ['git'],
-      node: [process.execPath],
-      uv: uv?.argv ?? null
-    }
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
@@ -183,10 +148,7 @@ function main() {
     deployment = normalizeDeployment({
       contractPath: opts.contract,
       homeDir: opts.home,
-      engineDir: opts.engineDir,
-      engineRepoUrl: opts.engineRepo,
-      engineRef: opts.engineRef,
-      engineSha: opts.engineSha
+      engineDir: opts.engineDir
     })
     assertSafeDeploymentPaths(deployment)
   } catch (err) {
@@ -221,21 +183,13 @@ function main() {
     process.exit(1)
   }
 
-  const { missing, tools } = discoverTools(deployment)
-  if (missing.length > 0) {
-    for (const m of missing) console.error(`community-provision: missing prerequisite: ${m}`)
-    if (opts.command === 'apply') {
-      console.error('community-provision: refusing to apply with missing prerequisites (fail-closed)')
-      process.exit(1)
-    }
-    console.error('community-provision: continuing with nominal tool names — statuses below may be incomplete')
-  }
+  const tools = { node: [process.execPath] }
 
   const steps = buildPlan(deployment, tools, { spaces })
 
   console.log(`deployment: home=${deployment.homeDir} (the ONE HERMES_HOME)`)
   console.log(`            engine=${deployment.engineDir}`)
-  console.log(`            overlay=${deployment.engineRepoUrl} @ ${deployment.engineRef} (${deployment.engineSha}) — temporary until PR #85490 merges`)
+  console.log('            engine updates are owned by official Hermes')
   console.log(`            contract=${deployment.contractPath}`)
   console.log('')
 

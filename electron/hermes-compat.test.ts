@@ -7,7 +7,6 @@ import {
   assertUpdateMethodSupported,
   captureInstallCommit,
   classifyInstallMethod,
-  gitFetchOrigin,
   installRepoRoot,
   resetInstallCheckout
 } from './hermes-compat.cjs'
@@ -81,24 +80,18 @@ describe('pinned community git installs', () => {
 
   it('classifies a fork checkout as pinned and refuses auto-update', () => {
     expect(classifyInstallMethod(command)).toBe('pinned')
-    expect(() => assertUpdateMethodSupported(command)).toThrow(/נעוץ|קהילה מאומתת/)
-  })
-})
-
-describe('gitFetchOrigin', () => {
-  it('reports not-git for a non-git install without shelling out', () => {
-    expect(gitFetchOrigin(BOGUS)).toEqual({ ok: false, reason: 'not-git' })
+    expect(() => assertUpdateMethodSupported(command)).toThrow(/מותאם אישית/)
   })
 })
 
 describe('assertRunningVersionSupported (post-update re-gate)', () => {
   it('accepts and returns a trimmed in-range version (bare or `hermes X.Y.Z`)', () => {
-    expect(assertRunningVersionSupported('0.19.0')).toBe('0.19.0')
-    expect(assertRunningVersionSupported('hermes 0.19.9')).toBe('hermes 0.19.9')
+    expect(assertRunningVersionSupported('0.22.2')).toBe('0.22.2')
+    expect(assertRunningVersionSupported('hermes 0.23.9')).toBe('hermes 0.23.9')
   })
 
-  it('throws (out of range) for a version at or above the exclusive max', () => {
-    expect(assertRunningVersionSupported('0.20.1')).toBe('0.20.1')
+  it('throws (out of range) for a version below the minimum', () => {
+    expect(assertRunningVersionSupported('1.0.0')).toBe('1.0.0')
     expect(() => assertRunningVersionSupported('0.21.0')).toThrow(/חורגת מהטווח הנתמך/)
     expect(() => assertRunningVersionSupported('0.18.9')).toThrow(/חורגת מהטווח הנתמך/)
   })

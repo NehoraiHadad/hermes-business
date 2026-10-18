@@ -1,6 +1,6 @@
 name: community-archive
-version: 0.1.0
-description: "Read-only, allowlist-scoped search and analytics over observed WhatsApp community messages in Hermes state.db."
+version: 0.2.0
+description: "Optional passive collection and scoped read-only search over approved WhatsApp community messages."
 author: "תכל'ס"
 kind: standalone
 provides_tools:

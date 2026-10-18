@@ -164,6 +164,8 @@ export function validateContract(raw, { fileExists } = {}) {
   //   * 'open' (explicit operator opt-in): residents may DM and are routed to
   //     the fenced RESIDENT_SPACE persona (§2.2) — public knowledge, no
   //     archive, no management skills.
+  const observeMessages = community?.observe_messages ?? false
+  if (typeof observeMessages !== 'boolean') errors.push('community.observe_messages: must be true or false (default false)')
   const rawDms = community?.dms
   let dmMode = 'admins'
   if (rawDms !== undefined) {
@@ -330,6 +332,7 @@ export function validateContract(raw, { fileExists } = {}) {
       name: name.trim(),
       wakeWord: wakeWord.trim(),
       dmMode,
+      observeMessages,
       admins,
       groups,
       knowledge: packs

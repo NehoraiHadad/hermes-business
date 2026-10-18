@@ -83,7 +83,7 @@ const DEMO_RUNTIME: HermesRuntime = {
   running: true,
   starting: false,
   mode: 'demo',
-  version: '0.19.0',
+  version: '0.22.2',
   error: null,
   wsUrl: ''
 }
@@ -106,7 +106,7 @@ export function createDemoDesktop(): HermesDesktopApi {
       return { ok: true, path: 'C:\\Demo\\hermes-diagnostics-demo.zip' }
     },
     async getVersions() {
-      return { hermes: '0.19.0', shell: '0.1.0' }
+      return { hermes: '0.22.2', shell: '0.1.0' }
     },
 
     // There is no full Hermes window to raise in a browser session. Say so instead of

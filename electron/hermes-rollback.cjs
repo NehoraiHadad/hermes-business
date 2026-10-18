@@ -1,3 +1,5 @@
+const { readInstallStamp } = require('./hermes-install-identity.cjs')
+const { installRepoRoot } = require('./hermes-compat.cjs')
 const { rememberLog } = require('./logs.cjs')
 const {
   isGitInstall,
@@ -32,16 +34,17 @@ function manualSupportMessage(backupPath) {
 
 // Snapshot the rollback anchor before the update mutates anything. Helpers are
 // injectable so the update flow can be DI-tested without a live git checkout.
-function captureRollbackAnchor(command, { isGit = isGitInstall, capture = captureInstallCommit } = {}) {
+function captureRollbackAnchor(command, { isGit = isGitInstall, capture = captureInstallCommit, readStamp = readInstallStamp } = {}) {
   if (!isGit(command)) return { gitInstall: false, anchor: null }
-  return { gitInstall: true, anchor: capture(command) }
+  const anchor = capture(command)
+  return { gitInstall: true, anchor, installStamp: readStamp(installRepoRoot(command), anchor) }
 }
 
 // Attempt recovery after the update failed AFTER mutation began. Returns
 // { restored, method, commit?, message? }. When `restored` is false, `message`
 // is the honest fail-closed copy the UI must surface.
 function rollbackAfterFailedUpdate(
-  { command, anchor, backupPath },
+  { command, anchor, backupPath, installStamp },
   { isGit = isGitInstall, reset = resetInstallCheckout, log = rememberLog } = {}
 ) {
   if (!isGit(command)) {
@@ -54,7 +57,7 @@ function rollbackAfterFailedUpdate(
     log('Hermes update rollback skipped: no git anchor was captured before the update')
     return { restored: false, method: 'git', message: manualSupportMessage(backupPath) }
   }
-  const result = reset(command, anchor)
+  const result = installStamp === undefined ? reset(command, anchor) : reset(command, anchor, installStamp)
   if (result.ok) {
     log(`Hermes install checkout reset to pre-update commit ${anchor}`)
     return { restored: true, method: 'git', commit: anchor }

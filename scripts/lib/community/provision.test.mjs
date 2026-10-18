@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import path from 'node:path'
 import {
-  DEFAULT_ENGINE_REF,
-  DEFAULT_ENGINE_REPO_URL,
-  DEFAULT_ENGINE_SHA,
   ProvisionRefusedError,
   ProvisionStepError,
   applyPlan,
@@ -13,7 +10,6 @@ import {
   discoverTool,
   isInsideOrEqual,
   normalizeDeployment,
-  pyprojectVersion,
   venvPythonPath,
   verifyDeployment,
   windowsCommandLine
@@ -48,12 +44,8 @@ function plan(d = descriptor(), spaces = SPACES) {
 function fakeMachine(initial = {}) {
   const d = initial.deployment ?? descriptor()
   const state = {
-    officialCheckout: false, // <engine>/.git exists (official git install)
+    officialCheckout: false, // native CLI exists (git or packaged install)
     venv: false, // official venv interpreter exists
-    headSha: '', // current HEAD of the official checkout
-    pyprojectVersion: '0.20.1', // [project] version at the CURRENT checkout
-    overlayPyprojectVersion: '0.20.1', // version the overlay checkout lands on
-    distVersion: '0.20.1', // install-time dist-info metadata in the venv
     profiles: {}, // slug -> exists
     homeGenerated: false,
     gatewayInstalled: false,
@@ -70,27 +62,15 @@ function fakeMachine(initial = {}) {
       return false
     },
     isFile(p) {
+      if (p === path.join(d.engineDir, 'hermes_cli', 'main.py')) return state.officialCheckout
       if (p === d.venvPython) return state.venv
       return Object.prototype.hasOwnProperty.call(state.files, p)
     },
     readFile(p) {
-      if (p === path.join(d.engineDir, 'pyproject.toml')) {
-        return state.officialCheckout ? `name = "hermes-agent"\nversion = "${state.pyprojectVersion}"\n` : null
-      }
       return Object.prototype.hasOwnProperty.call(state.files, p) ? state.files[p] : null
     },
     probe(spec) {
       const line = spec.argv.join(' ')
-      if (line.includes('rev-parse HEAD')) {
-        return state.officialCheckout && state.headSha
-          ? { code: 0, stdout: `${state.headSha}\n`, stderr: '' }
-          : { code: 128, stdout: '', stderr: 'not a git repo' }
-      }
-      if (line.includes('importlib.metadata')) {
-        return state.venv && state.distVersion
-          ? { code: 0, stdout: `${state.distVersion}\n`, stderr: '' }
-          : { code: 1, stdout: '', stderr: 'PackageNotFoundError' }
-      }
       if (line.includes('verify')) {
         return { code: state.homeGenerated ? 0 : 1, stdout: '', stderr: '' }
       }
@@ -103,15 +83,7 @@ function fakeMachine(initial = {}) {
       const line = spec.argv.join(' ')
       runs.push(spec)
       if (state.failOn && line.includes(state.failOn)) return { code: 1 }
-      if (line.includes('fetch')) {
-        /* objects fetched */
-      } else if (line.includes('checkout --detach')) {
-        state.headSha = d.engineSha
-        // the overlay checkout can move pyproject to the fork's base version
-        state.pyprojectVersion = state.overlayPyprojectVersion
-      } else if (line.includes('pip install')) {
-        state.distVersion = state.pyprojectVersion
-      } else if (line.includes('profile create')) {
+      if (line.includes('profile create')) {
         const slug = spec.argv[spec.argv.indexOf('create') + 1]
         state.profiles[slug] = true
       } else if (line.includes('generate')) state.homeGenerated = true
@@ -123,13 +95,11 @@ function fakeMachine(initial = {}) {
   return { io, state, runs, deployment: d }
 }
 
-/** An official Hermes install is already present (bootstrap ran). */
-const officialState = () => ({ officialCheckout: true, venv: true, headSha: 'f'.repeat(40) })
+const officialState = () => ({ officialCheckout: true, venv: true })
 
 const provisionedState = () => ({
   officialCheckout: true,
   venv: true,
-  headSha: DEFAULT_ENGINE_SHA,
   profiles: { village: true, private: true },
   homeGenerated: true,
   gatewayInstalled: true
@@ -144,32 +114,11 @@ describe('normalizeDeployment (single home)', () => {
     expect(d.engineDir).toBe(path.join(HOME, 'hermes-agent'))
     expect(d.venvDir).toBe(path.join(HOME, 'hermes-agent', 'venv'))
     expect(d.venvPython).toBe(path.join(HOME, 'hermes-agent', 'venv', 'Scripts', 'python.exe'))
-    expect(d.engineRepoUrl).toBe(DEFAULT_ENGINE_REPO_URL)
-    expect(d.engineRef).toBe(DEFAULT_ENGINE_REF)
-    expect(d.engineSha).toBe(DEFAULT_ENGINE_SHA)
-  })
-
-  it('honors explicit engineDir/repo/ref overrides', () => {
-    const customSha = 'a'.repeat(40)
-    const d = descriptor({
-      engineDir: 'D:\\hermes\\hermes-agent',
-      engineRef: 'v9.9.9',
-      engineRepoUrl: 'https://example.com/x.git',
-      engineSha: customSha
-    })
-    expect(d.engineDir).toBe('D:\\hermes\\hermes-agent')
-    expect(d.engineRef).toBe('v9.9.9')
-    expect(d.engineRepoUrl).toBe('https://example.com/x.git')
-    expect(d.engineSha).toBe(customSha)
   })
 
   it('requires homeDir and contractPath', () => {
     expect(() => normalizeDeployment({ contractPath: 'x' })).toThrow(ProvisionRefusedError)
     expect(() => normalizeDeployment({ homeDir: HOME })).toThrow(/contractPath/)
-  })
-
-  it('requires a full immutable engine SHA', () => {
-    expect(() => descriptor({ engineSha: '2c9b24e' })).toThrow(/40-character commit SHA/)
   })
 
   it('refuses a homeDir nested inside the engine checkout', () => {
@@ -243,12 +192,10 @@ describe('safety: forbidden roots (never touch the reference checkouts / pilot)'
   })
 })
 
-describe('plan construction (single-home overlay model)', () => {
+describe('plan construction (native single-home model)', () => {
   it('produces the steps in dependency order, one profile-create per space', () => {
     expect(plan().map(s => s.id)).toEqual([
       'official-install',
-      'engine-overlay',
-      'engine-deps',
       'profile-create:village',
       'profile-create:private',
       'home-generate',
@@ -268,35 +215,6 @@ describe('plan construction (single-home overlay model)', () => {
     const gate = plan().find(s => s.id === 'official-install')
     expect(gate.kind).toBe('execute')
     expect(gate.commands).toEqual([])
-  })
-
-  it('overlays by fetching the tag BY URL and detaching onto the exact SHA — no clone, no venv creation', () => {
-    const d = descriptor()
-    const steps = plan(d)
-    const overlay = steps.find(s => s.id === 'engine-overlay')
-    expect(overlay.commands.map(c => c.argv)).toEqual([
-      ['git', 'fetch', DEFAULT_ENGINE_REPO_URL, `refs/tags/${DEFAULT_ENGINE_REF}`],
-      ['git', 'checkout', '--detach', DEFAULT_ENGINE_SHA]
-    ])
-    for (const c of overlay.commands) expect(c.cwd).toBe(d.engineDir)
-    const allArgv = steps.flatMap(s => s.commands.map(c => c.argv.join(' ')))
-    expect(allArgv.some(l => l.includes('clone'))).toBe(false)
-    expect(allArgv.some(l => l.includes('-m venv'))).toBe(false)
-    expect(allArgv.some(l => l.includes('npm ci'))).toBe(false)
-    // dependency sync exists but ONLY as the dedicated engine-deps step
-    const pipLines = steps.filter(s => s.commands.some(c => c.argv.join(' ').includes('pip install')))
-    expect(pipLines.map(s => s.id)).toEqual(['engine-deps'])
-  })
-
-  it('engine-deps prefers the official uv command (honors [tool.uv] overrides), falls back to venv pip', () => {
-    const d = descriptor()
-    const withUv = buildPlan(d, { ...TOOLS, uv: ['C:\\home\\bin\\uv.exe'] }, { generatorScript: GEN, spaces: SPACES })
-      .find(s => s.id === 'engine-deps')
-    expect(withUv.commands[0].argv).toEqual(['C:\\home\\bin\\uv.exe', 'pip', 'install', '-e', '.', '--python', d.venvPython])
-    expect(withUv.commands[0].cwd).toBe(d.engineDir)
-    const noUv = plan(d).find(s => s.id === 'engine-deps')
-    expect(noUv.commands[0].argv).toEqual([d.venvPython, '-m', 'pip', 'install', '-e', '.'])
-    expect(noUv.commands[0].cwd).toBe(d.engineDir)
   })
 
   it('creates each space profile through Hermes\u2019 OWN profile lifecycle under the one HERMES_HOME', () => {
@@ -343,48 +261,14 @@ describe('plan construction (single-home overlay model)', () => {
 })
 
 describe('per-step checks', () => {
-  it('official-install: satisfied only with BOTH the git checkout and the venv interpreter', () => {
+  it('official-install: satisfied only with BOTH native source and the venv interpreter', () => {
     const m = fakeMachine()
     const gate = plan(m.deployment).find(s => s.id === 'official-install')
-    expect(gate.check(m.io)).toMatchObject({ satisfied: false, detail: expect.stringMatching(/ZIP\/non-git/) })
+    expect(gate.check(m.io)).toMatchObject({ satisfied: false, detail: expect.stringMatching(/official Hermes/) })
     m.state.officialCheckout = true
     expect(gate.check(m.io)).toMatchObject({ satisfied: false, detail: expect.stringMatching(/venv/) })
     m.state.venv = true
     expect(gate.check(m.io).satisfied).toBe(true)
-  })
-
-  it('engine-overlay: satisfied only when HEAD equals the pinned SHA', () => {
-    const m = fakeMachine({ ...officialState(), headSha: DEFAULT_ENGINE_SHA })
-    const step = plan(m.deployment).find(s => s.id === 'engine-overlay')
-    expect(step.check(m.io).satisfied).toBe(true)
-    m.state.headSha = 'f'.repeat(40)
-    const off = step.check(m.io)
-    expect(off.satisfied).toBe(false)
-    expect(off.detail).toMatch(/!=/)
-    m.state.officialCheckout = false
-    expect(step.check(m.io).satisfied).toBe(false)
-  })
-
-  it('engine-deps: satisfied only when the venv dist metadata matches the checkout pyproject', () => {
-    const m = fakeMachine({ ...officialState(), pyprojectVersion: '0.20.1', distVersion: '0.20.1' })
-    const step = plan(m.deployment).find(s => s.id === 'engine-deps')
-    expect(step.check(m.io).satisfied).toBe(true)
-    // the LIVE machine case: 0.19.1 venv under an overlaid 0.20.1 checkout
-    m.state.distVersion = '0.19.1'
-    const stale = step.check(m.io)
-    expect(stale.satisfied).toBe(false)
-    expect(stale.detail).toMatch(/0\.19\.1.*!=.*0\.20\.1/)
-    m.state.venv = false
-    expect(step.check(m.io).satisfied).toBe(false)
-    m.state.officialCheckout = false
-    expect(step.check(m.io)).toMatchObject({ satisfied: false, detail: expect.stringMatching(/pyproject/) })
-  })
-
-  it('pyprojectVersion parses the [project] version line only', () => {
-    expect(pyprojectVersion('name = "hermes-agent"\nversion = "0.20.1"\n')).toBe('0.20.1')
-    expect(pyprojectVersion("version = '1.2.3'")).toBe('1.2.3')
-    expect(pyprojectVersion('no version here')).toBeNull()
-    expect(pyprojectVersion(null)).toBeNull()
   })
 
   it('profile-create: satisfied when the profile directory exists', () => {
@@ -459,64 +343,43 @@ describe('applyPlan: sequencing, idempotency, failure propagation', () => {
     expect(caught).toBeInstanceOf(ProvisionStepError)
     expect(caught.stepId).toBe('official-install')
     expect(caught.message).toMatch(/still unsatisfied/)
-    expect(m.runs).toHaveLength(0) // the overlay/generator/gateway never ran
+    expect(m.runs).toHaveLength(0) // no profile, generator or gateway command ran
   })
 
   it('adds the capability to an official install end-to-end in step order', () => {
     const m = fakeMachine(officialState())
     const outcome = applyPlan(plan(m.deployment), m.io)
     expect(outcome.executed).toEqual([
-      'engine-overlay',
       'profile-create:village',
       'profile-create:private',
       'home-generate',
       'gateway-service'
     ])
-    expect(outcome.skipped).toEqual(['official-install', 'engine-deps'])
+    expect(outcome.skipped).toEqual(['official-install'])
     expect(m.runs.map(r => r.argv.join(' ')).some(l => l.includes('gateway install'))).toBe(true)
-  })
-
-  it('LIVE-MACHINE case: an 0.19.x official install gets a dependency resync after the overlay', () => {
-    // Verified real scenario (2026-08-16): live venv pinned at 0.19.1, the
-    // overlay checkout moves pyproject to the fork's 0.20.1 base.
-    const m = fakeMachine({ ...officialState(), pyprojectVersion: '0.19.1', distVersion: '0.19.1' })
-    const outcome = applyPlan(plan(m.deployment), m.io)
-    expect(outcome.executed).toEqual([
-      'engine-overlay',
-      'engine-deps',
-      'profile-create:village',
-      'profile-create:private',
-      'home-generate',
-      'gateway-service'
-    ])
-    expect(m.state.distVersion).toBe('0.20.1')
-    const pip = m.runs.map(r => r.argv.join(' ')).filter(l => l.includes('pip install'))
-    expect(pip).toHaveLength(1)
   })
 
   it('is a no-op on a healthy deployment: nothing executed, all skipped', () => {
     const m = fakeMachine(provisionedState())
     const outcome = applyPlan(plan(m.deployment), m.io)
     expect(outcome.executed).toEqual([])
-    expect(outcome.skipped).toHaveLength(7)
+    expect(outcome.skipped).toHaveLength(5)
     expect(m.runs).toHaveLength(0)
   })
 
   it('executes only the unsatisfied tail after partial provisioning', () => {
-    const m = fakeMachine({ ...officialState(), headSha: DEFAULT_ENGINE_SHA, profiles: { village: true, private: true } })
+    const m = fakeMachine({ ...officialState(), profiles: { village: true, private: true } })
     const outcome = applyPlan(plan(m.deployment), m.io)
     expect(outcome.skipped).toEqual([
       'official-install',
-      'engine-overlay',
-      'engine-deps',
       'profile-create:village',
       'profile-create:private'
     ])
     expect(outcome.executed).toEqual(['home-generate', 'gateway-service'])
   })
 
-  it('FAILS CLOSED: a nonzero exit in the overlay aborts before any later step runs', () => {
-    const m = fakeMachine({ ...officialState(), failOn: 'checkout --detach' })
+  it('FAILS CLOSED: a nonzero exit in profile creation aborts before any later step runs', () => {
+    const m = fakeMachine({ ...officialState(), failOn: 'profile create' })
     let caught
     try {
       applyPlan(plan(m.deployment), m.io)
@@ -524,11 +387,11 @@ describe('applyPlan: sequencing, idempotency, failure propagation', () => {
       caught = err
     }
     expect(caught).toBeInstanceOf(ProvisionStepError)
-    expect(caught.stepId).toBe('engine-overlay')
+    expect(caught.stepId).toBe('profile-create:village')
     expect(caught.exitCode).toBe(1)
     expect(caught.message).toMatch(/later steps not attempted/)
     const lines = m.runs.map(r => r.argv.join(' '))
-    expect(lines.filter(l => l.includes('profile create'))).toHaveLength(0)
+    expect(lines.filter(l => l.includes('profile create'))).toHaveLength(1)
     expect(lines.filter(l => l.includes('gateway install'))).toHaveLength(0)
   })
 
@@ -537,7 +400,7 @@ describe('applyPlan: sequencing, idempotency, failure propagation', () => {
     // fetch+checkout return exit 0 but HEAD never moves:
     const io = { ...m.io, run: spec => (m.runs.push(spec), { code: 0 }) }
     expect(() => applyPlan(plan(m.deployment), io)).toThrow(/still unsatisfied/)
-    expect(m.runs).toHaveLength(2) // fetch + checkout, aborted at the post-check
+    expect(m.runs).toHaveLength(1) // profile command did not create a profile
   })
 
   it('never executes report-only steps, but carries their status in the results', () => {

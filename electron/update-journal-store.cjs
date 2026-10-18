@@ -70,7 +70,7 @@ function readJournal({ file = journalPath() } = {}) {
 // Begin a new update record BEFORE any mutation. Overwrites any stale journal
 // atomically. `now` is injectable for deterministic tests.
 function beginUpdate(
-  { method, anchor = null, currentVersion = null, targetVersion = null, backupPath = null } = {},
+  { method, anchor = null, installStamp, currentVersion = null, targetVersion = null, backupPath = null } = {},
   { file = journalPath(), now = nowIso } = {}
 ) {
   const stamp = now()
@@ -79,6 +79,7 @@ function beginUpdate(
     phase: 'preflight',
     method: method || null,
     anchor: anchor || null,
+    ...(installStamp !== undefined ? { installStamp } : {}),
     currentVersion: currentVersion || null,
     targetVersion: targetVersion || null,
     backupPath: backupPath || null,

@@ -28,9 +28,8 @@ export default defineConfig(({ mode, command }) => {
       sourcemap: true
     },
     test: {
-      // Concurrent Claude Code sessions run in worktrees under .claude/ — their
-      // test copies must never be collected by this checkout's vitest run.
-      exclude: [...configDefaults.exclude, '**/.claude/**', '**/promo-video/**'],
+      // Worktrees and downloaded upstream test sources are separate projects.
+      exclude: [...configDefaults.exclude, '**/.claude/**', '**/.artifacts/**', '**/promo-video/**'],
       // Spawn-heavy suites (PowerShell/zip/python probes) exceed the 5s default
       // under parallel machine load; they pass in isolation well under this cap.
       testTimeout: 15000

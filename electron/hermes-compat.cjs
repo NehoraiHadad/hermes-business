@@ -1,17 +1,15 @@
 const { spawnSync } = require('node:child_process')
 const fs = require('node:fs')
 const path = require('node:path')
+const { safeWrite } = require('./atomic-write.cjs')
+const { validInstallStamp } = require('./hermes-install-identity.cjs')
 
 const SHA_PATTERN = /^[0-9a-f]{7,40}$/i
 
-// Main-process mirror of src/lib/hermes/compat.ts. The companion supports only
-// Hermes v0.19.x and v0.20.x, so startup and self-update accept only the
-// verified compatibility window [0.19.0, 0.21.0). Keep in lockstep with
-// scripts/plugin-sdk-contract.mjs (HERMES_COMPAT_RANGE).
-
-const HERMES_MIN_VERSION = '0.19.0'
-const HERMES_MAX_VERSION_EXCLUSIVE = '0.21.0'
-const HERMES_COMPAT_RANGE = `>=${HERMES_MIN_VERSION} <${HERMES_MAX_VERSION_EXCLUSIVE}`
+// Future official stable releases remain eligible; capability checks detect drift.
+const policy = require('../hermes-compat.json')
+const HERMES_MIN_VERSION = policy.minVersion
+const HERMES_COMPAT_RANGE = policy.range
 
 function parseVersion(text) {
   const match = String(text || '').match(/(\d+)\.(\d+)(?:\.(\d+))?/)
@@ -27,8 +25,7 @@ function isVersionSupported(text) {
   const version = parseVersion(text)
   if (!version) return false
   return (
-    compare(version, parseVersion(HERMES_MIN_VERSION)) >= 0 &&
-    compare(version, parseVersion(HERMES_MAX_VERSION_EXCLUSIVE)) < 0
+    compare(version, parseVersion(HERMES_MIN_VERSION)) >= 0
   )
 }
 
@@ -52,53 +49,15 @@ function gitProbe(root, args) {
   return spawnSync('git', ['-C', root, ...args], { encoding: 'utf8', windowsHide: true })
 }
 
-// A community engine is a deliberately pinned fork/tag until its small patch
-// queue lands upstream. Detached HEADs, missing origins and non-upstream
-// origins are never eligible for `hermes update`, which would silently pull
-// them away from the reviewed engine SHA.
+// Official stable source installs may legitimately use a detached release HEAD.
+// Only custom/missing origins require their operator's update mechanism.
 function isPinnedGitInstall(command) {
   if (!isGitInstall(command)) return false
   const root = installRepoRoot(command)
-  const branch = gitProbe(root, ['symbolic-ref', '--quiet', '--short', 'HEAD'])
-  if (branch.status !== 0 || !String(branch.stdout).trim()) return true
   const origin = gitProbe(root, ['remote', 'get-url', 'origin'])
   if (origin.status !== 0) return true
   const normalized = String(origin.stdout).trim().replace(/\\/g, '/').replace(/\.git$/i, '').toLowerCase()
   return !/(?:github\.com[/:])nousresearch\/hermes-agent$/.test(normalized)
-}
-
-// Fetch origin/<branch> and report whether the release source was actually
-// reachable. Split out from gitTargetVersion so a fetch (network) failure is
-// SURFACED to the preflight instead of being swallowed into a mutation attempt.
-// `run` is injectable for tests. Non-git → { ok:false, reason:'not-git' }.
-function gitFetchOrigin(command, branch = 'main', { run = spawnSync } = {}) {
-  if (!isGitInstall(command)) return { ok: false, reason: 'not-git' }
-  const probe = run('git', ['-C', installRepoRoot(command), 'fetch', 'origin', branch], {
-    encoding: 'utf8',
-    windowsHide: true,
-    timeout: 120_000
-  })
-  if (probe.status !== 0) {
-    return { ok: false, reason: 'fetch-failed', detail: String(probe.stderr || probe.stdout || '').trim() }
-  }
-  return { ok: true }
-}
-
-// Read the __version__ that origin/<branch> WOULD install, so a git self-update
-// cannot silently cross the tested 0.21 boundary. Reads the ALREADY-fetched
-// origin ref (the preflight runs gitFetchOrigin first and aborts if it failed —
-// we never silently re-fetch here). Returns a version string or null (unknown →
-// the forward guard is skipped and assertRunningVersionSupported re-gates the
-// ACTUAL landed version after the update as the authoritative backstop).
-function gitTargetVersion(command, branch = 'main') {
-  const root = installRepoRoot(command)
-  const show = spawnSync('git', ['-C', root, 'show', `origin/${branch}:hermes_cli/__init__.py`], {
-    encoding: 'utf8',
-    windowsHide: true
-  })
-  if (show.status !== 0) return null
-  const match = String(show.stdout).match(/__version__\s*=\s*["']([^"']+)["']/)
-  return match ? match[1] : null
 }
 
 // Capture the exact commit the install checkout is on RIGHT NOW, before any
@@ -122,9 +81,12 @@ function captureInstallCommit(command) {
 // so a hard reset here can never touch them. Hermes' own updater autostashes
 // tracked local edits and `reset --hard` never disturbs a stash, so this is
 // non-destructive to user changes. Returns {ok, reason?, detail?}.
-function resetInstallCheckout(command, commit) {
+function resetInstallCheckout(command, commit, installStamp) {
   if (!isGitInstall(command)) return { ok: false, reason: 'not-git' }
   if (!SHA_PATTERN.test(String(commit || ''))) return { ok: false, reason: 'no-anchor' }
+  const stampFile = path.join(installRepoRoot(command), 'install-stamp.json')
+  if (installStamp === undefined && fs.existsSync(stampFile)) return { ok: false, reason: 'missing-install-identity' }
+  if (installStamp !== undefined && !validInstallStamp(installStamp, commit)) return { ok: false, reason: 'invalid-install-identity' }
   const probe = spawnSync('git', ['-C', installRepoRoot(command), 'reset', '--hard', commit], {
     encoding: 'utf8',
     windowsHide: true
@@ -132,12 +94,19 @@ function resetInstallCheckout(command, commit) {
   if (probe.status !== 0) {
     return { ok: false, reason: 'reset-failed', detail: String(probe.stderr || probe.stdout || '').trim() }
   }
+  try {
+    if (installStamp === null) {
+      if (fs.existsSync(stampFile)) fs.unlinkSync(stampFile)
+    } else if (installStamp !== undefined) {
+      safeWrite(stampFile, installStamp)
+    }
+  } catch (error) { return { ok: false, reason: 'identity-restore-failed', detail: error.message } }
   return { ok: true, commit }
 }
 
 // Which official install layout backs this executable:
-//   'git'     — an upstream branch checkout: update + rollback are available.
-//   'pinned'  — a detached/non-upstream community engine; manual tag upgrade.
+//   'git'     — an official source checkout (including detached release tags).
+//   'pinned'  — a custom fork or checkout without a known official origin.
 //   'managed' — the official native/ZIP layout (<...>/hermes-agent with a
 //               pyproject.toml). Classified for status/UI, but NOT eligible for
 //               unattended auto-update (see assertUpdateMethodSupported).
@@ -168,8 +137,7 @@ function assertUpdateMethodSupported(command) {
   if (method === 'git') return method
   if (method === 'pinned') {
     throw new Error(
-      'עדכון Hermes האוטומטי בוטל: מנוע הקהילה נעוץ בגרסה מאומתת עם תיקונים זמניים. ' +
-        'לא בוצע שינוי. השדרוג יתבצע רק באמצעות גרסת קהילה מאומתת חדשה.'
+      'התקנת Hermes משתמשת במקור מותאם אישית. עדכן באמצעות מנגנון ההתקנה שלה או עבור להתקנה הרשמית של Hermes.'
     )
   }
   if (method === 'managed') {
@@ -208,22 +176,8 @@ function assertRunningVersionSupported(version) {
   return text
 }
 
-// Throw (aborting the update, before any mutation) if a git install's
-// origin/main would leave the shell on an unsupported Hermes.
-function assertUpdateTargetSupported(command) {
-  if (!isGitInstall(command)) return { checked: false, target: null }
-  const target = gitTargetVersion(command)
-  if (target && !isVersionSupported(target)) {
-    throw new Error(
-      `עדכון Hermes בוטל: הגרסה ב-origin/main (${target}) חורגת מהטווח הנתמך ${HERMES_COMPAT_RANGE}. לא בוצע שינוי.`
-    )
-  }
-  return { checked: true, target }
-}
-
 module.exports = {
   HERMES_MIN_VERSION,
-  HERMES_MAX_VERSION_EXCLUSIVE,
   HERMES_COMPAT_RANGE,
   parseVersion,
   isVersionSupported,
@@ -231,9 +185,6 @@ module.exports = {
   installRepoRoot,
   isGitInstall,
   isPinnedGitInstall,
-  gitFetchOrigin,
-  gitTargetVersion,
-  assertUpdateTargetSupported,
   captureInstallCommit,
   resetInstallCheckout,
   classifyInstallMethod,

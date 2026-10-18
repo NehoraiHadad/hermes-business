@@ -40,7 +40,6 @@ export const DISCOVERY = Object.freeze({
   diskDoorSegment: 'desktop-plugins',
   pluginFile: 'plugin.js',
   restNamespacePrefix: '/api/plugins/',
-  integrityAlgo: 'sha256',
   importMapFactory: 'sdkImportMap',
   loaderEntry: 'loadRuntimePlugin',
   contextFactory: 'createPluginContext'
@@ -56,8 +55,12 @@ export function contractFilePath(hermesHome, key) {
   return path.join(hermesAgentRoot(hermesHome), CONTRACT_FILES[key])
 }
 
-/** Parse the installed package version from hermes-agent/pyproject.toml. */
+/** Read the executing build identity; modern Hermes uses a stamped version. */
 export function readInstalledVersion(hermesHome) {
+  try {
+    const stamp = JSON.parse(readFileSync(path.join(hermesAgentRoot(hermesHome), 'install-stamp.json'), 'utf8').replace(/^\uFEFF/, ''))
+    if (/^\d+\.\d+\.\d+$/.test(stamp.baseVersion)) return stamp.baseVersion
+  } catch { /* Historical source installs may have a real pyproject version. */ }
   try {
     const toml = readFileSync(path.join(hermesAgentRoot(hermesHome), 'pyproject.toml'), 'utf8')
     return toml.match(/^\s*version\s*=\s*["']([0-9]+\.[0-9]+\.[0-9]+)["']/m)?.[1] || null
@@ -132,7 +135,7 @@ export function checkRequirements(req, sources) {
   need('pluginContract', req.ctxMethods, 'PluginContext method')
   need('pluginContract', [DISCOVERY.contextFactory], 'context factory')
   // Loader + discovery invariants.
-  need('runtimeLoader', [DISCOVERY.diskDoorSegment, DISCOVERY.pluginFile, DISCOVERY.loaderEntry, DISCOVERY.integrityAlgo, DISCOVERY.contextFactory], 'disk-door loader')
+  need('runtimeLoader', [DISCOVERY.diskDoorSegment, DISCOVERY.pluginFile, DISCOVERY.loaderEntry, DISCOVERY.contextFactory], 'disk-door loader')
   need('sdkRuntime', [DISCOVERY.importMapFactory], 'SDK import-map shim')
   return failures
 }

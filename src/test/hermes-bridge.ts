@@ -43,7 +43,7 @@ export function runningRuntime(overrides: Partial<HermesRuntime> = {}): HermesRu
     running: true,
     starting: false,
     mode: 'desktop',
-    version: '0.19.1',
+    version: '0.22.2',
     error: null,
     wsUrl: '',
     ...overrides

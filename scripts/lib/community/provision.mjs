@@ -1,80 +1,8 @@
-// Community-mode provisioning core: deployment descriptor → step plan.
-// PURE — every effect and every filesystem/command probe goes through an
-// injected io interface, so the whole planner is unit-testable without disk,
-// network, git, python or schtasks (docs/specs/community-mode.md §6).
-//
-// SINGLE-HOME MODEL (user decision 2026-08-16): community is a CAPABILITY of
-// the user's ONE Hermes installation — one engine, one gateway, one WhatsApp
-// connection, one HERMES_HOME. Nothing is cloned and no venv is created here;
-// the official Tachles bootstrap installs official Hermes (`pip install -e .`
-// into <engine>/venv — editable, so a git checkout below takes effect without
-// a reinstall), and this plan only ADDS the community capability:
-//   1. official-install  GATE (no commands): the official editable git
-//                        checkout + venv must already exist. A ZIP/non-git
-//                        install fails closed here — the overlay would
-//                        otherwise silently have no effect.
-//   2. engine-overlay    TEMPORARY until upstream PR #85490 merges: fetch the
-//                        reviewed fork tag BY URL (no remote bookkeeping —
-//                        idempotent) and detach-checkout the pinned SHA in the
-//                        SAME official checkout. The desktop updater already
-//                        classifies a detached/non-upstream checkout as
-//                        'pinned' and refuses to auto-update over it. When
-//                        the PR lands in an official release, this step is
-//                        deleted and `git checkout main` restores stock.
-//   2b. engine-deps      the checkout can cross an engine version (a live
-//                        0.19.x install overlaid with the 0.20.1-based fork
-//                        REALLY happens — verified 2026-08-16 on the live
-//                        machine: cryptography 48→50, Pillow, nemo-relay pins
-//                        moved). Editable code takes effect instantly but the
-//                        venv's pinned deps do NOT — so when the installed
-//                        dist version != the checkout's pyproject version,
-//                        re-run the OFFICIAL installer command
-//                        (`uv pip install -e .`; uv honors the pyproject's
-//                        [tool.uv] override-dependencies, which plain pip
-//                        cannot). pip is only the fallback when uv is absent.
-//   3. profile-create    one `hermes profile create <slug> --no-alias
-//                        --no-skills` per contract space — Hermes' OWN profile
-//                        lifecycle, never a hand-rolled mkdir.
-//   4. home-generate     community generator apply (scripts/community-generate.mjs
-//                        — REUSED as a child process, never reimplemented). It
-//                        merges ADDITIVELY into the existing home (see
-//                        buildGatewayConfig) — a pre-existing business
-//                        deployment keeps working.
-//   5. gateway-service   hermes gateway install as a Windows auto-start
-//                        (Scheduled Task /SC ONLOGON w/ restart handling, or the
-//                        engine's Startup-folder fallback on locked-down boxes).
-//                        HERMES_HOME is threaded via the child process env: the
-//                        engine's install() → _write_task_script() reads
-//                        get_hermes_home() (env HERMES_HOME —
-//                        hermes_constants.py:_hermes_home_from_env) and BAKES it
-//                        into the generated launchers, so the logon task always
-//                        starts the gateway on THIS home.
-//   6. auth-state        REPORT-ONLY: auth.json presence + provider state.
-//                        Interactive OAuth is the companion UI's concern.
-//   7. pairing-state     REPORT-ONLY: WhatsApp creds.json presence. QR pairing
-//                        is likewise a UI concern.
-//
-// Fail-closed rules:
-//   * apply stops at the FIRST failing command; later steps are not attempted.
-//   * after a step's commands run, its check() is re-evaluated — a command that
-//     "succeeded" without producing the satisfied state is an error, not a pass.
-//   * safety: refuses any engineDir/homeDir inside (or containing) the
-//     read-only reference checkouts or the manual pilot.
-//
-// io interface (all injected):
-//   io.isDir(absPath)  -> boolean
-//   io.isFile(absPath) -> boolean
-//   io.readFile(absPath) -> string | null (null = absent; real errors throw)
-//   io.probe({ argv, cwd?, env? }) -> { code, stdout, stderr }   read-only cmds
-//   io.run({ argv, cwd?, env? })   -> { code }                   effectful cmds
-
+// Community provisioning adds native profiles, config and skills to one Hermes
+// home. Hermes alone owns engine acquisition, dependencies and updates.
+// Every effect is injected through io; apply stops on the first failed check.
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-
-export const DEFAULT_ENGINE_REPO_URL = 'https://github.com/NehoraiHadad/hermes-agent.git'
-export const DEFAULT_ENGINE_REF = 'community-engine-v0.3.1'
-export const DEFAULT_ENGINE_SHA = 'f44d02d53ff3b74c82f47bb3c6128c294224ccd0'
-
 
 export class ProvisionRefusedError extends Error {
   constructor(message) {
@@ -180,17 +108,10 @@ export function normalizeDeployment(descriptor, { platform = process.platform } 
   const home = path.resolve(homeDir)
   const engineDir = path.resolve(descriptor.engineDir || path.join(home, 'hermes-agent'))
   const venvDir = path.join(engineDir, 'venv')
-  const engineSha = descriptor.engineSha || DEFAULT_ENGINE_SHA
-  if (!/^[0-9a-f]{40}$/i.test(engineSha)) {
-    throw new ProvisionRefusedError('descriptor.engineSha must be a full 40-character commit SHA')
-  }
   if (isInsideOrEqual(home, engineDir)) {
     throw new ProvisionRefusedError('homeDir must not live inside the engine checkout')
   }
   return {
-    engineRepoUrl: descriptor.engineRepoUrl || DEFAULT_ENGINE_REPO_URL,
-    engineRef: descriptor.engineRef || DEFAULT_ENGINE_REF,
-    engineSha: engineSha.toLowerCase(),
     homeDir: home,
     contractPath: path.resolve(contractPath),
     engineDir,
@@ -255,19 +176,6 @@ const PYTHON_ENV = Object.freeze({ PYTHONIOENCODING: 'utf-8' })
 const GATEWAY_INSTALLED_SNIPPET =
   'import sys; from hermes_cli import gateway_windows as g; sys.exit(0 if g.is_installed() else 1)'
 
-// Editable installs read hermes_cli SOURCE from the checkout, so importing
-// __version__ would always match the checkout and prove nothing. The dist-info
-// metadata in site-packages is written at INSTALL time — it is the honest
-// "which pyproject were the deps resolved against" signal.
-const DIST_VERSION_SNIPPET =
-  "from importlib.metadata import version; print(version('hermes-agent'))"
-
-/** Parse `[project] version = "…"` out of a pyproject.toml text. */
-export function pyprojectVersion(text) {
-  const m = /^version\s*=\s*["']([^"']+)["']/m.exec(text ?? '')
-  return m ? m[1] : null
-}
-
 function defaultGeneratorScript() {
   return fileURLToPath(new URL('../../community-generate.mjs', import.meta.url))
 }
@@ -284,90 +192,25 @@ function defaultGeneratorScript() {
  */
 export function buildPlan(deployment, tools, { generatorScript, spaces = [] } = {}) {
   const d = deployment
-  const git = tools?.git ?? ['git']
   const node = tools?.node ?? [process.execPath]
   const genScript = generatorScript ?? defaultGeneratorScript()
-  const gitDir = path.join(d.engineDir, '.git')
 
   const steps = []
 
-  // GATE — no commands on purpose: when unsatisfied, applyPlan runs nothing
-  // and the re-check still fails, aborting the whole apply with this detail.
-  // A ZIP/non-git official install MUST stop here: the overlay would checkout
-  // nothing and the plan would otherwise "succeed" on stock engine behavior.
+  // The native install is a prerequisite, regardless of its packaging method.
   steps.push({
     id: 'official-install',
     kind: 'execute',
-    description: 'verify the official editable Hermes install (git checkout + venv)',
+    description: 'verify the native Hermes install and interpreter',
     commands: [],
     check(io) {
-      if (!io.isDir(gitDir)) {
-        return {
-          satisfied: false,
-          detail:
-            `no git checkout at ${d.engineDir} — install official Hermes first (the Tachles installer does this); ` +
-            'a ZIP/non-git Hermes install cannot take the community engine overlay'
-        }
+      if (!io.isFile(path.join(d.engineDir, 'hermes_cli', 'main.py'))) {
+        return { satisfied: false, detail: 'Install official Hermes first; no native CLI source was found' }
       }
       if (!io.isFile(d.venvPython)) {
         return { satisfied: false, detail: `no venv interpreter at ${d.venvPython} — the official install is incomplete` }
       }
-      return { satisfied: true, detail: `official editable install present at ${d.engineDir}` }
-    }
-  })
-
-  // TEMPORARY until upstream #85490 (WhatsApp observer) ships in an official
-  // release: overlay the reviewed fork SHA onto the SAME official checkout.
-  // Fetching BY URL keeps this idempotent with zero remote bookkeeping, and
-  // the editable install means the checkout takes effect with no reinstall.
-  steps.push({
-    id: 'engine-overlay',
-    kind: 'execute',
-    description: `overlay ${d.engineRef} at ${d.engineSha.slice(0, 12)} onto the official checkout (temporary until PR #85490 merges)`,
-    commands: [
-      { argv: [...git, 'fetch', d.engineRepoUrl, `refs/tags/${d.engineRef}`], cwd: d.engineDir },
-      { argv: [...git, 'checkout', '--detach', d.engineSha], cwd: d.engineDir }
-    ],
-    check(io) {
-      if (!io.isDir(gitDir)) return { satisfied: false, detail: 'official checkout is not present yet' }
-      const head = io.probe({ argv: [...git, 'rev-parse', 'HEAD'], cwd: d.engineDir })
-      if (head.code !== 0) return { satisfied: false, detail: 'cannot resolve HEAD in the official checkout' }
-      const headSha = head.stdout.trim().toLowerCase()
-      return headSha === d.engineSha
-        ? { satisfied: true, detail: `HEAD is the pinned overlay ${d.engineRef} (${d.engineSha.slice(0, 12)})` }
-        : { satisfied: false, detail: `HEAD ${headSha.slice(0, 12)} != pinned ${d.engineSha.slice(0, 12)}` }
-    }
-  })
-
-  // The overlay checkout may cross an engine version (live 0.19.x → fork's
-  // 0.20.1 base). Editable code switches instantly; the venv's dependency pins
-  // do NOT — resync them exactly the way the official installer does. uv is
-  // REQUIRED for a correct resolve (the 0.20.1 pyproject relies on [tool.uv]
-  // override-dependencies to reconcile cryptography==50 with capped
-  // transitive deps); venv pip is only a last-resort fallback.
-  const uv = tools?.uv ?? null
-  steps.push({
-    id: 'engine-deps',
-    kind: 'execute',
-    description: 'sync venv dependencies to the overlaid checkout (official `uv pip install -e .`)',
-    commands: [
-      uv
-        ? { argv: [...uv, 'pip', 'install', '-e', '.', '--python', d.venvPython], cwd: d.engineDir, env: PYTHON_ENV }
-        : { argv: [d.venvPython, '-m', 'pip', 'install', '-e', '.'], cwd: d.engineDir, env: PYTHON_ENV }
-    ],
-    check(io) {
-      const pyproject = io.readFile(path.join(d.engineDir, 'pyproject.toml'))
-      if (pyproject == null) return { satisfied: false, detail: `no pyproject.toml at ${d.engineDir} — official checkout incomplete` }
-      const want = pyprojectVersion(pyproject)
-      if (!want) return { satisfied: false, detail: 'cannot parse the project version from pyproject.toml' }
-      const r = io.probe({ argv: [d.venvPython, '-c', DIST_VERSION_SNIPPET], cwd: d.engineDir, env: PYTHON_ENV })
-      if (r.code !== 0) {
-        return { satisfied: false, detail: 'hermes-agent dist metadata unreadable in the venv — editable install incomplete' }
-      }
-      const have = (r.stdout ?? '').trim()
-      return have === want
-        ? { satisfied: true, detail: `venv deps installed against pyproject ${want}` }
-        : { satisfied: false, detail: `installed dist ${have} != checkout pyproject ${want} — dependency pins are stale, resync required` }
+      return { satisfied: true, detail: `native Hermes install present at ${d.engineDir}` }
     }
   })
 

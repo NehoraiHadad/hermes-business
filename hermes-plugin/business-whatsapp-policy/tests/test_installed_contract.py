@@ -16,7 +16,7 @@ holds only the contract assertions.
 import unittest
 
 from business_whatsapp_policy.transport import (
-    INTERACTIVE_AUTH_METHOD,
+    INTERACTIVE_REPLY_METHOD,
     OUTBOUND_METHODS,
     REQUIRED_PLATFORM_ENTRY_FIELDS,
     is_supported_version,
@@ -53,7 +53,7 @@ class InstalledSurfaceContract(unittest.TestCase):
         self.assertTrue(self.data.get("cloud_has_check"))
         self.assertTrue(
             self.data.get("cloud_has_interactive"),
-            f"Cloud lost {INTERACTIVE_AUTH_METHOD}; interactive taps would bypass policy",
+            f"Cloud lost {INTERACTIVE_REPLY_METHOD}; interactive taps would bypass policy",
         )
         unguarded = outbound_public(methods) - OUTBOUND_METHODS["cloud"]
         self.assertEqual(

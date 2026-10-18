@@ -17,6 +17,7 @@ const EXCLUDED_DIR_NAMES = new Set([
   'dist',
   'release',
   '.claude',
+  '.artifacts',
   'promo-video',
   'coverage',
   '.vite',

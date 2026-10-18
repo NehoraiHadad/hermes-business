@@ -1,3 +1,4 @@
+const { validInstallStamp } = require('./hermes-install-identity.cjs')
 const {
   JOURNAL_VERSION,
   PHASES,
@@ -43,6 +44,9 @@ function validateJournalRecord(record) {
   if (record.backupPath != null && typeof record.backupPath !== 'string') {
     return { valid: false, reason: 'malformed backupPath (not a string)' }
   }
+  if (record.installStamp !== undefined && !validInstallStamp(record.installStamp, record.anchor)) {
+    return { valid: false, reason: 'malformed install identity' }
+  }
   return { valid: true }
 }
 
@@ -65,6 +69,7 @@ function detectIncompleteUpdate({ file = journalPath() } = {}) {
   return {
     ...record,
     anchor: null,
+    installStamp: undefined,
     backupPath: typeof record.backupPath === 'string' ? record.backupPath : null,
     malformed: true,
     invalidReason: validation.reason

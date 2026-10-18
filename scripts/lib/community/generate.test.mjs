@@ -211,10 +211,17 @@ describe('gateway config generation', () => {
     expect(cfg().whatsapp.group_user_allowed_commands).toEqual([])
   })
 
-  it('enables durable observation alongside the immediate 50-message context', () => {
-    const whatsapp = cfg().whatsapp
-    expect(whatsapp.observe_unmentioned_group_messages).toBe(true)
-    expect(whatsapp.observe_allowed_chats).toEqual([contract().groups[0].jid])
+  it('retires fork-only ambient observation settings from an existing home', () => {
+    const existing = yaml.dump({ whatsapp: { observe_unmentioned_group_messages: true, observe_allowed_chats: ['old@g.us'] } })
+    const whatsapp = yaml.load(gen({ existingConfigText: existing })['config.yaml']).whatsapp
+    expect(whatsapp).not.toHaveProperty('observe_unmentioned_group_messages')
+    expect(whatsapp).not.toHaveProperty('observe_allowed_chats')
+  })
+
+  it('keeps capture optional and scoped to non-isolated groups', () => {
+    const disabled = JSON.parse(gen()['community/archive-policy.json'])
+    expect(disabled.capture.enabled).toBe(false)
+    expect(disabled.groups.map(g => g.id)).toEqual(contract().groups.filter(g => !g.isolated).map(g => g.jid))
   })
 
   it('enables the archive plugin without privileged tool override', () => {
@@ -316,10 +323,7 @@ describe('gateway config generation', () => {
     expect(wa.group_allow_from).toEqual(expect.arrayContaining(['120363999999999999@g.us', ...jids]))
     expect(wa.allow_admin_from).toEqual(expect.arrayContaining(['972999999999', ...admins]))
     expect(wa.mention_patterns).toEqual(expect.arrayContaining(['^עסק', wakeWordPattern(contract().wakeWord)]))
-    // The retention fence stays EXACT — never unioned with pre-existing groups.
-    expect(wa.observe_allowed_chats).toEqual(
-      contract().groups.filter(g => g.isolated !== true).map(g => g.jid)
-    )
+
   })
 
   it('preserves foreign profile_routes and regenerates only contract-claimed ones', () => {
@@ -450,6 +454,7 @@ describe('per-space artifacts (§2.1)', () => {
   it('writes a server-owned archive policy with shared public groups only', () => {
     expect(buildArchivePolicy(contract())).toEqual({
       version: 1,
+      capture: { enabled: false },
       groups: [{ id: '120363000000000001@g.us', name: 'קבוצת היישוב הראשית' }]
     })
     expect(JSON.parse(gen()['community/archive-policy.json'])).toEqual(buildArchivePolicy(contract()))

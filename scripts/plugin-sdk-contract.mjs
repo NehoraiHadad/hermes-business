@@ -1,6 +1,8 @@
-export const HERMES_COMPAT_RANGE = '>=0.19.0 <0.21.0'
+import { readFileSync } from 'node:fs'
+const policy = JSON.parse(readFileSync(new URL('../hermes-compat.json', import.meta.url), 'utf8'))
+export const HERMES_COMPAT_RANGE = policy.range
 
-// Reviewed against Hermes Desktop SDK v0.20.1. Build-time validation uses this
+// Reviewed against Hermes Desktop SDK v0.22.2. Build-time validation uses this
 // snapshot when Hermes is not installed; bootstrap separately checks the real
 // SDK before installing the plugin.
 export const SDK_SYMBOLS = Object.freeze([

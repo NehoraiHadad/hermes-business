@@ -47,6 +47,10 @@ class FakeAdapter:
         self.sent.append((chat_id, content))
         return FakeSendResult(success=True)
 
+    async def send_final_ledgered(self, event, session_key, text_content, metadata, **kwargs):
+        self.sent.append((event.source.chat_id, "ledger"))
+        return FakeSendResult(success=True), self
+
     async def send_typing(self, chat_id, metadata=None):
         self.typed.append(chat_id)
 
@@ -59,8 +63,9 @@ class FakeAdapter:
         self.deleted.append(chat_id)
         return True
 
-    def _is_interactive_sender_authorized(self, _sender_id):
-        return True
+    async def _dispatch_interactive_reply(self, raw_message, contacts_by_waid):
+        self.sent.append((raw_message["from"], "interactive"))
+        return False
 
 
 @dataclass

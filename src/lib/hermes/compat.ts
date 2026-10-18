@@ -1,13 +1,8 @@
-// Reusable Hermes runtime compatibility contract for the desktop shell.
-// The companion (plugin + REST/RPC surface) is validated against Hermes
-// v0.19.x and v0.20.x, so startup and self-update refuse anything outside
-// [0.19.0, 0.21.0). Keep this range in lockstep with
-// scripts/plugin-sdk-contract.mjs (HERMES_COMPAT_RANGE) — the canonical source
-// used at build time; compat.test.ts asserts they never drift apart.
+import policy from '../../../hermes-compat.json'
 
-export const HERMES_MIN_VERSION = '0.19.0'
-export const HERMES_MAX_VERSION_EXCLUSIVE = '0.21.0'
-export const HERMES_COMPAT_RANGE = `>=${HERMES_MIN_VERSION} <${HERMES_MAX_VERSION_EXCLUSIVE}`
+// A minimum baseline, with no ceiling on future official Hermes releases.
+export const HERMES_MIN_VERSION = policy.minVersion
+export const HERMES_COMPAT_RANGE = policy.range
 
 export type Semver = { major: number; minor: number; patch: number }
 
@@ -27,8 +22,7 @@ export function isVersionSupported(text: string | null | undefined): boolean {
   const version = parseVersion(text)
   if (!version) return false
   const min = parseVersion(HERMES_MIN_VERSION)!
-  const maxExclusive = parseVersion(HERMES_MAX_VERSION_EXCLUSIVE)!
-  return compare(version, min) >= 0 && compare(version, maxExclusive) < 0
+  return compare(version, min) >= 0
 }
 
 // Hebrew, truthful copy for an unsupported runtime — no claim of an action we

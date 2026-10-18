@@ -9,9 +9,11 @@ unchanged.
 
 from __future__ import annotations
 
+import inspect
 from typing import Any
 
 from .contract import (
+    INTERACTIVE_REPLY_METHOD,
     OUTBOUND_METHODS,
     OUTBOUND_NAME_PREFIXES,
     REQUIRED_METHODS,
@@ -30,6 +32,8 @@ def _concrete_public_methods(adapter: Any) -> set[str]:
 
 
 def verify_adapter_surface(adapter: Any, family: str) -> None:
+    if family == "cloud" and not inspect.iscoroutinefunction(getattr(adapter, INTERACTIVE_REPLY_METHOD, None)):
+        raise AdapterContractError("cloud interactive dispatch must remain asynchronous")
     verify_surface(
         adapter,
         guarded=OUTBOUND_METHODS.get(family),

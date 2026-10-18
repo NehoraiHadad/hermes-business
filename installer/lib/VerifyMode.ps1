@@ -10,18 +10,17 @@ function Invoke-VerificationOnlyMode {
     [switch]$VerifyInstallerOnly,
     [Parameter(Mandatory)][string]$Repository,
     [Parameter(Mandatory)][version]$Minimum,
-    [Parameter(Mandatory)][version]$Maximum,
     [Parameter(Mandatory)]$Headers
   )
 
   if ($ResolveOnly) {
-    Resolve-LatestCompatibleRelease -Repository $Repository -Minimum $Minimum -Maximum $Maximum -Headers $Headers |
+    Resolve-LatestCompatibleRelease -Repository $Repository -Minimum $Minimum -Headers $Headers |
       ConvertTo-Json -Compress
     exit 0
   }
 
   if ($VerifyInstallerOnly) {
-    $resolved = Resolve-LatestCompatibleRelease -Repository $Repository -Minimum $Minimum -Maximum $Maximum -Headers $Headers
+    $resolved = Resolve-LatestCompatibleRelease -Repository $Repository -Minimum $Minimum -Headers $Headers
     $temporaryPath = Join-Path ([System.IO.Path]::GetTempPath()) "hermes-installer-$([guid]::NewGuid().ToString('N')).ps1"
     try {
       $blobSha = Save-VerifiedOfficialInstaller -Repository $Repository -Tag $resolved.tag -Destination $temporaryPath -Headers $Headers

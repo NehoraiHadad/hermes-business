@@ -106,14 +106,13 @@ try {
   # is asserted against by src/lib/hermes-compat-policy.test.ts.
   $compat = Get-Content -Raw -LiteralPath (Join-Path $root 'hermes-compat.json') | ConvertFrom-Json
   $minHermesVersion = [version]$compat.minVersion
-  $maxHermesVersionExclusive = [version]$compat.maxVersionExclusive
   $versionMatch = [regex]::Match($versionOutput, '\d+\.\d+\.\d+')
   if (-not $versionMatch.Success) {
     throw "Clean bootstrap produced an unparseable Hermes version: $versionOutput"
   }
   $installedVersion = [version]$versionMatch.Value
-  if ($installedVersion -lt $minHermesVersion -or $installedVersion -ge $maxHermesVersionExclusive) {
-    throw "Clean bootstrap installed a Hermes version outside the supported range [$minHermesVersion, $maxHermesVersionExclusive): $versionOutput"
+  if ($installedVersion -lt $minHermesVersion) {
+    throw "Clean bootstrap installed a Hermes version outside the supported range >=$minHermesVersion: $versionOutput"
   }
   $installReceipt = Get-Content -Raw -LiteralPath $receipt | ConvertFrom-Json
   if (

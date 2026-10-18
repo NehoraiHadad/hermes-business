@@ -1,24 +1,9 @@
 const { runCaptured } = require('./process-util.cjs')
 const { rememberLog } = require('./logs.cjs')
-const { isGitInstall, gitFetchOrigin, classifyInstallMethod } = require('./hermes-compat.cjs')
+const { classifyInstallMethod } = require('./hermes-compat.cjs')
 
-// Pre-mutation gates for the official Hermes self-update. NOTHING here stops a
-// surface, backs up, or mutates the checkout — these run first and, on any
-// failure, abort the update before a single side effect. Two concerns:
-//
-//   1. Install-method eligibility. We only auto-update an install we can BOTH
-//      preflight AND automatically roll back — that is a git checkout (reset to
-//      the captured anchor). A managed/native (ZIP) install has NO proven
-//      automatic in-place rollback: its pre-update backup ZIP is a manual
-//      recovery aid, NOT an automatic restore, so we refuse before mutation and
-//      tell the user the supported recovery path. (See assertUpdateMethodSupported
-//      in hermes-compat.cjs, which owns the git-only policy.)
-//
-//   2. Release reachability. `update --check` (read-only) and, for a git install,
-//      `git fetch origin` must both actually reach the release source. Their
-//      failures are NEVER swallowed into a mutation attempt — offline/unreachable
-//      aborts here, before we touch anything.
-
+// Hermes owns stable release discovery and reachability; never fetch main or
+// infer a target by scraping its source version.
 const OFFLINE_MESSAGE =
   'עדכון Hermes בוטל: מקור העדכון אינו נגיש (ייתכן שאין חיבור לרשת). לא בוצע שינוי; נסה שוב כשהחיבור יציב.'
 
@@ -40,11 +25,11 @@ function classifyUpdateCheck({ ok, output }) {
 // unreachable / any failed check — the failure is surfaced, never swallowed.
 async function assertReleaseReachable(
   command,
-  { run = runCaptured, isGit = isGitInstall, fetch = gitFetchOrigin, log = rememberLog } = {}
+  { run = runCaptured, log = rememberLog } = {}
 ) {
   let check
   try {
-    const { stdout, stderr } = await run(command, ['update', '--check'], 5 * 60_000)
+    const { stdout, stderr } = await run(command, ['update', '--check', '--channel', 'stable'], 5 * 60_000)
     check = { ok: true, output: `${stdout || ''}\n${stderr || ''}` }
   } catch (error) {
     check = { ok: false, output: error.message || String(error) }
@@ -57,15 +42,6 @@ async function assertReleaseReachable(
   if (verdict === 'blocked') {
     log(`update --check failed: ${String(check.output).slice(0, 200)}`)
     throw new Error(`עדכון Hermes בוטל: בדיקת זמינות העדכון נכשלה. לא בוצע שינוי. פרטים: ${String(check.output).slice(0, 160)}`)
-  }
-  // For a git install, `git fetch origin` is the authoritative reachability gate;
-  // a fetch failure must abort rather than be swallowed into `update --yes`.
-  if (isGit(command)) {
-    const fetched = fetch(command)
-    if (!fetched.ok) {
-      log(`git fetch origin failed before update: ${fetched.detail || fetched.reason || 'unknown'}`)
-      throw new Error(`${OFFLINE_MESSAGE}${fetched.detail ? ` (${String(fetched.detail).slice(0, 160)})` : ''}`)
-    }
   }
   return { reachable: true, method: classifyInstallMethod(command) }
 }

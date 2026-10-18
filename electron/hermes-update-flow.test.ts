@@ -12,15 +12,14 @@ describe('runOfficialUpdate — success ordering & health gates', () => {
     expect(result).toMatchObject({
       ok: true,
       completed: true,
-      version: '0.19.1',
+      version: '0.22.2',
       backupPath: '/backups/pre-update.zip'
     })
     expect(calls).toEqual([
       'methodGate',
       'releaseReachable',
-      'targetPreflight',
       'anchor',
-      'version:0.19.1', // current version captured for the journal, pre-mutation
+      'version:0.22.2', // current version captured for the journal, pre-mutation
       'journal:begin',
       'journal:stopping',
       'stop',
@@ -28,7 +27,7 @@ describe('runOfficialUpdate — success ordering & health gates', () => {
       'journal:backup',
       'backup',
       'journal:mutating',
-      'run:update --yes',
+      'run:update --yes --channel stable',
       'journal:recovering',
       'ensureGw',
       'start',
@@ -42,7 +41,7 @@ describe('runOfficialUpdate — success ordering & health gates', () => {
       'deepHealth',
       'deepHealth',
       'journal:verifying',
-      'version:0.19.1',
+      'version:0.22.2',
       'regate',
       'journal:clear:completed'
     ])
@@ -57,9 +56,9 @@ describe('runOfficialUpdate — success ordering & health gates', () => {
   })
 
   it('re-gates the ACTUAL landed version and reports success when it is supported', async () => {
-    const { deps, calls } = makeDeps({ postVersion: 'hermes 0.19.2' })
+    const { deps, calls } = makeDeps({ postVersion: 'hermes 0.23.0' })
     const result = await runOfficialUpdate(deps)
-    expect(result).toMatchObject({ ok: true, completed: true, version: 'hermes 0.19.2' })
+    expect(result).toMatchObject({ ok: true, completed: true, version: 'hermes 0.23.0' })
     expect(calls.indexOf('regate')).toBeGreaterThan(calls.indexOf('deepHealth'))
     expect(calls.some(c => c.startsWith('rollback:'))).toBe(false)
     expect(calls).toContain('journal:clear:completed')

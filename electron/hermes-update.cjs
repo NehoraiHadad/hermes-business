@@ -4,7 +4,6 @@ const { runCaptured } = require('./process-util.cjs')
 const { stopHermes, startHermes, hermesApi } = require('./runtime.cjs')
 const { ensureGatewayBackground } = require('./google-setup.cjs')
 const {
-  assertUpdateTargetSupported,
   assertUpdateMethodSupported,
   assertRunningVersionSupported
 } = require('./hermes-compat.cjs')
@@ -36,8 +35,7 @@ function defaultDeps() {
     assertGatewayDeepHealthy: command => assertGatewayDeepHealthy(command),
     assertUpdateMethodSupported,
     assertReleaseReachable: command => assertReleaseReachable(command),
-    assertUpdateTargetSupported,
-    assertRunningVersionSupported,
+      assertRunningVersionSupported,
     createPreUpdateBackup,
     captureRollbackAnchor,
     rollbackAfterFailedUpdate,

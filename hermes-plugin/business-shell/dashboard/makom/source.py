@@ -3,17 +3,17 @@ from contextlib import asynccontextmanager
 from copy import deepcopy
 import asyncio
 import httpx
+import httpx2
 from mcp import ClientSession
-from mcp.client.streamable_http import streamablehttp_client
+from mcp.client.streamable_http import streamable_http_client
 from .contract import TOOLS, check_host, parse_link
 
 
 @asynccontextmanager
 async def upstream(binding):
     await asyncio.to_thread(check_host, binding["origin"])
-    def factory(headers=None, timeout=None, auth=None):
-        return httpx.AsyncClient(headers=headers, timeout=timeout or 8, auth=auth, follow_redirects=False, trust_env=False)
-    async with streamablehttp_client(binding["origin"] + "/mcp", timeout=8, sse_read_timeout=8, httpx_client_factory=factory) as (read, write, _):
+    async with httpx2.AsyncClient(timeout=8, follow_redirects=False, trust_env=False) as http, \
+            streamable_http_client(binding["origin"] + "/mcp", http_client=http) as (read, write):
         async with ClientSession(read, write) as session:
             await session.initialize()
             yield session
@@ -39,7 +39,7 @@ async def resolve(link):
         if not TOOLS.issubset({tool.name for tool in tools}):
             raise ValueError("באתר חסרים כלי הקריאה הנדרשים למקום")
         result = await session.call_tool("list_public_prayer_calendars", {"communitySlug": binding["communitySlug"]})
-        if result.isError:
+        if result.is_error:
             raise ValueError("לא ניתן לקרוא כרגע את מידע הקהילה")
     return {**binding, "name": community["name"][:200]}
 
@@ -52,11 +52,11 @@ async def bound_tools(binding):
         if original.name not in TOOLS:
             continue
         tool = original.model_copy(deep=True)
-        schema = deepcopy(tool.inputSchema)
+        schema = deepcopy(tool.input_schema)
         schema.get("properties", {}).pop("communitySlug", None)
         schema["required"] = [name for name in schema.get("required", []) if name != "communitySlug"]
         schema["additionalProperties"] = False
-        tool.inputSchema = schema
+        tool.input_schema = schema
         tools.append(tool)
     if len(tools) != len(TOOLS):
         raise ValueError("חסרים כלי קריאה")

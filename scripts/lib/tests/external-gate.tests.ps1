@@ -97,7 +97,7 @@ function Invoke-ExternalGateTests {
     $server = Start-MockServer -Port $port -StopFile $stop -Mode 'ratelimit' -BodyPath ''
     try {
       $child = New-ProbeChild -Name 'probe-ratelimit.ps1' -BodyLines @(
-        ('Resolve-LatestCompatibleRelease -Repository ''NousResearch/hermes-agent'' -Minimum ([version]''0.17.0'') -Maximum ([version]''0.21.0'') -Headers @{ ''User-Agent'' = ''gate-test'' } -ApiBase ''http://127.0.0.1:' + $port + '''')
+        ('Resolve-LatestCompatibleRelease -Repository ''NousResearch/hermes-agent'' -Minimum ([version]''0.17.0'') -Headers @{ ''User-Agent'' = ''gate-test'' } -ApiBase ''http://127.0.0.1:' + $port + '''')
       )
       $probe = Invoke-ProbeChild -Path $child
       # The exit code is now actually CONSULTED - the old pattern threw before it.

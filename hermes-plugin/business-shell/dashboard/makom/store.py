@@ -132,7 +132,7 @@ def apply(selection, binding):
     if binding:
         # Probe the SAME bridge with a disposable binding before taking Hermes'
         # config lock. MCP discovery itself may read native configuration.
-        import yaml
+        import hermes_yaml as yaml
         from hermes_cli.mcp_config import _probe_single_server
         with tempfile.TemporaryDirectory(prefix="tachles-makom-probe-") as directory:
             temporary_home = Path(directory)

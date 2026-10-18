@@ -48,6 +48,8 @@ class ToolTests(ArchiveHome, unittest.TestCase):
         self.assertTrue(archive_available())
         result = json.loads(handle_archive({"action": "recent"}))
         self.assertTrue(result["ok"])
+        self.assertFalse(result["coverage"]["complete"])
+        self.assertEqual(result["coverage"]["mode"], "capture_paused")
         self.assertEqual(result["messages"][0]["provenance"]["sender_id"], "u1")
 
         rejected = json.loads(handle_archive({

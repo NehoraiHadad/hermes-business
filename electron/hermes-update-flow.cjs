@@ -21,7 +21,6 @@ async function runOfficialUpdate(deps) {
     rememberLog,
     assertUpdateMethodSupported,
     assertReleaseReachable,
-    assertUpdateTargetSupported,
     assertRunningVersionSupported,
     createPreUpdateBackup,
     captureRollbackAnchor,
@@ -41,6 +40,7 @@ async function runOfficialUpdate(deps) {
   let began = false
   let backupPath = null
   let anchor = null
+  let installStamp
   let success = null
 
   try {
@@ -52,10 +52,10 @@ async function runOfficialUpdate(deps) {
     //    origin fetch must actually reach the source — failures abort here and are
     //    NEVER swallowed into a mutation attempt.
     await assertReleaseReachable(command)
-    // 3. A git install must not silently cross the tested 0.21 boundary.
-    const { target } = assertUpdateTargetSupported(command)
     // 4. Capture the exact commit to roll back to — still before any mutation.
-    anchor = captureRollbackAnchor(command).anchor
+    const identity = captureRollbackAnchor(command)
+    anchor = identity.anchor
+    installStamp = identity.installStamp
 
     // --- DURABLE JOURNAL (opened before the first side effect) ---
     // Records method/anchor/versions/backup/phase atomically so an interrupted
@@ -63,8 +63,9 @@ async function runOfficialUpdate(deps) {
     journal.beginUpdate({
       method,
       anchor,
+      installStamp,
       currentVersion: getHermesVersion(command),
-      targetVersion: target || null
+      targetVersion: null
     })
     began = true
 
@@ -82,7 +83,7 @@ async function runOfficialUpdate(deps) {
     // post-mutation fail-closed can name it.
     updated = true
     journal.updatePhase('mutating', { backupPath })
-    await runCaptured(command, ['update', '--yes'], 20 * 60_000)
+    await runCaptured(command, ['update', '--yes', '--channel', 'stable'], 20 * 60_000)
 
     // Recover both health surfaces (foreground serve + gateway deep) BEFORE any
     // success is reported.
@@ -106,7 +107,7 @@ async function runOfficialUpdate(deps) {
     if (updated) {
       // Failure AFTER the install was mutated: attempt the safe, bounded rollback
       // (git reset to the anchor; non-git → fail closed).
-      const outcome = rollbackAfterFailedUpdate({ command, anchor, backupPath })
+      const outcome = rollbackAfterFailedUpdate({ command, anchor, backupPath, installStamp })
       let recovered = false
       try {
         // STOP BEFORE RECOVERING, or the health proof below covers the WRONG CODE.

@@ -19,10 +19,10 @@ function Invoke-ReleasePackagingTests {
   # Public functions each part must own; asserts the split PRESERVED them (not a
   # facade that quietly dropped a function) and did not leave a monolith behind.
   $partFunctions = @{
-    'ReleaseSelection.ps1'   = @('Get-DefaultPinnedReleases', 'Get-ReleaseSourceVersion',
+    'ReleaseSelection.ps1'   = @(
       'Select-CompatibleRelease', 'Get-GitHubApiHeaders', 'Resolve-LatestCompatibleRelease')
     'ReleaseAcquisition.ps1' = @('Assert-VerifiedInstallerBlob', 'Save-VerifiedOfficialInstaller',
-      'Install-LatestCompatibleHermes')
+      'Install-OfficialHermesRelease')
   }
 
   Test-Case 'the facade advertises at least one split part' {
@@ -49,7 +49,7 @@ function Invoke-ReleasePackagingTests {
     $facadeText = Get-Content -Raw -LiteralPath (Join-Path $libDir 'Release.ps1')
     Assert-True ($facadeText -match 'Get-ReleaseModuleParts') 'the facade does not expose its parts'
     Assert-True ($facadeText -match 'throw') 'the facade loader is not fail-closed on a missing part'
-    foreach ($heavy in @('Install-LatestCompatibleHermes', 'Resolve-LatestCompatibleRelease', 'Save-VerifiedOfficialInstaller')) {
+    foreach ($heavy in @('Install-OfficialHermesRelease', 'Resolve-LatestCompatibleRelease', 'Save-VerifiedOfficialInstaller')) {
       Assert-True (-not ($facadeText -match "function\s+$heavy")) "the facade still defines the moved function $heavy (monolith not split)"
     }
   }

@@ -127,6 +127,9 @@ export const COMMUNITY_ARCHIVE_PLUGIN_FILES = Object.freeze([
   'filters.py',
   'policy.py',
   'query.py',
+  'capture_store.py',
+  'legacy.py',
+  'observer.py',
   'storage.py',
   'tool.py',
   'plugin.yaml'
@@ -300,12 +303,10 @@ export function buildGatewayConfig(contract, existingConfigText, adminLids = {})
   whatsapp.group_user_allowed_commands = []
   whatsapp.require_mention = true
   whatsapp.mention_patterns = unionList(whatsapp.mention_patterns, [wakeWordPattern(contract.wakeWord)])
-  whatsapp.observe_unmentioned_group_messages = true
-  // The retention fence is EXACT, never unioned: only non-isolated contract
-  // groups may have ambient traffic durably observed.
-  whatsapp.observe_allowed_chats = contract.groups
-    .filter(group => group.isolated !== true)
-    .map(group => group.jid)
+  // Retire fork-only observation keys. Official Hermes currently forwards
+  // mentioned/authorized intake; it has no WhatsApp ambient archive contract.
+  delete whatsapp.observe_unmentioned_group_messages
+  delete whatsapp.observe_allowed_chats
   if (whatsapp.history_backfill === undefined) whatsapp.history_backfill = true
   if (whatsapp.history_backfill_limit === undefined) whatsapp.history_backfill_limit = HISTORY_BACKFILL_LIMIT
   cfg.whatsapp = whatsapp
@@ -349,7 +350,7 @@ export function buildGatewayConfig(contract, existingConfigText, adminLids = {})
  *
  * `community_sources` is the GENERATOR-OWNED section of the policy file:
  * exactly the contract's group JIDs + admin DMs, regenerated on every apply
- * (an exact fence, like observe_allowed_chats). Everything else — the owner's
+ * (an exact community fence). Everything else — the owner's
  * mode/behavior/sources for the business surface — is preserved verbatim; an
  * absent file starts from the plugin's own fail-closed defaults. A
  * present-but-unparseable file is REFUSED, never overwritten.
@@ -411,6 +412,7 @@ export function buildEgressPolicy(contract, existingPolicyText, adminLids = {}) 
 export function buildArchivePolicy(contract) {
   return {
     version: 1,
+    capture: { enabled: contract.observeMessages === true },
     groups: contract.groups
       .filter(group => group.isolated !== true)
       .map(group => ({ id: group.jid, name: group.name }))

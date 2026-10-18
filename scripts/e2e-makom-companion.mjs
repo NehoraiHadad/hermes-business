@@ -13,15 +13,15 @@ import { verifyMakomUi } from './lib/probes/hermes/makom-ui.mjs'
 import { reapProcessTree } from '../electron/process-util.cjs'
 import { snapshotLoginItem, verifyAndRestoreLoginItem } from './lib/isolated-e2e/login-item-guard.mjs'
 const root = process.cwd()
-const pinned = JSON.parse(readFileSync('.artifacts/makom/pinned-runtime.json', 'utf8'))
-assert.ok(existsSync(pinned.launcher), 'Prepare the pinned runtime with scripts/makom-pinned-runtime.py first')
+const runtime = JSON.parse(readFileSync('.artifacts/makom/runtime.json', 'utf8'))
+assert.ok(existsSync(runtime.launcher), 'Prepare the test runtime with scripts/makom-test-runtime.py first')
 const sandbox = createSandbox('hermes-business-e2e-makom-')
 const loginItemBefore = snapshotLoginItem()
-const env = buildChildEnv({ base: process.env, sandbox, cliBin: pinned.launcher })
+const env = buildChildEnv({ base: process.env, sandbox, cliBin: runtime.launcher })
 Object.assign(env, {
   HERMES_BUSINESS_DEV_RUNTIME: 'isolated-dev-home',
   HERMES_BUSINESS_DEV_HERMES_HOME: sandbox.hermesHome,
-  HERMES_BUSINESS_HERMES_EXE: pinned.launcher,
+  HERMES_BUSINESS_HERMES_EXE: runtime.launcher,
   HERMES_BUSINESS_DEV_PORT: '19179',
   HERMES_NO_UPDATE_CHECK: '1', HERMES_DISABLE_UPDATE_CHECK: '1', DO_NOT_TRACK: '1'
 })
@@ -34,7 +34,7 @@ try {
   catch (error) { if (error.message === 'Port 5173 is already in use') throw error }
   await seedCompanionContext(root, sandbox)
   vite = await serveCompanionBuild(root)
-  console.log('Launching the isolated Companion with the pinned Hermes CLI.')
+  console.log('Launching the isolated Companion with the runtime Hermes CLI.')
   const debugPort = await new Promise(resolve => { const probe = net.createServer().listen(0, '127.0.0.1', () => { const port = probe.address().port; probe.close(() => resolve(port)) }) })
   app = spawn(path.join(root, 'node_modules/electron/dist/electron.exe'), [root, '--remote-debugging-port=' + debugPort], { cwd: root, env, windowsHide: true, stdio: 'ignore' })
   let debugReady = false

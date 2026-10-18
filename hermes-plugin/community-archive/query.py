@@ -9,7 +9,7 @@ from typing import Any
 
 from .filters import build_where, decode_cursor, encode_cursor, fingerprint, parse_filters
 from .policy import ArchivePolicy
-from .storage import MAX_EVIDENCE_CHARS, QueryError, connect_readonly, iso_timestamp
+from .storage import MAX_EVIDENCE_CHARS, QueryError, connect_readonly, iso_timestamp, capture_provenance
 
 COUNT_EVIDENCE_LIMIT = 20
 
@@ -20,6 +20,7 @@ def _message(row: sqlite3.Row, policy: ArchivePolicy) -> dict[str, Any]:
         "content": content[:MAX_EVIDENCE_CHARS],
         "content_truncated": len(content) > MAX_EVIDENCE_CHARS,
         "provenance": {
+            **capture_provenance(row["capture_metadata"]),
             "group_id": row["chat_id"],
             "group_name": policy.groups[row["chat_id"].lower()],
             "sender_id": row["sender_id"] or None,
@@ -45,7 +46,7 @@ def _count(conn, policy, where, params, filters) -> dict[str, Any]:
         ).fetchall()
         evidence = conn.execute(
             "SELECT m.id AS row_id, m.timestamp, m.platform_message_id, LOWER(s.chat_id) AS chat_id, "
-            "archive_text(m.display_metadata, m.content) AS archive_text, "
+            "m.display_metadata AS capture_metadata, archive_text(m.display_metadata, m.content) AS archive_text, "
             "archive_sender_id(m.display_metadata, m.content) AS sender_id, "
             "archive_sender_name(m.display_metadata, m.content) AS sender_name "
             + base + " ORDER BY m.timestamp DESC, m.id DESC LIMIT ?",
@@ -86,7 +87,7 @@ def query_archive(db_path: Path, policy: ArchivePolicy, args: dict[str, Any]) ->
             params.extend([cursor[0], cursor[0], cursor[1]])
         sql = f"""
             SELECT m.id AS row_id, m.timestamp, m.platform_message_id, LOWER(s.chat_id) AS chat_id,
-                   archive_text(m.display_metadata, m.content) AS archive_text,
+                   m.display_metadata AS capture_metadata, archive_text(m.display_metadata, m.content) AS archive_text,
                    archive_sender_id(m.display_metadata, m.content) AS sender_id,
                    archive_sender_name(m.display_metadata, m.content) AS sender_name
             FROM messages m JOIN sessions s ON s.id = m.session_id

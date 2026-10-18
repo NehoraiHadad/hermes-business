@@ -13,7 +13,7 @@ describe('runOfficialUpdate — pre-mutation aborts (nothing on the checkout cha
     await expect(runOfficialUpdate(deps)).rejects.toThrow('unsupported install method')
     expect(calls).not.toContain('stop')
     expect(calls).not.toContain('backup')
-    expect(calls).not.toContain('run:update --yes')
+    expect(calls).not.toContain('run:update --yes --channel stable')
     expect(calls).not.toContain('journal:begin')
     expect(calls.some(c => c.startsWith('rollback:'))).toBe(false)
   })
@@ -26,17 +26,9 @@ describe('runOfficialUpdate — pre-mutation aborts (nothing on the checkout cha
     expect(calls).not.toContain('journal:begin')
     expect(calls).not.toContain('stop')
     expect(calls).not.toContain('backup')
-    expect(calls).not.toContain('run:update --yes')
+    expect(calls).not.toContain('run:update --yes --channel stable')
   })
 
-  it('aborts on the compat target preflight before stopping the runtime', async () => {
-    const { deps, calls } = makeDeps({ targetThrows: true })
-    await expect(runOfficialUpdate(deps)).rejects.toThrow('target out of range')
-    expect(calls).toContain('targetPreflight')
-    expect(calls).not.toContain('journal:begin')
-    expect(calls).not.toContain('stop')
-    expect(calls).not.toContain('backup')
-  })
 
   it('aborts when the backup fails verification, without running update --yes, and clears the journal', async () => {
     const { deps, calls } = makeDeps({ backupThrows: true })
@@ -44,7 +36,7 @@ describe('runOfficialUpdate — pre-mutation aborts (nothing on the checkout cha
     expect(calls).toContain('journal:begin')
     expect(calls).toContain('stop')
     expect(calls).toContain('backup')
-    expect(calls).not.toContain('run:update --yes')
+    expect(calls).not.toContain('run:update --yes --channel stable')
     // Backup failed before mutation → no rollback, journal cleared, runtime recovered.
     expect(calls.some(c => c.startsWith('rollback:'))).toBe(false)
     expect(calls).toContain('journal:clear:aborted-before-mutation')
@@ -60,7 +52,7 @@ describe('runOfficialUpdate — post-mutation failure & rollback', () => {
     // error propagates and the journal is preserved for launch-time recovery.
     const { deps, calls } = makeDeps({ deepThrows: true })
     await expect(runOfficialUpdate(deps)).rejects.toThrow('gateway deep probe failed')
-    expect(calls).toContain('run:update --yes')
+    expect(calls).toContain('run:update --yes --channel stable')
     expect(calls).toContain('health')
     expect(calls).toContain('deepHealth')
     expect(calls).toContain(`rollback:${ANCHOR}`)
@@ -70,9 +62,9 @@ describe('runOfficialUpdate — post-mutation failure & rollback', () => {
   })
 
   it('fails closed and rolls back when the update lands an UNSUPPORTED version', async () => {
-    const { deps, calls } = makeDeps({ postVersion: '0.21.0' })
+    const { deps, calls } = makeDeps({ postVersion: '0.22.1' })
     await expect(runOfficialUpdate(deps)).rejects.toThrow('שוחזרה לגרסה הקודמת')
-    expect(calls).toContain('run:update --yes')
+    expect(calls).toContain('run:update --yes --channel stable')
     expect(calls).toContain('regate')
     expect(calls).toContain(`rollback:${ANCHOR}`)
     expect(calls).toContain('journal:clear:rolled-back')
@@ -88,7 +80,7 @@ describe('runOfficialUpdate — post-mutation failure & rollback', () => {
   it('rolls back to the anchor and recovers when update --yes fails after mutation', async () => {
     const { deps, calls } = makeDeps({ updateYesThrows: true })
     await expect(runOfficialUpdate(deps)).rejects.toThrow('שוחזרה לגרסה הקודמת')
-    expect(calls).toContain('run:update --yes')
+    expect(calls).toContain('run:update --yes --channel stable')
     expect(calls).toContain('journal:fail')
     expect(calls).toContain(`rollback:${ANCHOR}`)
     expect(calls.lastIndexOf('start')).toBeGreaterThan(calls.indexOf(`rollback:${ANCHOR}`))
@@ -115,7 +107,7 @@ describe('runOfficialUpdate — post-mutation failure & rollback', () => {
     // the rollback too), so we roll back but never falsely report it running.
     const { deps, calls } = makeDeps({ startResult: { running: false, error: 'never healthy' } })
     await expect(runOfficialUpdate(deps)).rejects.toThrow('never healthy')
-    expect(calls).toContain('run:update --yes')
+    expect(calls).toContain('run:update --yes --channel stable')
     expect(calls).toContain(`rollback:${ANCHOR}`)
     expect(calls).not.toContain('journal:clear:rolled-back')
   })
@@ -169,7 +161,7 @@ describe('runOfficialUpdate — bounded settle wait before the destructive rollb
     const { deps, calls, clock } = makeDeps({ gatewaySettlesAtMs: 16_000 })
     const result = await runOfficialUpdate(deps)
 
-    expect(result).toMatchObject({ ok: true, completed: true, version: '0.19.1' })
+    expect(result).toMatchObject({ ok: true, completed: true, version: '0.22.2' })
     // THE POINT: no `git reset` of a healthy, landed update.
     expect(calls.some(c => c.startsWith('rollback:'))).toBe(false)
     expect(calls).toContain('journal:clear:completed')
@@ -272,7 +264,7 @@ describe('runOfficialUpdate - the post-rollback health proof covers the restored
     const { deps, proofs, runningCode } = makeDeps()
     await deps.stopHermes()
     await deps.runCaptured(COMMAND, ['gateway', 'stop', '--all'])
-    await deps.runCaptured(COMMAND, ['update', '--yes'])
+    await deps.runCaptured(COMMAND, ['update', '--yes', '--channel', 'stable'])
     await deps.ensureGatewayBackground(COMMAND)
     await deps.startHermes()
     expect(runningCode()).toMatchObject({ serve: POST_UPDATE_CODE, gateway: POST_UPDATE_CODE })
@@ -294,7 +286,7 @@ describe('runOfficialUpdate - the post-rollback health proof covers the restored
   it('the version re-gate rollback is now verified against the RESTORED version', async () => {
     // The sharpest case: the update lands an unsupported version, so the flow
     // reverts the checkout and must not then certify the rejected code as healthy.
-    const { deps, calls, proofs, runningCode } = makeDeps({ postVersion: '0.21.0' })
+    const { deps, calls, proofs, runningCode } = makeDeps({ postVersion: '0.22.1' })
     await expect(runOfficialUpdate(deps)).rejects.toThrow('שוחזרה לגרסה הקודמת')
 
     // The whole proof history, in order: the first three verify the landed update
@@ -319,7 +311,7 @@ describe('runOfficialUpdate - the post-rollback health proof covers the restored
   })
 
   it('the stop lands AFTER the rollback and BEFORE the restart it is supposed to precede', async () => {
-    const { deps, calls } = makeDeps({ postVersion: '0.21.0' })
+    const { deps, calls } = makeDeps({ postVersion: '0.22.1' })
     await expect(runOfficialUpdate(deps)).rejects.toThrow()
     const rollbackAt = calls.indexOf(`rollback:${ANCHOR}`)
     const stopAt = calls.indexOf('stop', rollbackAt)
@@ -390,7 +382,7 @@ describe('runOfficialUpdate - the post-rollback health proof covers the restored
 
 describe('runOfficialUpdate - the post-rollback stop is PROVEN, not assumed', () => {
   it('happy path: the reader confirms `stopped`, so the restart and its proof stand', async () => {
-    const { deps, calls, proofs, runningCode } = makeDeps({ postVersion: '0.21.0' })
+    const { deps, calls, proofs, runningCode } = makeDeps({ postVersion: '0.22.1' })
     await expect(runOfficialUpdate(deps)).rejects.toThrow('שוחזרה לגרסה הקודמת')
     // The verification happened, between the stop and the restart...
     const stopAt = calls.indexOf('run:gateway stop --all', calls.indexOf(`rollback:${ANCHOR}`))
@@ -413,7 +405,7 @@ describe('runOfficialUpdate - the post-rollback stop is PROVEN, not assumed', ()
     // reader check, ensureGatewayBackground would have early-returned on it and the
     // deep assertion would have certified `code@post-update` as a healthy restore.
     const { deps, calls, proofs, runningCode } = makeDeps({
-      postVersion: '0.21.0',
+      postVersion: '0.22.1',
       postRollbackGatewayStopSilentlyFails: true
     })
     await expect(runOfficialUpdate(deps)).rejects.toThrow()
@@ -445,7 +437,7 @@ describe('runOfficialUpdate - the post-rollback stop is PROVEN, not assumed', ()
     // The reader returns `unknown` when the binary is missing, the spawn failed, or
     // the output was unparseable. None of those establish that the old gateway is
     // gone, so none of them may authorise a restore claim.
-    const { deps, calls, proofs } = makeDeps({ postVersion: '0.21.0', gatewayStateAfterStop: 'unknown' })
+    const { deps, calls, proofs } = makeDeps({ postVersion: '0.22.1', gatewayStateAfterStop: 'unknown' })
     await expect(runOfficialUpdate(deps)).rejects.toThrow()
     expect(calls).toContain('gatewayState')
     expect(calls.lastIndexOf('ensureGw')).toBeLessThan(calls.indexOf(`rollback:${ANCHOR}`))
@@ -457,7 +449,7 @@ describe('runOfficialUpdate - the post-rollback stop is PROVEN, not assumed', ()
     // The PRE-mutation stop keeps its swallow: a noisy stop must never abort an
     // update, and stopOfficialSurfaces itself is unchanged. So the reader is
     // consulted exactly once, and only after a rollback.
-    const { deps, calls } = makeDeps({ postVersion: '0.21.0' })
+    const { deps, calls } = makeDeps({ postVersion: '0.22.1' })
     await expect(runOfficialUpdate(deps)).rejects.toThrow()
     expect(calls.filter(c => c === 'gatewayState')).toHaveLength(1)
 

@@ -69,3 +69,11 @@ def connect_readonly(db_path: Path) -> sqlite3.Connection:
 
 def iso_timestamp(value: float) -> str:
     return datetime.fromtimestamp(value, timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def capture_provenance(value: Any) -> dict[str, Any]:
+    metadata = _metadata(value)
+    source = metadata.get("capture_source")
+    return {"capture_source": source if source in {"passive_bridge", "legacy_hermes"} else "legacy_hermes",
+            "timestamp_source": metadata.get("timestamp_source", "legacy"),
+            "capture_truncated": metadata.get("capture_truncated") is True}

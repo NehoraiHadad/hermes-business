@@ -36,8 +36,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $ProgressPreference = 'SilentlyContinue'
 
-$MinimumHermesVersion = [version]'0.19.0'
-$MaximumHermesVersion = [version]'0.21.0'
+$MinimumHermesVersion = [version]'0.22.2'
 $Repository = 'NousResearch/hermes-agent'
 if ([string]::IsNullOrWhiteSpace($BootstrapVersion)) {
   $packagePath = Join-Path (Split-Path -Parent $PSScriptRoot) 'package.json'
@@ -78,7 +77,7 @@ try {
 
   if ($ResolveOnly -or $VerifyInstallerOnly) {
     Invoke-VerificationOnlyMode -ResolveOnly:$ResolveOnly -VerifyInstallerOnly:$VerifyInstallerOnly `
-      -Repository $Repository -Minimum $MinimumHermesVersion -Maximum $MaximumHermesVersion -Headers (Get-Headers)
+      -Repository $Repository -Minimum $MinimumHermesVersion -Headers (Get-Headers)
   }
 
   if ([string]::IsNullOrWhiteSpace($PayloadRoot)) {
@@ -97,23 +96,23 @@ try {
   }
 
   $hermesExe = Find-Hermes -HermesHome $HermesHome -HermesHomeWasExplicit:$HermesHomeWasExplicit
-  if (-not $hermesExe -and -not $SkipHermesInstall) {
-    Install-LatestCompatibleHermes `
-      -Repository $Repository `
-      -Minimum $MinimumHermesVersion `
-      -Maximum $MaximumHermesVersion `
-      -HermesHome $HermesHome `
-      -Headers (Get-Headers)
-    $hermesExe = Find-Hermes -HermesHome $HermesHome -HermesHomeWasExplicit:$HermesHomeWasExplicit
+  if (-not $SkipHermesInstall) {
+    $headers = Get-Headers
+    $latest = Resolve-LatestCompatibleRelease -Repository $Repository -Minimum $MinimumHermesVersion -Headers $headers
+    $installed = if ($hermesExe) { Get-HermesVersion -HermesExe $hermesExe } else { $null }
+    $target = ConvertTo-BusinessSemVer ([string]$latest.version)
+    if ($null -eq $installed -or (Compare-BusinessSemVer $installed $target) -lt 0) {
+      Install-OfficialHermesRelease -Repository $Repository -Release $latest -HermesHome $HermesHome -Headers $headers
+      $hermesExe = Find-Hermes -HermesHome $HermesHome -HermesHomeWasExplicit:$HermesHomeWasExplicit
+    }
   }
   if (-not $hermesExe) {
     throw 'Hermes is not installed and installation was skipped or did not complete.'
   }
 
   $version = Get-HermesVersion -HermesExe $hermesExe
-  # Fail closed on an out-of-range version; a compatible existing install is
-  # preserved and used as-is.
-  Assert-CompatibleVersion -Version $version -Minimum $MinimumHermesVersion -Maximum $MaximumHermesVersion
+  # Refuse an installation below the capability baseline, including skip mode.
+  Assert-CompatibleVersion -Version $version -Minimum $MinimumHermesVersion
   # $version is a SemVer.ps1 object (ConvertTo-BusinessSemVer); interpolating it
   # directly would print PowerShell's default @{...} property dump, so use the
   # normalized display string explicitly.

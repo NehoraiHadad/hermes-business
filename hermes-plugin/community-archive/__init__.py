@@ -6,6 +6,13 @@ from .tool import ARCHIVE_SCHEMA, archive_available, handle_archive
 
 
 def register(ctx) -> None:
+    import logging
+    try:
+        from .observer import install_observer
+        from .tool import _process_home
+        install_observer(_process_home)
+    except (ImportError, AttributeError, TypeError):
+        logging.getLogger(__name__).warning("Community passive capture is unavailable; read-only history remains accessible")
     ctx.register_tool(
         name="community_archive",
         toolset="community_archive",

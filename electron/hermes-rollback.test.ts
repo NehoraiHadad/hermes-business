@@ -14,7 +14,7 @@ describe('captureRollbackAnchor', () => {
       isGit: () => true,
       capture: () => ANCHOR
     })
-    expect(result).toEqual({ gitInstall: true, anchor: ANCHOR })
+    expect(result).toEqual({ gitInstall: true, anchor: ANCHOR, installStamp: null })
   })
 
   it('reports no anchor for a non-git install (never calls capture)', () => {

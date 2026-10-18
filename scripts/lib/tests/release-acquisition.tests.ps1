@@ -64,13 +64,13 @@ function Invoke-ReleaseAcquisitionTests {
     catch { $threw = $true; Assert-True ($_.Exception.Message -match 'unexpected size') "unexpected: $($_.Exception.Message)" }
     Assert-True $threw 'an undersized installer blob was accepted'
   }
-  Test-Case 'the acquisition path is wired: verify + source-version selection are reachable' {
+  Test-Case 'the acquisition path is wired: verify + latest stable selection are reachable' {
     $save = (Get-Command Save-VerifiedOfficialInstaller).ScriptBlock.ToString()
     Assert-True ($save -match 'Assert-VerifiedInstallerBlob') 'Save-VerifiedOfficialInstaller does not delegate to the blob verifier'
-    $install = (Get-Command Install-LatestCompatibleHermes).ScriptBlock.ToString()
+    $install = (Get-Command Install-OfficialHermesRelease).ScriptBlock.ToString()
     Assert-True ($install -match 'Save-VerifiedOfficialInstaller') 'the install path does not verify the installer blob'
-    Assert-True ($install -match 'Resolve-LatestCompatibleRelease') 'the install path does not select by resolved source version'
+    Assert-True ($install -match '\$release.tag') 'the install path does not consume the resolved stable release'
     $resolve = (Get-Command Resolve-LatestCompatibleRelease).ScriptBlock.ToString()
-    Assert-True ($resolve -match 'Get-ReleaseSourceVersion') 'release selection is not wired to the authoritative source __version__'
+    Assert-True ($resolve -match '/releases/latest') 'release selection is not wired to the official latest stable endpoint'
   }
 }

@@ -115,85 +115,19 @@ describe('E2E temp-path sentinel regex accepts/rejects the same path set in both
 })
 
 // ---------------------------------------------------------------------------
-// 4) Hermes compat range >=0.19.0 <0.21.0
-//    electron/hermes-compat.cjs, src/lib/hermes/compat.ts, hermes-compat.json,
-//    scripts/plugin-sdk-contract.mjs.
-//    src/lib/hermes-compat-policy.test.ts already asserts every mirror (incl.
-//    these four) against hermes-compat.json as the canonical source, with
-//    isolated-drift meta-tests per dimension — that coverage is NOT duplicated
-//    here. This block adds a direct, self-contained four-way check scoped to
-//    exactly the modules named in this task, plus a behavioral parity check of
-//    isVersionSupported() across the .cjs and .ts copies (which the existing
-//    policy test does not do — it only compares embedded literals).
-// ---------------------------------------------------------------------------
-import {
-  HERMES_COMPAT_RANGE as CJS_RANGE,
-  HERMES_MIN_VERSION as CJS_MIN,
-  HERMES_MAX_VERSION_EXCLUSIVE as CJS_MAX,
-  isVersionSupported as cjsIsVersionSupported
-} from './hermes-compat.cjs'
-import {
-  HERMES_COMPAT_RANGE as TS_RANGE,
-  HERMES_MIN_VERSION as TS_MIN,
-  HERMES_MAX_VERSION_EXCLUSIVE as TS_MAX,
-  isVersionSupported as tsIsVersionSupported
-} from '../src/lib/hermes/compat'
+// 4) Compatibility is sourced from one policy without a future version cap.
+import policy from '../hermes-compat.json'
+import { HERMES_COMPAT_RANGE as CJS_RANGE, isVersionSupported as cjsSupported } from './hermes-compat.cjs'
+import { HERMES_COMPAT_RANGE as TS_RANGE, isVersionSupported as tsSupported } from '../src/lib/hermes/compat'
 import { HERMES_COMPAT_RANGE as MJS_RANGE } from '../scripts/plugin-sdk-contract.mjs'
-import {
-  DEFAULT_ENGINE_REF,
-  DEFAULT_ENGINE_REPO_URL,
-  DEFAULT_ENGINE_SHA
-} from '../scripts/lib/community/provision.mjs'
 
-describe('Hermes compat range stays in lockstep across all four copies', () => {
-  const canonical = JSON.parse(read('hermes-compat.json')) as {
-    range: string
-    minVersion: string
-    maxVersionExclusive: string
-  }
-
-  it('electron/hermes-compat.cjs, src/lib/hermes/compat.ts, hermes-compat.json, scripts/plugin-sdk-contract.mjs all agree on the range', () => {
-    expect(CJS_RANGE).toBe(canonical.range)
-    expect(TS_RANGE).toBe(canonical.range)
-    expect(MJS_RANGE).toBe(canonical.range)
-    expect(CJS_MIN).toBe(canonical.minVersion)
-    expect(TS_MIN).toBe(canonical.minVersion)
-    expect(CJS_MAX).toBe(canonical.maxVersionExclusive)
-    expect(TS_MAX).toBe(canonical.maxVersionExclusive)
+describe('Hermes compatibility stays aligned', () => {
+  it('all runtimes consume the same minimum policy', () => {
+    expect(CJS_RANGE).toBe(policy.range)
+    expect(TS_RANGE).toBe(policy.range)
+    expect(MJS_RANGE).toBe(policy.range)
   })
-
-  it.each(['0.18.9', '0.19.0', '0.19.99', '0.20.1', '0.21.0'])(
-    'isVersionSupported(%s) agrees between electron/hermes-compat.cjs and src/lib/hermes/compat.ts',
-    version => {
-      expect(cjsIsVersionSupported(version)).toBe(tsIsVersionSupported(version))
-    }
+  it.each(['0.0.0', '0.22.1', '0.22.2', '0.23.0', '1.0.0', '99.0.0'])(
+    'both runtime gates agree for %s', version => expect(cjsSupported(version)).toBe(tsSupported(version))
   )
-
-  it('the shared boundary semantics are what both copies actually implement (min inclusive, max exclusive)', () => {
-    expect(tsIsVersionSupported('0.18.9')).toBe(false)
-    expect(tsIsVersionSupported('0.19.0')).toBe(true)
-    expect(tsIsVersionSupported('0.19.99')).toBe(true)
-    expect(tsIsVersionSupported('0.20.1')).toBe(true)
-    expect(tsIsVersionSupported('0.21.0')).toBe(false)
-    expect(cjsIsVersionSupported('0.18.9')).toBe(false)
-    expect(cjsIsVersionSupported('0.19.0')).toBe(true)
-    expect(cjsIsVersionSupported('0.19.99')).toBe(true)
-    expect(cjsIsVersionSupported('0.20.1')).toBe(true)
-    expect(cjsIsVersionSupported('0.21.0')).toBe(false)
-  })
-})
-
-describe('community engine immutable pin stays in canonical lockstep', () => {
-  const canonical = JSON.parse(read('hermes-compat.json')).communityEngine as {
-    repository: string
-    tag: string
-    sha: string
-  }
-
-  it('provision defaults equal the canonical repository, tag and full SHA', () => {
-    expect(DEFAULT_ENGINE_REPO_URL).toBe(`https://github.com/${canonical.repository}.git`)
-    expect(DEFAULT_ENGINE_REF).toBe(canonical.tag)
-    expect(DEFAULT_ENGINE_SHA).toBe(canonical.sha)
-    expect(DEFAULT_ENGINE_SHA).toMatch(/^[0-9a-f]{40}$/)
-  })
 })

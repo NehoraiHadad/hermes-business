@@ -28,7 +28,6 @@ export type Overrides = {
   gatewayStateAfterStop?: 'running' | 'stopped' | 'unknown'
   methodThrows?: boolean
   reachableThrows?: boolean
-  targetThrows?: boolean
   backupThrows?: boolean
   updateYesThrows?: boolean
   deepThrows?: boolean
@@ -85,7 +84,7 @@ export function makeDeps(overrides: Overrides = {}) {
     platform: 'linux',
     findHermes: () => (overrides.command === undefined ? COMMAND : overrides.command),
     getHermesVersion: () => {
-      const v = overrides.postVersion === undefined ? '0.19.1' : overrides.postVersion
+      const v = overrides.postVersion === undefined ? '0.22.2' : overrides.postVersion
       calls.push(`version:${v}`)
       return v
     },
@@ -93,10 +92,10 @@ export function makeDeps(overrides: Overrides = {}) {
     runCaptured: async (_cmd: string, args: string[]) => {
       const tag = args.join(' ')
       calls.push(`run:${tag}`)
-      if (tag === 'update --yes' && overrides.updateYesThrows) throw new Error('update --yes failed')
+      if (tag === 'update --yes --channel stable' && overrides.updateYesThrows) throw new Error('update --yes failed')
       // `update --yes` rewrites the CHECKOUT only — a gateway/serve already
       // running keeps executing the old code until something restarts it.
-      if (tag === 'update --yes') checkout = POST_UPDATE_CODE
+      if (tag === 'update --yes --channel stable') checkout = POST_UPDATE_CODE
       if (tag === 'gateway stop --all' && !(rolledBack && overrides.postRollbackGatewayStopSilentlyFails)) {
         runningGateway = null
       }
@@ -144,11 +143,6 @@ export function makeDeps(overrides: Overrides = {}) {
     assertReleaseReachable: async () => {
       calls.push('releaseReachable')
       if (overrides.reachableThrows) throw new Error('release source unreachable')
-    },
-    assertUpdateTargetSupported: () => {
-      calls.push('targetPreflight')
-      if (overrides.targetThrows) throw new Error('target out of range')
-      return { checked: true, target: '0.19.2' }
     },
     // Real post-update re-gate: exercises hermes-compat.json enforcement against
     // the version getHermesVersion() reports, end-to-end through the flow.

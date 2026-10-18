@@ -21,6 +21,7 @@ class PolicyError(RuntimeError):
 @dataclass(frozen=True)
 class ArchivePolicy:
     groups: dict[str, str]
+    capture_enabled: bool = False
 
     def select(self, requested: Any = None) -> tuple[str, ...]:
         if requested is None:
@@ -67,4 +68,7 @@ def load_policy(home: Path) -> ArchivePolicy:
         if not name or len(name) > 200 or group_id in groups:
             raise PolicyError("community archive policy contains an invalid group")
         groups[group_id] = name
-    return ArchivePolicy(groups=groups)
+    capture = payload.get("capture", {})
+    if not isinstance(capture, dict) or not isinstance(capture.get("enabled", False), bool):
+        raise PolicyError("community capture setting must be an explicit boolean")
+    return ArchivePolicy(groups=groups, capture_enabled=capture.get("enabled", False))

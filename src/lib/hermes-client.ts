@@ -69,7 +69,7 @@ export class HermesClient {
         running: true,
         starting: false,
         mode: 'demo',
-        version: '0.19.0',
+        version: '0.22.2',
         error: null,
         wsUrl: ''
       } satisfies HermesRuntime

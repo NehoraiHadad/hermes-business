@@ -33,7 +33,22 @@ class TransportBlocking(TempHomeCase, unittest.TestCase):
         self.assertEqual(adapter.sent, [])
         self.assertIsNone(asyncio.run(adapter.send_typing("15551234567")))
         self.assertEqual(adapter.typed, [])
-        self.assertFalse(adapter._is_interactive_sender_authorized("15551234567"))
+        self.assertTrue(asyncio.run(adapter._dispatch_interactive_reply({"from": "15551234567"}, {})))
+        self.assertEqual(adapter.sent, [])
+
+    def test_ledgered_delivery_blocks_before_recording_or_sending(self):
+        self.install_fake_send_result()
+        write_policy(self.home, "selected_chats", ["15551234567"])
+        adapter = guard_adapter(FakeAdapter(), "whatsapp", lambda: self.home)
+        event = SimpleNamespace(source=SimpleNamespace(chat_id="15550000000"))
+        result, current = asyncio.run(adapter.send_final_ledgered(event, "s", "hi", {}, reply_to=None))
+        self.assertFalse(result.success)
+        self.assertIs(current, adapter)
+        self.assertEqual(adapter.sent, [])
+        event.source.chat_id = "15551234567"
+        result, _ = asyncio.run(adapter.send_final_ledgered(event, "s", "hi", {}, reply_to=None))
+        self.assertTrue(result.success)
+        self.assertEqual(adapter.sent, [("15551234567", "ledger")])
 
     def test_allows_only_selected_chat(self):
         self.install_fake_send_result()
@@ -42,8 +57,8 @@ class TransportBlocking(TempHomeCase, unittest.TestCase):
         result = asyncio.run(adapter.send("15551234567@s.whatsapp.net", "hi"))
         self.assertTrue(result.success)
         self.assertEqual(adapter.sent, [("15551234567@s.whatsapp.net", "hi")])
-        self.assertTrue(adapter._is_interactive_sender_authorized("15551234567"))
-        self.assertFalse(adapter._is_interactive_sender_authorized("15550000000"))
+        self.assertFalse(asyncio.run(adapter._dispatch_interactive_reply({"from": "15551234567"}, {})))
+        self.assertTrue(asyncio.run(adapter._dispatch_interactive_reply({"from": "15550000000"}, {})))
 
     def test_blocks_sync_mutating_method_in_read_only(self):
         # A plain synchronous mutating method must fail closed too — the pre-fix
@@ -72,8 +87,8 @@ class TransportBlocking(TempHomeCase, unittest.TestCase):
             blocked = asyncio.run(adapter.send(near_miss, "hi"))
             self.assertFalse(blocked.success, near_miss)
             self.assertFalse(adapter.delete(near_miss), near_miss)
-            self.assertFalse(
-                adapter._is_interactive_sender_authorized(near_miss), near_miss
+            self.assertTrue(
+                asyncio.run(adapter._dispatch_interactive_reply({"from": near_miss}, {})), near_miss
             )
         self.assertEqual(adapter.sent, [])
         self.assertEqual(adapter.deleted, [])

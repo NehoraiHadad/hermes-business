@@ -81,20 +81,18 @@ function Save-VerifiedOfficialInstaller {
     -Tag $Tag
 }
 
-function Install-LatestCompatibleHermes {
+function Install-OfficialHermesRelease {
   # Detect-then-download flow entry point: pick the newest compatible tagged
   # release, verify+run the official installer into $HermesHome, and confirm the
   # expected hermes.exe was produced. Never bundles or vendors Hermes.
   [CmdletBinding()]
   param(
     [Parameter(Mandatory)][string]$Repository,
-    [Parameter(Mandatory)][version]$Minimum,
-    [Parameter(Mandatory)][version]$Maximum,
+    [Parameter(Mandatory)]$Release,
     [Parameter(Mandatory)][string]$HermesHome,
     [Parameter(Mandatory)][hashtable]$Headers
   )
-  Write-Step 'Hermes was not found; downloading the newest compatible official release.'
-  $release = Resolve-LatestCompatibleRelease -Repository $Repository -Minimum $Minimum -Maximum $Maximum -Headers $Headers
+  Write-Step 'Installing the latest official stable Hermes release using its own installer.'
   $tag = [string]$release.tag
   Write-Step "Selected $($release.name) at immutable tag $tag."
 

@@ -36,22 +36,22 @@ async def exercise(home, link):
             await client.initialize()
             tools = (await client.list_tools()).tools
             assert len(tools) == 6
-            assert all("communitySlug" not in tool.inputSchema["properties"] for tool in tools)
+            assert all("communitySlug" not in tool.input_schema["properties"] for tool in tools)
             calendars = await client.call_tool("list_public_prayer_calendars", {})
-            assert not calendars.isError
-            data = calendars.structuredContent
+            assert not calendars.is_error
+            data = calendars.structured_content
             assert data["community"]["slug"] == resolved["communitySlug"]
             calendar = next(row for row in data["items"] if row["kind"] == "prayer-minyans")
             prayer = await client.call_tool("get_public_prayer_day", {"localDate": datetime.now(ZoneInfo("Asia/Jerusalem")).date().isoformat(), "calendarId": calendar["publicId"]})
-            assert not prayer.isError
-            assert prayer.structuredContent["community"]["slug"] == resolved["communitySlug"]
-            assert prayer.structuredContent["asOf"]
+            assert not prayer.is_error
+            assert prayer.structured_content["community"]["slug"] == resolved["communitySlug"]
+            assert prayer.structured_content["asOf"]
             forbidden = await client.call_tool("list_public_prayer_calendars", {"communitySlug": "another-community"})
-            assert forbidden.isError
+            assert forbidden.is_error
             report.update({"tools": len(tools), "liveRead": True, "prayerRead": True, "communityOverrideDenied": True})
             await asyncio.to_thread(store.apply, ["residents"], None)
             revoked = await client.call_tool("list_public_prayer_calendars", {})
-            assert revoked.isError
+            assert revoked.is_error
             report["runningProcessRevoked"] = True
     assert not store.skill_path(store.profile_home("residents")).exists()
     assert name not in store.read_config(store.profile_home("residents")).get("mcp_servers", {})
@@ -63,16 +63,18 @@ async def exercise(home, link):
 async def exercise_native_registry(resolved, report):
     """One native process must not reuse another profile or binding's session."""
     from makom import store
-    from tools import mcp_tool as native
+    from tools.mcp_tool_discovery import register_mcp_servers
+    from tools.mcp_tool_lifecycle import shutdown_mcp_servers
+    from tools.mcp_tool_schema import mcp_prefixed_tool_name
     from tools.registry import registry
 
     async def register(profile):
         cfg = store.read_config(store.profile_home(profile))
         name = cfg["tachles_makom"]["serverName"]
-        await asyncio.to_thread(native.register_mcp_servers, cfg["mcp_servers"])
+        await asyncio.to_thread(register_mcp_servers, cfg["mcp_servers"])
         tools = registry.get_tool_names_for_toolset("mcp-" + name)
         assert len(tools) == 6 and all(len(tool) <= 64 for tool in tools), tools
-        return name, native.mcp_prefixed_tool_name(name, "list_public_prayer_calendars")
+        return name, mcp_prefixed_tool_name(name, "list_public_prayer_calendars")
 
     async def read(tool):
         return str(await asyncio.to_thread(registry.dispatch, tool, {}))
@@ -95,7 +97,7 @@ async def exercise_native_registry(resolved, report):
         assert 'MAKOM_UNAVAILABLE' in await read(new_tool)
         report.update({"nativeMultiProfileRegistration": True, "nativeReconnection": True, "nativeOldBindingRevoked": True})
     finally:
-        await asyncio.to_thread(native.shutdown_mcp_servers)
+        await asyncio.to_thread(shutdown_mcp_servers)
 
 
 def main():

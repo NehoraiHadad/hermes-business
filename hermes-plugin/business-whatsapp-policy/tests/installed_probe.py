@@ -36,7 +36,7 @@ try:
     cls = wc.WhatsAppCloudAdapter
     out["cloud_methods"] = [n for n in dir(cls) if callable(getattr(cls, n, None))]
     out["cloud_has_check"] = hasattr(wc, "check_whatsapp_cloud_requirements")
-    out["cloud_has_interactive"] = hasattr(cls, "_is_interactive_sender_authorized")
+    out["cloud_has_interactive"] = hasattr(cls, "_dispatch_interactive_reply")
 except Exception as e:
     out["errors"]["cloud"] = repr(e)
 try:

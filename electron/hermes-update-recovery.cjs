@@ -135,7 +135,7 @@ async function recoverIncompleteUpdate(deps = {}) {
   }
 
   // 3. Roll back to the pre-update anchor and re-assert both healths.
-  const outcome = rollback({ command, anchor: record.anchor, backupPath: record.backupPath })
+  const outcome = rollback({ command, anchor: record.anchor, backupPath: record.backupPath, ...(record.installStamp !== undefined ? { installStamp: record.installStamp } : {}) })
   if (outcome.restored) {
     try {
       await fullHealth(command)

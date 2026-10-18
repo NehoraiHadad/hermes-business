@@ -119,52 +119,17 @@ function Get-HermesVersion {
 
 function Test-HermesVersionCompatible {
   [CmdletBinding()]
-  param(
-    [Parameter(Mandatory)]$Version,
-    [Parameter(Mandatory)]$Minimum,
-    [Parameter(Mandatory)]$Maximum
-  )
+  param([Parameter(Mandatory)]$Version, [Parameter(Mandatory)]$Minimum)
   $version = ConvertTo-BusinessSemVerFromAny $Version
   $minimum = ConvertTo-BusinessSemVerFromAny $Minimum
-  $maximum = ConvertTo-BusinessSemVerFromAny $Maximum
-  return ((Compare-BusinessSemVer $version $minimum) -ge 0 -and (Compare-BusinessSemVer $version $maximum) -lt 0)
+  return ((Compare-BusinessSemVer $version $minimum) -ge 0)
 }
 
 function Assert-CompatibleVersion {
-  # Fail-closed compatibility gate with operator-facing guidance. An install
-  # outside the tested half-open range [Minimum, Maximum) is never modified.
-  # The half-open range semantics (>=Minimum, <Maximum) are unchanged from the
-  # previous [version]-only implementation; only the parser/comparator moved to
-  # SemVer.ps1 (see Get-HermesVersion / ConvertTo-BusinessSemVerFromAny above).
   [CmdletBinding()]
-  param(
-    [Parameter(Mandatory)]$Version,
-    [Parameter(Mandatory)]$Minimum,
-    [Parameter(Mandatory)]$Maximum
-  )
-  if (Test-HermesVersionCompatible -Version $Version -Minimum $Minimum -Maximum $Maximum) {
-    return
-  }
-  $detectedSemVer = ConvertTo-BusinessSemVerFromAny $Version
-  $minimumSemVer = ConvertTo-BusinessSemVerFromAny $Minimum
-  $maximumSemVer = ConvertTo-BusinessSemVerFromAny $Maximum
-  $detected = $detectedSemVer.raw
-  $minimumText = $minimumSemVer.raw
-  $maximumText = $maximumSemVer.raw
-  if ((Compare-BusinessSemVer $detectedSemVer $minimumSemVer) -lt 0) {
-    throw @"
-The detected Hermes $detected is older than the tested minimum $minimumText.
-Your existing install has been left untouched. To continue, update Hermes to a
-release in the range [$minimumText, $maximumText) using the official installer, then
-re-run this bootstrap. No business components were changed.
-"@
-  }
-  throw @"
-The detected Hermes $detected is newer than this business bootstrap supports
-(tested range [$minimumText, $maximumText)). Your existing install has been left
-untouched. Install an updated business bootstrap that lists $detected as
-supported, then re-run it. No business components were changed.
-"@
+  param([Parameter(Mandatory)]$Version, [Parameter(Mandatory)]$Minimum)
+  if (Test-HermesVersionCompatible -Version $Version -Minimum $Minimum) { return }
+  throw "Hermes $Version is below the required minimum $Minimum. Update using the official Hermes installer, then re-run this bootstrap. No business components were changed."
 }
 
 function Wait-HermesHealth {

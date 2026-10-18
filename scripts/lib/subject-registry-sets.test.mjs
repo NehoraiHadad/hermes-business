@@ -22,7 +22,7 @@ const CASES = [
   { rel: 'installer/business-bootstrap.nsi', body: 'OutFile y\n', changes: [THIN], stable: [PACKAGED_INPUTS] },
   { rel: 'installer/lib/Logging.ps1', body: 'function Write-Log { 2 }\n', changes: [THIN], stable: [PACKAGED_INPUTS] },
   { rel: 'scripts/build-bootstrap.ps1', body: 'param($x)\n', changes: [THIN], stable: [PACKAGED_INPUTS] },
-  { rel: 'hermes-compat.json', body: '{"range":">=0.20.0 <0.21.0"}\n', changes: [THIN], stable: [PACKAGED_INPUTS] },
+  { rel: 'hermes-compat.json', body: '{"range":">=0.23.0"}\n', changes: [THIN, PACKAGED_INPUTS], stable: [] },
   { rel: 'scripts/after-pack.cjs', body: 'exports.default=async()=>2\n', changes: [PACKAGED_INPUTS], stable: [THIN] },
   { rel: 'scripts/build-plugin.mjs', body: 'export const v=2\n', changes: [PACKAGED_INPUTS], stable: [THIN] },
   { rel: 'electron/main.cjs', body: 'run2\n', changes: [PACKAGED_INPUTS], stable: [THIN] },

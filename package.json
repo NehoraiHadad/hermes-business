@@ -114,7 +114,8 @@
       "!**/.pytest_cache/**",
       "!**/.vite/**",
       "!**/.vitest/**",
-      "!**/*.test.{cjs,mjs,js,jsx,ts,tsx,py}"
+      "!**/*.test.{cjs,mjs,js,jsx,ts,tsx,py}",
+      "hermes-compat.json"
     ],
     "extraResources": [
       {
@@ -146,15 +147,15 @@
         "to": "business-bootstrap/dashboard",
         "filter": [
           "manifest.json",
-            "plugin_api.py",
-            "makom_bridge.py",
-            "makom/__init__.py",
-            "makom/api.py",
-            "makom/contract.py",
-            "makom/source.py",
-            "makom/store.py",
-            "makom/bridge.py",
-            "makom/SKILL.md"
+          "plugin_api.py",
+          "makom_bridge.py",
+          "makom/__init__.py",
+          "makom/api.py",
+          "makom/contract.py",
+          "makom/source.py",
+          "makom/store.py",
+          "makom/bridge.py",
+          "makom/SKILL.md"
         ]
       },
       {

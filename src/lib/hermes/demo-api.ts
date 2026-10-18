@@ -8,7 +8,7 @@ export function createDemoApi() {
     if (endpoint.startsWith('/api/skills')) return skillsResponse(init) as T
     if (endpoint === '/api/health') return { ok: true, status: 'healthy' } as T
     if (endpoint === '/api/status') {
-      return { version: '0.19.0', provider: 'openrouter', gateway: 'running', cron: 'running' } as T
+      return { version: '0.22.2', provider: 'openrouter', gateway: 'running', cron: 'running' } as T
     }
     if (endpoint === '/api/providers/oauth?profile=default') {
       // Mirrors the real 0.19.1 catalog shape: all three `flow` kinds, so the

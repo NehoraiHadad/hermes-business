@@ -11,12 +11,11 @@ describe('Hermes update orchestration', () => {
     const source = readFileSync(path.resolve('electron/hermes-update-flow.cjs'), 'utf8')
     const methodGate = source.indexOf('assertUpdateMethodSupported(command)')
     const reachable = source.indexOf('assertReleaseReachable(command)')
-    const targetPreflight = source.indexOf('assertUpdateTargetSupported(command)')
     const anchor = source.indexOf('captureRollbackAnchor(command)')
     const begin = source.indexOf('journal.beginUpdate(')
     const stop = source.indexOf('await stopOfficialSurfaces(command, deps)')
     const backup = source.indexOf('await createPreUpdateBackup(command)')
-    const update = source.indexOf("runCaptured(command, ['update', '--yes']")
+    const update = source.indexOf("runCaptured(command, ['update', '--yes', '--channel', 'stable']")
     const recover = source.indexOf('await recoverRuntime(command, deps)')
 
     // Preflight (gate unsupported/no-rollback method + offline + compat target)
@@ -24,8 +23,7 @@ describe('Hermes update orchestration', () => {
     // never stops the runtime, backs up, or even opens the journal.
     expect(methodGate).toBeGreaterThan(0)
     expect(reachable).toBeGreaterThan(methodGate)
-    expect(targetPreflight).toBeGreaterThan(reachable)
-    expect(anchor).toBeGreaterThan(targetPreflight)
+    expect(anchor).toBeGreaterThan(reachable)
     // The durable journal opens after the anchor but BEFORE the first side effect.
     expect(begin).toBeGreaterThan(anchor)
     expect(stop).toBeGreaterThan(begin)
@@ -34,7 +32,7 @@ describe('Hermes update orchestration', () => {
     expect(recover).toBeGreaterThan(update)
 
     // Post-mutation failure path exists: rollback then honest recovery.
-    expect(source).toContain('rollbackAfterFailedUpdate({ command, anchor, backupPath })')
+    expect(source).toContain('rollbackAfterFailedUpdate({ command, anchor, backupPath, installStamp })')
     // Journal is cleared only after a verified-healthy completion.
     expect(source).toContain("journal.clearJournal({ outcome: 'completed' })")
 

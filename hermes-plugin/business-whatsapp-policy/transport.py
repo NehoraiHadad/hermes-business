@@ -16,28 +16,28 @@ from __future__ import annotations
 from typing import Any, Callable
 
 from .contract import (
-    INTERACTIVE_AUTH_METHOD,
+    INTERACTIVE_REPLY_METHOD,
     OUTBOUND_METHODS,
     PLATFORM_FAMILY,
     REQUIRED_METHODS,
     REQUIRED_PLATFORM_ENTRY_FIELDS,
     SUPPORTED_HERMES_VERSIONS,
-    SUPPORTED_VERSION_PREFIXES,
+    MINIMUM_HERMES_VERSION,
     AdapterContractError,
     is_supported_version,
     platform_family,
 )
-from .guards import guard_interactive_auth, guard_standalone_sender, make_outbound_guard
+from .guards import guard_interactive_reply, guard_standalone_sender, make_outbound_guard
 from .surface import verify_adapter_surface, verify_platform_entry
 
 __all__ = [
-    "INTERACTIVE_AUTH_METHOD",
+    "INTERACTIVE_REPLY_METHOD",
     "OUTBOUND_METHODS",
     "PLATFORM_FAMILY",
     "REQUIRED_METHODS",
     "REQUIRED_PLATFORM_ENTRY_FIELDS",
     "SUPPORTED_HERMES_VERSIONS",
-    "SUPPORTED_VERSION_PREFIXES",
+    "MINIMUM_HERMES_VERSION",
     "AdapterContractError",
     "is_supported_version",
     "platform_family",
@@ -75,5 +75,5 @@ def guard_adapter(adapter: Any, platform: str, home_getter: Callable[[], Any]) -
         # covers both cases.
         setattr(adapter, name, make_outbound_guard(name, original, home_getter, platform))
 
-    guard_interactive_auth(adapter, home_getter, platform)
+    guard_interactive_reply(adapter, home_getter, platform)
     return adapter

@@ -18,10 +18,9 @@ from __future__ import annotations
 import logging
 from typing import Any, Callable
 
-from .contract import INTERACTIVE_AUTH_METHOD
+from .contract import INTERACTIVE_REPLY_METHOD
 from .guard_core import (
     blocked_result,
-    guard_interactive,
     guard_standalone,
     make_guard,
     target_from_call,
@@ -62,6 +61,12 @@ def _blocked(method: str):
 
 
 def _target(method: str, args: tuple, kwargs: dict) -> Any:
+    if method == "send_final_ledgered":
+        event = args[0] if args else kwargs.get("event")
+        return getattr(getattr(event, "source", None), "chat_id", "")
+    if method == "_send_exec_approval_prompt":
+        prompt = args[0] if args else kwargs.get("prompt")
+        return getattr(prompt, "chat_id", "")
     resolver = _read_receipt_target if method == "_send_read_receipt" else None
     return target_from_call(args, kwargs, resolver)
 
@@ -70,16 +75,28 @@ def make_outbound_guard(name, original, home_getter, platform=None):
     """Wrap one outbound adapter method. ``guard_core.make_guard`` already
     branches on ``inspect.iscoroutinefunction`` to pick the async/sync wrapper,
     so there is exactly one call site here for both cases."""
-    return make_guard(name, original, _authorize(home_getter, platform), _blocked, _target)
+    def blocked(method):
+        result = _blocked(method)
+        # Native ledgered delivery returns (result, current adapter). Refuse
+        # before it records a delivery obligation that could be retried later.
+        return (result, original.__self__) if method == "send_final_ledgered" else result
+    return make_guard(name, original, _authorize(home_getter, platform), blocked, _target)
 
 
-def guard_interactive_auth(adapter: Any, home_getter: Callable[[], Any], platform=None) -> None:
-    guard_interactive(
-        adapter,
-        INTERACTIVE_AUTH_METHOD,
-        _authorize(home_getter, platform),
-        lambda args, kwargs: (args[0] if args else kwargs.get("sender_id", ""),),
-    )
+def guard_interactive_reply(adapter: Any, home_getter: Callable[[], Any], platform=None) -> None:
+    original = getattr(adapter, INTERACTIVE_REPLY_METHOD, None)
+    if not callable(original):
+        return
+    authorize = _authorize(home_getter, platform)
+
+    async def guarded(raw_message, contacts_by_waid):
+        sender = raw_message.get("from", "") if isinstance(raw_message, dict) else ""
+        if not authorize(sender):
+            # Native True means claimed: block the resolver AND text fallback.
+            return True
+        return await original(raw_message, contacts_by_waid)
+
+    setattr(adapter, INTERACTIVE_REPLY_METHOD, guarded)
 
 
 def guard_standalone_sender(original, home_getter):

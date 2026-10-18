@@ -10,12 +10,12 @@ import assert from 'node:assert/strict'
 import { reapProcessTree } from '../electron/process-util.cjs'
 import { removeOwnedDir } from './lib/probes/hermes/real-loader-fs.mjs'
 import { verifyMakomUi } from './lib/probes/hermes/makom-ui.mjs'
-const metadata = JSON.parse(readFileSync('.artifacts/makom/pinned-runtime.json', 'utf8'))
+const metadata = JSON.parse(readFileSync('.artifacts/makom/runtime.json', 'utf8'))
 const home = mkdtempSync(path.join(tmpdir(), 'tachles-makom-ui-'))
 const token = randomBytes(32).toString('hex')
 const port = await new Promise(resolve => { const probe = net.createServer().listen(0, '127.0.0.1', () => { const value = probe.address().port; probe.close(() => resolve(value)) }) })
 const origin = 'http://127.0.0.1:' + port
-const python = process.env.MAKOM_HERMES_PYTHON || path.join(process.env.LOCALAPPDATA, 'hermes/hermes-agent/venv/Scripts/python.exe')
+const python = process.env.MAKOM_HERMES_PYTHON || metadata.python
 const server = spawn(python, ['scripts/makom-http-test-server.py', home, String(port)], { windowsHide: true,
   env: { ...process.env, PYTHONUTF8: '1', PYTHONPATH: metadata.engine, HERMES_HOME: home, HERMES_DASHBOARD_SESSION_TOKEN: token,
     WHATSAPP_ENABLED: '0', TELEGRAM_ENABLED: '0', HERMES_DISABLE_UPDATE_CHECK: '1' }, stdio: ['ignore', 'pipe', 'pipe'] })

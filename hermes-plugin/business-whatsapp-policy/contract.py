@@ -1,7 +1,7 @@
 """The verified WhatsApp adapter *contract*: what surface this plugin guards,
 and the fail-closed checks that refuse to run when the live surface drifts.
 
-Verified against the official source at Hermes 0.19.1 and 0.20.1:
+Verified against the official source at Hermes 0.22.2:
 
   * Native / Baileys ("whatsapp"): bundled platform plugin
     ``plugins/platforms/whatsapp/adapter.py`` -> ``WhatsAppAdapter``. Every
@@ -9,7 +9,7 @@ Verified against the official source at Hermes 0.19.1 and 0.20.1:
     to overridden primitives, so guarding the primitives covers the surface.
   * Cloud ("whatsapp_cloud"): ``gateway/platforms/whatsapp_cloud.py`` ->
     ``WhatsAppCloudAdapter``. Native interactive taps are authorized *before*
-    the gateway dispatch hook via ``_is_interactive_sender_authorized``.
+    the gateway dispatch hook via ``_dispatch_interactive_reply``.
 
 Method selection is *contract-driven* (not a fragile mutating-prefix denylist):
 a guarded method runs only when the reply policy authorizes the resolved chat,
@@ -19,6 +19,7 @@ running unguarded.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 # ─────────────────────────── version + surface contract ────────────────────
@@ -26,8 +27,8 @@ from typing import Any
 # Hermes releases whose adapter surface this contract was verified against.
 # Single-sourced with the canonical compat manifest (hermes-compat.json); the
 # JS drift test asserts these stay in lockstep with the renderer/electron range.
-SUPPORTED_HERMES_VERSIONS = frozenset({"0.20.1"})
-SUPPORTED_VERSION_PREFIXES = ("0.19.", "0.20.")
+SUPPORTED_HERMES_VERSIONS = frozenset({"0.22.2"})
+MINIMUM_HERMES_VERSION = (0, 22, 2)
 
 # Each WhatsApp platform name maps to exactly one adapter "family". An
 # unrecognized name is treated as unknown -> fail closed.
@@ -39,7 +40,7 @@ PLATFORM_FAMILY = {
 # Resolves native interactive (button/list) taps ahead of the gateway dispatch
 # hook. Routed through the reply policy so a stale approval button cannot bypass
 # read-only mode.
-INTERACTIVE_AUTH_METHOD = "_is_interactive_sender_authorized"
+INTERACTIVE_REPLY_METHOD = "_dispatch_interactive_reply"
 
 # Outbound / mutating methods to policy-gate. Wrapping can only make a method
 # *more* restrictive: if a chat target cannot be resolved the guard blocks
@@ -64,6 +65,8 @@ _COMMON_OUTBOUND = frozenset(
         "send_private_notice",
         "send_draft",
         "send_clarify",
+        "send_exec_approval",
+        "send_final_ledgered",
     }
 )
 
@@ -82,9 +85,9 @@ OUTBOUND_METHODS = {
     },
     "cloud": _COMMON_OUTBOUND
     | {
-        "send_exec_approval",
+        "_send_exec_approval_prompt",
         "send_slash_confirm",
-        "_post_interactive",
+        "_send_interactive",
         "_send_media",
         "_send_media_from_path_or_link",
     },
@@ -94,7 +97,7 @@ OUTBOUND_METHODS = {
 # can guard -> fail closed.
 REQUIRED_METHODS = {
     "baileys": frozenset({"send", "send_typing"}),
-    "cloud": frozenset({"send", "send_typing", INTERACTIVE_AUTH_METHOD}),
+    "cloud": frozenset({"send", "send_typing", INTERACTIVE_REPLY_METHOD}),
 }
 
 # Public method-name prefixes that denote an outbound surface for the drift
@@ -141,6 +144,5 @@ def platform_family(platform: Any) -> str | None:
 
 def is_supported_version(version: Any) -> bool:
     text = str(version or "").strip()
-    if text in SUPPORTED_HERMES_VERSIONS:
-        return True
-    return any(text.startswith(prefix) for prefix in SUPPORTED_VERSION_PREFIXES)
+    match = re.fullmatch(r"v?(\d+)\.(\d+)\.(\d+)(?:\+[0-9A-Za-z.-]+)?", text)
+    return bool(match and tuple(map(int, match.groups())) >= MINIMUM_HERMES_VERSION)

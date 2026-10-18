@@ -1,30 +1,16 @@
 {
-  "$comment": "CANONICAL, single source of truth for Hermes compatibility policy. Every layer (renderer src/lib/hermes/compat.ts, electron/hermes-compat.cjs, scripts/plugin-sdk-contract.mjs, the Python plugin contract, and installer/bootstrap/Release) is asserted against this file by src/lib/hermes-compat-policy.test.ts. Edit HERE first, then update the mirrors the test names.",
-  "range": ">=0.19.0 <0.21.0",
-  "minVersion": "0.19.0",
-  "maxVersionExclusive": "0.21.0",
-  "verifiedInstalledVersion": "0.20.1",
-  "versionSource": "hermes_cli/__init__.py:__version__",
-  "communityEngine": {
-    "repository": "NehoraiHadad/hermes-agent",
-    "tag": "community-engine-v0.3.1",
-    "sha": "f44d02d53ff3b74c82f47bb3c6128c294224ccd0",
-    "officialBaseTag": "v2026.8.13",
-    "officialBaseVersion": "0.20.1",
-    "note": "Temporary immutable community runtime while the WhatsApp observer and related fixes are reviewed upstream. The installer verifies the exact SHA and the desktop updater refuses to mutate pinned/fork installs."
-  },
+  "$comment": "Tachles follows official stable Hermes. This is a minimum capability baseline, never an upper version ceiling or an engine pin.",
+  "range": ">=0.22.2",
+  "minVersion": "0.22.2",
+  "verifiedInstalledVersion": "0.22.2",
+  "versionSource": "hermes_cli.version_info.get_version_info / install-stamp.json",
   "releaseChannel": {
     "repository": "NousResearch/hermes-agent",
-    "tagScheme": "calver",
-    "tagExample": "v2026.7.30",
-    "note": "Upstream release TAGS are CalVer (vYYYY.M.D) and are NOT the package version. The authoritative semver a release installs is __version__ in hermes_cli/__init__.py at that tag — exactly what `hermes --version` reports. NEVER parse the tag as semver and NEVER scrape release prose. The thin installer reads the source __version__ per candidate tag (Release.ps1: Get-ReleaseSourceVersion) and, when that read is unavailable, falls back to the pinned map below.",
-    "installerContract": "The official scripts/install.ps1 accepts -Tag (precedence Commit > Tag > Branch); the bootstrap pins by CalVer tag and verifies the installer blob before running it."
+    "channel": "stable",
+    "tagScheme": "semver",
+    "tagExample": "v0.22.2",
+    "note": "Resolve the newest published stable SemVer release. Exclude historical CalVer tags, drafts and prereleases. Never fall back silently to an older release.",
+    "installerContract": "Verify the official scripts/install.ps1 blob at the resolved release tag, then invoke it with -Tag. Hermes owns its runtime, dependencies and updates. Community provisioning only adds profiles, configuration and skills."
   },
-  "pinnedReleases": [
-    { "tag": "v2026.8.13", "version": "0.20.1" },
-    { "tag": "v2026.7.30", "version": "0.19.1" },
-    { "tag": "v2026.7.20", "version": "0.19.0" },
-    { "tag": "v2026.6.19", "version": "0.17.0" }
-  ],
-  "trustAndUpdateProcess": "When Hermes ships a new release: (1) read hermes_cli/__init__.py __version__ at the new tag, (2) if it is still in range, add {tag, version} to pinnedReleases here AND to installer/lib/Release.ps1 Get-DefaultPinnedReleases, (3) if a new version widens support, bump range/minVersion/maxVersionExclusive here and in the mirrors this file's test enumerates, and re-verify the plugin's installed-contract tests against it. The drift test fails until every mirror matches, so the policy can never fork silently."
+  "trustAndUpdateProcess": "New official stable releases remain eligible without changing Tachles. Runtime capability checks guard actual interface drift. Before a Tachles release, verify the plugin SDK, guarded outbound surfaces, and Makom end-to-end against the newest official stable Hermes, then refresh the verified version and evidence."
 }

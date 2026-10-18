@@ -23,6 +23,13 @@
   קריאות נוספות דרך החיבור הקודם. החיבור מאפשר קריאה בלבד ואינו מפעיל מענה
   בקבוצות ווטסאפ או משנה את מדיניות הקבוצות.
 
+- **Hermes נשאר מעודכן.** המתקין בוחר את הגרסה הרשמית היציבה האחרונה.
+  מצב קהילה מוסיף יכולות בלי להחליף את המנוע בגרסה נעוצה, וגרסאות עתידיות
+  אינן נחסמות בגלל תקרת גרסה קבועה.
+- **איסוף קהילתי לבחירה.** תוסף נפרד יכול לשמור הודעות מקבוצות מאושרות גם ללא
+  אזכור הבוט, בלי להפעיל אותו. ההודעות נשמרות כמקורות עם פרטי שולח וזמן;
+  האיסוף כבוי כברירת מחדל ואינו משלים היסטוריה שהגשר לא קיבל.
+
 ### Technical
 
 - Add one shared Makom connection flow for Companion and the native Desktop plugin,
@@ -36,13 +43,25 @@
   from registering a user-wide gateway login task.
 - Verify live prayer reads, native multi-profile MCP registration, reconnection and
   revocation, both application windows, mobile layout, and unauthenticated-route
-  rejection. Keep the test Desktop and CLI on the same reviewed engine source.
-- Refresh the SDK snapshot from the pinned community engine, provision PyYAML in CI,
+  rejection. Keep the test Desktop and CLI on the same official stable release source.
+- Refresh the SDK snapshot from official Hermes 0.22.2, provision PyYAML in CI,
   isolate cron projection tests from optional MCP dependencies, and include shared
-  JavaScript sources in release fingerprints (subject scheme 4).
+  JavaScript sources and the shipped compatibility policy in release fingerprints (subject scheme 5).
+- Migrate the Makom transport/server to the MCP SDK shipped by the official PM,
+  using its native YAML facade and isolated, hash-locked Python dependencies.
+- Add opt-in passive collection to the separate community-archive plugin through
+  the native WhatsApp platform registry. Keep deduplicated evidence in a plugin-owned
+  SQLite archive, import approved legacy history read-only, preserve native mention
+  filtering, and verify durability with the actual adapter and a fresh process.
 - Honor an explicit engine selection in the isolated packaged-test runtime, so
   release verification uses the reviewed compatible engine without changing the
   operator's active installation or falling back after a missing selection.
+
+- Follow official stable Hermes without an upper version cap. Remove the community
+  fork overlay and dependency mutation, delegate update discovery to native
+  `--channel stable`, and restore the native install stamp alongside rollback code.
+- Migrate the MCP discovery/lifecycle imports and Cloud interactive dispatch guard
+  to the current native interfaces; blocked taps are claimed to prevent fallback.
 
 ---
 

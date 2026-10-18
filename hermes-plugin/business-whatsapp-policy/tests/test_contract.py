@@ -8,7 +8,7 @@ from support import TempHomeCase, write_policy
 
 from business_whatsapp_policy.registry import _guarded_factory
 from business_whatsapp_policy.transport import (
-    INTERACTIVE_AUTH_METHOD,
+    INTERACTIVE_REPLY_METHOD,
     OUTBOUND_METHODS,
     REQUIRED_PLATFORM_ENTRY_FIELDS,
     AdapterContractError,
@@ -48,11 +48,11 @@ class ContractTripwire(unittest.TestCase):
         self.assertEqual(platform_family("whatsapp"), "baileys")
         self.assertEqual(platform_family("WHATSAPP_CLOUD"), "cloud")
         self.assertIsNone(platform_family("telegram"))
-        self.assertTrue(is_supported_version("0.19.1"))
-        self.assertTrue(is_supported_version("0.19.4"))
-        self.assertTrue(is_supported_version("0.20.0"))
-        self.assertTrue(is_supported_version("0.20.9"))
-        self.assertFalse(is_supported_version("0.21.0"))
+        self.assertTrue(is_supported_version("0.22.2"))
+        self.assertTrue(is_supported_version("0.23.4"))
+        self.assertTrue(is_supported_version("1.0.0"))
+        self.assertTrue(is_supported_version("2.0.9"))
+        self.assertFalse(is_supported_version("0.22.1"))
 
     def test_conforming_surface_passes(self):
         verify_adapter_surface(Conforming(), "baileys")  # must not raise
@@ -89,7 +89,7 @@ class ContractTripwire(unittest.TestCase):
     def test_interactive_auth_name_is_in_cloud_contract(self):
         # The Cloud interactive-tap authorizer is a private method; the guard
         # hooks it by exact name, so pin that name here.
-        self.assertEqual(INTERACTIVE_AUTH_METHOD, "_is_interactive_sender_authorized")
+        self.assertEqual(INTERACTIVE_REPLY_METHOD, "_dispatch_interactive_reply")
 
 
 class DisablesOnContractFailure(TempHomeCase, unittest.TestCase):
