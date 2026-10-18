@@ -51,25 +51,30 @@ def _guarded_factory(original_factory, platform, home_getter):
     return factory
 
 
-def _blocked_factory(platform, reason):
-    """Factory that always disables a platform we could not verify."""
-
-    def factory(_config):
-        logger.error(
-            "business-whatsapp-policy: %s disabled (%s); refusing to serve an "
-            "unguarded adapter.",
-            platform,
-            reason,
-        )
-        return None
-
-    return factory
-
-
 def _guard_native(home_getter: Callable[[], Any]) -> None:
     from gateway.platform_registry import platform_registry
 
-    whatsapp = platform_registry.get("whatsapp")
+    scope = platform_registry.current_scope_key()
+    whatsapp, loader = platform_registry.snapshot_registration("whatsapp", scope=scope)
+    if whatsapp is None and loader is None:
+        scope = None
+        whatsapp, loader = platform_registry.snapshot_registration("whatsapp")
+    if loader is not None and whatsapp is None:
+        def guarded_loader():
+            loader()
+            try:
+                _guard_native(home_getter)
+            except Exception:
+                # A lazy failure happens after register() returned; replace the
+                # just-loaded native entry before the resolver can expose it.
+                from gateway.platform_registry import PlatformEntry
+                platform_registry.register(PlatformEntry(name="whatsapp", label="WhatsApp",
+                    adapter_factory=lambda _config: None, check_fn=lambda: False,
+                    source="builtin"), scope=scope)
+                logger.exception("Lazy WhatsApp contract verification failed; connection disabled")
+                raise
+        platform_registry.register_deferred("whatsapp", guarded_loader, scope=scope)
+        return
     if whatsapp is None:
         # Native Baileys not registered (e.g. Cloud-only install). Nothing to
         # guard; the pre_gateway_dispatch hook still enforces read-only.
@@ -85,7 +90,7 @@ def _guard_native(home_getter: Callable[[], Any]) -> None:
             standalone_sender_fn=guard_standalone_sender(
                 whatsapp.standalone_sender_fn, home_getter
             ),
-        )
+        ), scope=scope,
     )
 
 
@@ -97,26 +102,22 @@ def _guard_cloud(home_getter: Callable[[], Any]) -> None:
         getattr(existing_cloud, "standalone_sender_fn", None), home_getter
     )
 
-    try:
-        from gateway.platforms.whatsapp_cloud import (
-            WhatsAppCloudAdapter,
-            check_whatsapp_cloud_requirements,
-        )
+    def make_cloud(config):
+        try:
+            from gateway.platforms.whatsapp_cloud import WhatsAppCloudAdapter
+            return WhatsAppCloudAdapter(config)
+        except Exception as exc:
+            logger.error("WhatsApp Cloud unavailable (%s); disabling connection", type(exc).__name__)
+            return None
 
-        adapter_factory = _guarded_factory(
-            lambda config: WhatsAppCloudAdapter(config), "whatsapp_cloud", home_getter
-        )
-    except Exception as exc:  # noqa: BLE001 - unknown Cloud surface -> fail closed
-        # We could not import/verify the Cloud adapter. Register a DISABLED
-        # entry so a dependency being present cannot auto-enable an unguarded
-        # Cloud adapter through some other path.
-        logger.error(
-            "business-whatsapp-policy: WhatsApp Cloud adapter unavailable/unknown "
-            "(%s); registering it as disabled.",
-            exc,
-        )
-        adapter_factory = _blocked_factory("whatsapp_cloud", "adapter unverified")
-        check_whatsapp_cloud_requirements = lambda: True  # noqa: E731
+    def check_whatsapp_cloud_requirements():
+        try:
+            from gateway.platforms.whatsapp_cloud import check_whatsapp_cloud_requirements as native_check
+            return native_check()
+        except Exception:
+            return False
+
+    adapter_factory = _guarded_factory(make_cloud, "whatsapp_cloud", home_getter)
 
     platform_registry.register(
         PlatformEntry(

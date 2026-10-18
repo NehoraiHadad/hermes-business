@@ -93,12 +93,25 @@ class FakePlatformEntry:
 class FakeRegistry:
     def __init__(self):
         self.entries = {}
+        self.deferred = {}
+
+    def current_scope_key(self):
+        return 'test-home'
+
+    def snapshot_registration(self, name, *, scope=None):
+        return self.entries.get(name), self.deferred.get(name)
+
+    def register_deferred(self, name, loader, *, scope=None):
+        self.deferred[name] = loader
 
     def get(self, name):
+        if name in self.deferred:
+            self.deferred.pop(name)()
         return self.entries.get(name)
 
-    def register(self, entry):
+    def register(self, entry, *, scope=None):
         self.entries[entry.name] = entry
+        self.deferred.pop(entry.name, None)
 
     def unregister(self, name):
         """Mirror gateway.platform_registry.unregister: drop the entry and report

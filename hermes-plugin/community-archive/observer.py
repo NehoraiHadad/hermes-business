@@ -57,10 +57,28 @@ def wrap_adapter(adapter, home_getter):
 def install_observer(home_getter):
     from gateway.platform_registry import platform_registry
 
-    entry = platform_registry.get('whatsapp')
+    scope = platform_registry.current_scope_key()
+    entry, loader = platform_registry.snapshot_registration('whatsapp', scope=scope)
+    if entry is None and loader is None:
+        scope = None
+        entry, loader = platform_registry.snapshot_registration('whatsapp')
+    if loader is not None and entry is None:
+        # Materializing a native platform imports its SDK. Preserve that lazy
+        # boundary so plugin registration cannot exceed Hermes' load deadline.
+        def observed_loader():
+            loader()
+            ready, _ = platform_registry.snapshot_registration('whatsapp', scope=scope)
+            if ready is not None:
+                _install_entry(platform_registry, ready, home_getter, scope)
+        platform_registry.register_deferred('whatsapp', observed_loader, scope=scope)
+        return
     if entry is None:
         logger.warning('Native WhatsApp bridge is unavailable; passive community capture is inactive')
         return
+    _install_entry(platform_registry, entry, home_getter, scope)
+
+
+def _install_entry(platform_registry, entry, home_getter, scope):
     original = entry.adapter_factory
 
     def factory(config):
@@ -73,4 +91,4 @@ def install_observer(home_getter):
             logger.error('Native WhatsApp intake changed; passive community capture is inactive')
             return adapter
 
-    platform_registry.register(replace(entry, adapter_factory=factory))
+    platform_registry.register(replace(entry, adapter_factory=factory), scope=scope)

@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import shutil
 import sys
 import tempfile
 
@@ -33,25 +34,29 @@ def read_archive():
 
 
 async def exercise(home):
-    plugin = load_plugin()
+    from hermes_cli.plugins import PluginManager
     from gateway.config import PlatformConfig
-    from gateway.platform_registry import PlatformEntry, platform_registry
+    from gateway.platform_registry import platform_registry
+    manager = PluginManager()
+    manager.discover_and_load()
+    for key in ('community-archive', 'business-whatsapp-policy'):
+        loaded = manager._plugins[key]
+        assert loaded.enabled and not loaded.error, (key, loaded.error)
+    assert 'community_archive' in manager._plugins['community-archive'].tools_registered
+    load_plugin()  # independent reader used by the fresh-process proof below
+    # Cold plugin discovery already finished; only now materialize the native SDK.
     from plugins.platforms.whatsapp.adapter import WhatsAppAdapter
-
-    # Seed the real registry as native platform discovery does. The connection
-    # is never started; only the real adapter's message-building method executes.
-    platform_registry.register(PlatformEntry(name='whatsapp', label='WhatsApp',
-                                            adapter_factory=WhatsAppAdapter, check_fn=lambda: True,
-                                            source='builtin'))
-    class Context:
-        def register_tool(self, **kwargs):
-            assert kwargs['name'] == 'community_archive'
-    plugin.register(Context())
+    async def forbidden_send(self, chat_id, content, **kwargs):
+        raise AssertionError('A native outbound send must never be reached')
+    original_send = WhatsAppAdapter.send
+    WhatsAppAdapter.send = forbidden_send
     cfg = PlatformConfig(enabled=True, extra={'group_policy': 'allowlist',
                                              'group_allow_from': [GROUP, PRIVATE],
                                              'require_mention': True})
     adapter = platform_registry.get('whatsapp').adapter_factory(cfg)
+    WhatsAppAdapter.send = original_send
     assert adapter._tachles_passive_archive
+    assert not (await adapter.send(GROUP, 'must be blocked')).success
     data = {'chatId': GROUP, 'isGroup': True, 'messageId': 'native-unmentioned',
             'senderId': '972500000001@s.whatsapp.net', 'senderName': 'דנה',
             'body': 'מחר תפילה ב־07:00', 'timestamp': 1700000000}
@@ -72,7 +77,7 @@ async def exercise(home):
     policy_file.write_text(json.dumps(policy), encoding='utf-8')
     assert await adapter._build_message_event({**data, 'messageId': 'paused'}) is None
     assert read_archive()['matched_messages'] == 1
-    return {'actualOfficialAdapter': True, 'nativeRegistryComposition': True,
+    return {'actualOfficialAdapter': True, 'nativeRegistryComposition': True, 'nativePluginDiscovery': True, 'outboundPolicyPreserved': True,
             'unmentionedTextRetained': True, 'nativeMentionFilterPreserved': True,
             'deduplicated': True, 'privateGroupExcluded': True,
             'durableAcrossProcessRestart': True, 'disableWithoutRestart': True,
@@ -90,7 +95,11 @@ def main():
         for key in list(os.environ):
             if key.startswith('WHATSAPP_') or key == 'HERMES_PROFILE':
                 os.environ.pop(key)
-        (home / 'config.yaml').write_text('{}\n', encoding='utf-8')
+        for name in ('community-archive', 'business-whatsapp-policy'):
+            shutil.copytree(REPO / 'hermes-plugin' / name, home / 'plugins' / name,
+                            ignore=shutil.ignore_patterns('__pycache__', 'tests'))
+        (home / 'config.yaml').write_text(json.dumps({'plugins': {'enabled':
+            ['community-archive', 'business-whatsapp-policy']}}), encoding='utf-8')
         (home / 'community').mkdir()
         (home / 'community/archive-policy.json').write_text(json.dumps({
             'version': 1, 'capture': {'enabled': True}, 'groups': [{'id': GROUP, 'name': 'קהילת בדיקה'}]
