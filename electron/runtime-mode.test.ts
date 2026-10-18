@@ -98,6 +98,18 @@ describe('runtime mode contract', () => {
     expect(mode.electronUserData).toBe(path.join(fs.realpathSync.native(home), 'electron-user-data'))
     expect(mode.portRange).toBe(1)
   })
+
+  it('QA honors an explicitly selected engine without falling back to the live install', () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'hermes-qa-home-'))
+    roots.push(home)
+    const binary = path.join(home, 'missing-pinned-engine.exe')
+    const env = { ...baseEnv(), [QA_SENTINEL_ENV]: QA_SENTINEL_VALUE,
+      [QA_HOME_ENV]: home, [QA_PORT_ENV]: '47123', [DEV_BINARY_ENV]: binary }
+    const mode = resolveRuntimeMode(env)
+    expect(mode.hermesBinary).toBe(binary)
+    expect(resolveHermesBinary(mode, env)).toBeNull()
+    expect(() => resolveRuntimeMode({ ...env, [DEV_BINARY_ENV]: 'relative.exe' })).toThrow(/absolute path/)
+  })
 })
 
 describe('getRuntimeMode — memoized QA verdict (startup self-break regression)', () => {

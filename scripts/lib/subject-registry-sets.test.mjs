@@ -26,6 +26,7 @@ const CASES = [
   { rel: 'scripts/after-pack.cjs', body: 'exports.default=async()=>2\n', changes: [PACKAGED_INPUTS], stable: [THIN] },
   { rel: 'scripts/build-plugin.mjs', body: 'export const v=2\n', changes: [PACKAGED_INPUTS], stable: [THIN] },
   { rel: 'electron/main.cjs', body: 'run2\n', changes: [PACKAGED_INPUTS], stable: [THIN] },
+  { rel: 'shared/makom-form.js', body: 'export const MakomForm = () => 2\n', changes: [PACKAGED_INPUTS], stable: [THIN] },
   // HIGH 4 — the transitive release-security pipeline is attested: a containment /
   // signing / verdict change invalidates a prepared artifact but leaves THIN alone.
   { rel: 'scripts/lib/release/preflight.mjs', body: 'export const v=2\n', changes: [PACKAGED_INPUTS], stable: [THIN] },

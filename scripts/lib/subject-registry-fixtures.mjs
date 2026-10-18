@@ -19,6 +19,7 @@ export const FILES = {
   'tsconfig.json': '{}\n',
   'tsconfig.app.json': '{}\n',
   'tsconfig.node.json': '{}\n',
+  'shared/makom-form.js': 'export const MakomForm = () => null\n',
   'hermes-plugin/business-shell/plugin.js': 'module.exports={}\n',
   'installer/bootstrap.ps1': 'Write-Host hi\n',
   'installer/bootstrap-companion.ps1': 'Write-Host hi\n',

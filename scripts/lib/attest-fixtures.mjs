@@ -27,6 +27,7 @@ export function fakeRoot({ version = '9.9.9', productName = 'Widget', electron =
   // Every other declared packaged-source subject, so the full-set fingerprint
   // resolves without a MissingSubjectError.
   put(root, 'src/main.tsx', 'export const x = 1\n')
+  put(root, 'shared/makom-form.js', 'export const MakomForm = () => null\n')
   put(root, 'index.html', '<!doctype html>\n')
   put(root, 'vite.config.ts', 'export default {}\n')
   put(root, 'tsconfig.json', '{}\n')

@@ -105,11 +105,11 @@ function productionConfig(env) {
   }
 }
 
-function configFromQa(qa) {
+function configFromQa(qa, env) {
   return {
     mode: 'qa-isolated',
     hermesHome: qa.hermesHome,
-    hermesBinary: null,
+    hermesBinary: env[DEV_BINARY_ENV] ? absoluteEnvPath(env, DEV_BINARY_ENV) : null,
     host: qa.host,
     preferredPort: qa.port,
     portRange: 1,
@@ -119,7 +119,7 @@ function configFromQa(qa) {
 }
 
 function configFromQaVerdict(qa, env) {
-  if (qa.enabled) return configFromQa(qa)
+  if (qa.enabled) return configFromQa(qa, env)
   if (env[DEV_SENTINEL_ENV] === DEV_SENTINEL_VALUE) return devConfig(env)
   return productionConfig(env)
 }

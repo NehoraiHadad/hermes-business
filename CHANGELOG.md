@@ -40,6 +40,9 @@
 - Refresh the SDK snapshot from the pinned community engine, provision PyYAML in CI,
   isolate cron projection tests from optional MCP dependencies, and include shared
   JavaScript sources in release fingerprints (subject scheme 4).
+- Honor an explicit engine selection in the isolated packaged-test runtime, so
+  release verification uses the reviewed compatible engine without changing the
+  operator's active installation or falling back after a missing selection.
 
 ---
 
