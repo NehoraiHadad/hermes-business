@@ -1,5 +1,6 @@
 """Convenience reads over the unchanged public Makom contract, without inference."""
 from datetime import datetime, timedelta
+import asyncio
 import json
 import re
 from zoneinfo import ZoneInfo
@@ -71,9 +72,21 @@ async def read(session, binding, name, arguments, at=None):
             search["period"] = "all"
         matches = payload(await session.call_tool("search_public_information", search))
         items = matches["items"]
-        if len(items) != 1 or matches.get("nextCursor"):
+        if not items or matches.get("nextCursor") or len(items) > 5:
             value = {**matches, "status": "needs_selection" if items or matches.get("nextCursor") else "not_found"}
             return result(value, at)
+        if len(items) > 1:
+            async def detail(item):
+                publication = {key: item[key] for key in ("publicId", "title", "kind", "canonicalUrl") if key in item}
+                try:
+                    value = payload(await session.call_tool(name, {**args, "publicId": item["publicId"]}))
+                    return {**publication, "details": result(value, at)}
+                except Exception:
+                    # Keep successful siblings, but never turn an unreadable
+                    # publication into an empty schedule or an inferred closure.
+                    return {**publication, "status": "unavailable"}
+            values = await asyncio.gather(*(detail(item) for item in items))
+            return result({**matches, "status": "multiple_matches", "items": values}, at)
         selected = {key: items[0][key] for key in ("publicId", "title", "kind", "canonicalUrl") if key in items[0]}
         args["publicId"] = selected["publicId"]
     value = payload(await session.call_tool(name, args))

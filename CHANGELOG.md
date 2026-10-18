@@ -10,6 +10,22 @@
 
 ---
 
+## [0.4.0-alpha.16] - 2026-10-18
+
+### מה חדש (למשתמש)
+
+- שאלות על כמה שירותים, כמו שעות המרפאה, מקבלות תשובה מרוכזת לכל השירותים
+  שנמצאו, בלי שאלת הבהרה מיותרת.
+- פרטי התוצאות נקראים במקביל. מידע שלא ניתן לאמת מסומן בנפרד ואינו מסתיר
+  את שאר השירותים.
+
+### Technical
+
+- Resolve complete sets of two to five public matches in the bound MCP adapter,
+  preserving each publication's live details, citation and check time.
+- Keep paginated/oversized searches explicit and preserve successful siblings
+  when an individual source fails. Upgrade existing product-owned skills.
+
 ## [0.4.0-alpha.15] - 2026-10-18
 
 ### מה חדש (למשתמש)

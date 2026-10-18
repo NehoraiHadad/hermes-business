@@ -1,5 +1,6 @@
 """Behavioral coverage for short live reads, ambiguity and Israel-local dates."""
 from datetime import datetime
+import asyncio
 from types import SimpleNamespace
 from unittest import IsolatedAsyncioTestCase, TestCase
 from unittest.mock import AsyncMock
@@ -76,22 +77,54 @@ class LiveReadTests(IsolatedAsyncioTestCase):
             self.assertEqual(session.call_tool.await_args_list[1].args, (name, {"communitySlug": "village", "publicId": "only"}))
             self.assertEqual(value["status"], detail["status"])
 
-    async def test_multiple_no_matches_and_truncated_search_never_choose_arbitrarily(self):
-        for items, cursor, status in (([], None, "not_found"), ([{"publicId": "a"}, {"publicId": "b"}], None, "needs_selection"),
-                                      ([{"publicId": "a"}], "more", "needs_selection")):
+    async def test_empty_or_truncated_search_never_silently_returns_a_partial_schedule(self):
+        for items, cursor, status in (([], None, "not_found"),
+                                      ([{"publicId": "a"}], "more", "needs_selection"),
+                                      ([{"publicId": str(n)} for n in range(6)], None, "needs_selection")):
             session = SimpleNamespace(call_tool=AsyncMock(return_value=response({**self.envelope, "items": items, "nextCursor": cursor})))
             value = await read(session, self.binding, "get_public_service_hours", {"query": "clinic"}, self.at)
             self.assertEqual(value["status"], status)
             self.assertEqual(session.call_tool.await_count, 1)
 
-    async def test_hebrew_construct_names_are_found_without_silently_picking_a_clinic(self):
-        clinics = {**self.envelope, "items": [{"publicId": "nurse", "title": "אחות — מרפאת היישוב"},
-            {"publicId": "doctor", "title": "רופא — מרפאת היישוב"}], "nextCursor": None}
-        session = SimpleNamespace(call_tool=AsyncMock(return_value=response(clinics)))
-        value = await read(session, self.binding, "get_public_service_hours", {"query": "המרפאה"}, self.at)
-        self.assertEqual(session.call_tool.await_args.args[1]["q"], "מרפא")
-        self.assertEqual(session.call_tool.await_count, 1)
-        self.assertEqual(value["status"], "needs_selection")
+    async def test_small_complete_sets_read_every_detail_concurrently_and_preserve_dates(self):
+        items = [{"publicId": str(n), "title": "שירות " + str(n)} for n in range(5)]
+        for name in ("get_public_service_hours", "get_public_event_timetable", "get_public_resource"):
+            started, all_started = set(), asyncio.Event()
+            async def call(tool, args):
+                if tool == "search_public_information":
+                    return response({**self.envelope, "items": items, "nextCursor": None})
+                self.assertEqual(args["communitySlug"], "village")
+                self.assertEqual(args["fromDate"], "2026-10-20")
+                started.add(args["publicId"])
+                if len(started) == len(items):
+                    all_started.set()
+                await asyncio.wait_for(all_started.wait(), 1)
+                return response({**self.envelope, "status": "unknown", "publicId": args["publicId"]})
+            session = SimpleNamespace(call_tool=AsyncMock(side_effect=call))
+            value = await read(session, self.binding, name,
+                {"query": "המרפאה", "fromDate": "2026-10-20"}, self.at)
+            self.assertEqual(session.call_tool.await_args_list[0].args[1]["q"], "מרפא")
+            self.assertEqual(value["status"], "multiple_matches")
+            self.assertEqual([item["publicId"] for item in value["items"]], [item["publicId"] for item in items])
+            for item in value["items"]:
+                self.assertEqual(item["details"]["publicId"], item["publicId"])
+                self.assertEqual(item["details"]["status"], "unknown")
+                self.assertEqual(item["details"]["clock"]["checkedAtLocal"], "2026-10-18T16:29:10+03:00")
+
+    async def test_unavailable_sibling_keeps_valid_results_without_faking_empty_hours(self):
+        async def call(name, args):
+            if name == "search_public_information":
+                return response({**self.envelope, "items": [{"publicId": "good"}, {"publicId": "bad"}]})
+            return response({**self.envelope, "openNow": True}, error=args["publicId"] == "bad")
+        value = await read(SimpleNamespace(call_tool=AsyncMock(side_effect=call)), self.binding,
+            "get_public_service_hours", {"query": "clinic"}, self.at)
+        self.assertTrue(value["items"][0]["details"]["openNow"])
+        self.assertEqual(value["items"][1], {"publicId": "bad", "status": "unavailable"})
+        import jsonschema
+        wire = adapt({"name": "get_public_service_hours", "description": "old",
+            "inputSchema": {"type": "object", "properties": {}},
+            "outputSchema": {"type": "object", "properties": {"asOf": {"type": "string"}}, "required": ["asOf"]}})
+        jsonschema.validate(value, wire["outputSchema"])
 
     async def test_explicit_id_preserves_date_range_and_only_reads_once(self):
         session = SimpleNamespace(call_tool=AsyncMock(return_value=response(self.envelope)))
