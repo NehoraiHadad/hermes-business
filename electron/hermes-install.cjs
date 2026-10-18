@@ -2,13 +2,14 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { spawnCommandSync } = require('./hermes-command.cjs')
 
-function launcherCandidates(home, platform = process.platform) {
+function launcherCandidates(home, platform = process.platform, engine = path.join(home, 'hermes-agent')) {
   const names = platform === 'win32' ? ['hermes.exe', 'hermes.cmd'] : ['hermes']
   return [
-    ...names.map(name => path.join(home, 'bin', name)),
-    ...names.map(name => path.join(home, 'hermes-agent', '.hermes', 'bin', name)),
+    ...(path.resolve(engine) === path.resolve(home, 'hermes-agent')
+      ? names.map(name => path.join(home, 'bin', name)) : []),
+    ...names.map(name => path.join(engine, '.hermes', 'bin', name)),
     // Active pre-PM installations remain supported until their official update.
-    path.join(home, 'hermes-agent', 'venv', platform === 'win32' ? 'Scripts' : 'bin', names[0])
+    path.join(engine, 'venv', platform === 'win32' ? 'Scripts' : 'bin', names[0])
   ]
 }
 

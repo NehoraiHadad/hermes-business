@@ -30,6 +30,14 @@ describe('official PM launcher boundary', () => {
     expect(result.stdout).not.toContain('injected')
   })
 
+  it('keeps an explicitly selected custom engine separate from the default CLI', () => {
+    const { root } = fixture('fixture')
+    const engine = path.join(root, 'custom-engine')
+    const candidates = launcherCandidates(root, 'win32', engine)
+    expect(candidates).toContain(path.join(engine, '.hermes', 'bin', 'hermes.cmd'))
+    expect(candidates).not.toContain(path.join(root, 'bin', 'hermes.cmd'))
+  })
+
   it('rejects an unrecognized command script', () => {
     const { file } = fixture('@echo off\necho unexpected %*')
     expect(() => invocation(file, [])).toThrow(/Unsupported official Hermes launcher/)

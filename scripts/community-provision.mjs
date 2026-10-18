@@ -152,7 +152,7 @@ function main() {
       engineDir: opts.engineDir
     })
     assertSafeDeploymentPaths(deployment)
-    const command = nativeInstall.launcherCandidates(deployment.homeDir).find(existsSync)
+    const command = nativeInstall.launcherCandidates(deployment.homeDir, process.platform, deployment.engineDir).find(existsSync)
     if (command) deployment.venvPython = nativeInstall.installPython(command, deployment.homeDir)
   } catch (err) {
     if (err instanceof ProvisionRefusedError) {

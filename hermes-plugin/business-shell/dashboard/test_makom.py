@@ -12,6 +12,42 @@ from makom.store import planned
 
 
 class MakomContractTests(unittest.TestCase):
+    def setUp(self):
+        # Pure configuration tests model the native launch API; the real PM
+        # bootstrap/stdio handshake is exercised by the installed-runtime E2E.
+        native = SimpleNamespace(__file__=str(Path("engine/hermes_cli/_launchers.py").resolve()),
+            runtime_command=lambda root, args, **kwargs: ["native-python", "-I", "-c", kwargs["code"], *args])
+        self.launcher = patch.dict("sys.modules", {"hermes_cli": SimpleNamespace(_launchers=native), "hermes_cli._launchers": native,
+            "pm.environments": SimpleNamespace(owning_home_root=lambda root: Path("install-owner"), dependency_home_root=lambda: Path("unrelated-profile"))})
+        self.launcher.start()
+        self.addCleanup(self.launcher.stop)
+
+    def test_worker_uses_native_bootstrap_and_preserves_profile_arguments(self):
+        config = store.server_config(Path("profile with spaces"), {"revision": "rev"})
+        self.assertEqual(config["command"], "native-python")
+        self.assertEqual(config["env"], {"HERMES_HOME": "install-owner"})
+        self.assertEqual(config["args"][:2], ["-I", "-c"])
+        self.assertEqual(config["args"][-2:], ["profile with spaces", "rev"])
+        self.assertIn("runpy.run_path", config["args"][2])
+
+    def test_native_probe_failure_does_not_write_configuration(self):
+        import yaml
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            target = home / "config.yaml"
+            target.write_bytes(b"# preserve exactly\n")
+            def fail(*_):
+                raise RuntimeError("native failure with private diagnostic")
+            with patch.dict("sys.modules", {"hermes_yaml": yaml,
+                    "hermes_cli.config": SimpleNamespace(_CONFIG_LOCK=RLock()),
+                    "hermes_cli.mcp_config": SimpleNamespace(_probe_single_server=fail)}), \
+                    patch.object(store, "profile_home", return_value=home):
+                with self.assertRaises(ValueError) as error:
+                    store.apply(["default"], {"revision": "rev"})
+            self.assertNotIn("private diagnostic", str(error.exception))
+            self.assertEqual(target.read_bytes(), b"# preserve exactly\n")
+            self.assertFalse(store.skill_path(home).exists())
+
     def test_skill_is_valid_and_fits_hermes_discovery_budget(self):
         import yaml
         text = (Path(__file__).parent / "makom/SKILL.md").read_text(encoding="utf-8")

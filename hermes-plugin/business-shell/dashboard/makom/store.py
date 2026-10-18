@@ -7,7 +7,6 @@ from contextlib import contextmanager
 from copy import deepcopy
 from pathlib import Path
 import os
-import sys
 import tempfile
 import uuid
 from .contract import server_name, SKILL
@@ -63,7 +62,20 @@ def binding_for(name):
 
 def server_config(home, binding):
     entry = Path(__file__).resolve().parent.parent / "makom_bridge.py"
-    return {"command": sys.executable, "args": [str(entry), str(home), binding["revision"]],
+    from hermes_cli import _launchers as native
+    from pm.environments import owning_home_root, dependency_home_root
+    # Store Python alone has no dependencies. Persist Hermes' own bootstrap,
+    # which selects and leases its current PM generation on every worker start.
+    code = ("import os, sys, runpy; sys.argv = sys.argv[1:]; "
+            "sys.path.insert(0, os.path.dirname(sys.argv[0])); "
+            "runpy.run_path(sys.argv[0], run_name='__main__')")
+    root = Path(native.__file__).resolve().parent.parent
+    runtime_home = owning_home_root(root) or dependency_home_root()
+    argv = native.runtime_command(root,
+        [str(entry), str(home), binding["revision"]], code=code)
+    # Native MCP intentionally filters ambient HERMES_HOME. Bind only the PM
+    # owner here; the authorized community/profile remains the explicit argv.
+    return {"command": argv[0], "args": argv[1:], "env": {"HERMES_HOME": str(runtime_home)},
         "enabled": True, "timeout": 18, "connect_timeout": 20}
 
 
@@ -139,7 +151,10 @@ def apply(selection, binding):
             probe_binding = {**binding, "serverName": server_name(temporary_home, binding)}
             config = {"tachles_makom": probe_binding, "mcp_servers": {probe_binding["serverName"]: {"enabled": True}}}
             (temporary_home / "config.yaml").write_text(yaml.safe_dump(config), encoding="utf-8")
-            tools = _probe_single_server(probe_binding["serverName"], server_config(temporary_home, probe_binding))
+            try:
+                tools = _probe_single_server(probe_binding["serverName"], server_config(temporary_home, probe_binding))
+            except Exception:
+                raise ValueError("לא ניתן לטעון את חיבור מקום בסביבת Hermes הנוכחית") from None
             if len(tools) != 6:
                 raise ValueError("כלי מקום לא נטענו ב־Hermes")
     snapshots = []

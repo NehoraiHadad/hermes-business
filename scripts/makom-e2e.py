@@ -30,7 +30,7 @@ async def exercise(home, link):
     name = cfg["tachles_makom"]["serverName"]
     server = cfg["mcp_servers"][name]
     report = {"resolved": resolved["communitySlug"], "nativeProbe": True, "unselectedProfileUnchanged": True}
-    params = StdioServerParameters(command=server["command"], args=server["args"], env={**os.environ, "PYTHONUTF8": "1"})
+    params = StdioServerParameters(command=server["command"], args=server["args"], env={**os.environ, **server.get("env", {}), "PYTHONUTF8": "1"})
     async with stdio_client(params) as (read, write):
         async with ClientSession(read, write) as client:
             await client.initialize()
