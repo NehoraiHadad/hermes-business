@@ -9,6 +9,7 @@
 
 import { existsSync } from 'node:fs'
 import path from 'node:path'
+import nativeInstall from '../../electron/hermes-install.cjs'
 
 /**
  * Redact secrets from any string before it reaches stdout, stderr or a
@@ -110,12 +111,8 @@ export function resolveHermesBinary() {
     (process.platform === 'win32'
       ? path.join(process.env.LOCALAPPDATA || '', 'hermes')
       : path.join(process.env.HOME || '', '.hermes'))
-  const hermes =
-    process.env.HERMES_BIN ||
-    (process.platform === 'win32'
-      ? path.join(hermesHome, 'hermes-agent', 'venv', 'Scripts', 'hermes.exe')
-      : path.join(hermesHome, 'hermes-agent', 'venv', 'bin', 'hermes'))
-  if (!existsSync(hermes)) {
+  const hermes = process.env.HERMES_BIN || nativeInstall.launcherCandidates(hermesHome).find(existsSync)
+  if (!hermes || !existsSync(hermes)) {
     throw new Error(`Hermes executable was not found at ${hermes}`)
   }
   return { hermes, hermesHome }

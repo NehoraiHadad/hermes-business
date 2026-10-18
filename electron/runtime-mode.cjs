@@ -150,17 +150,9 @@ function resolveHermesBinary(config = getRuntimeMode(), env = process.env) {
   if (config.hermesBinary) {
     return fs.existsSync(config.hermesBinary) ? config.hermesBinary : null
   }
-  const candidates = [
-    process.platform === 'win32'
-      ? path.join(defaultLiveHome(env), 'hermes-agent', 'venv', 'Scripts', 'hermes.exe')
-      : path.join(defaultLiveHome(env), 'hermes-agent', 'venv', 'bin', 'hermes'),
-    process.platform === 'win32'
-      ? path.join(config.hermesHome, 'hermes-agent', 'venv', 'Scripts', 'hermes.exe')
-      : path.join(config.hermesHome, 'hermes-agent', 'venv', 'bin', 'hermes'),
-    process.platform === 'win32'
-      ? path.join(config.hermesHome, 'bin', 'hermes.exe')
-      : path.join(os.homedir(), '.local', 'bin', 'hermes')
-  ].filter(Boolean)
+  const { launcherCandidates } = require('./hermes-install.cjs')
+  const candidates = [...new Set([config.hermesHome, defaultLiveHome(env)])]
+    .flatMap(home => launcherCandidates(home))
   return candidates.find(candidate => fs.existsSync(candidate)) || null
 }
 

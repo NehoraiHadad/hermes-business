@@ -1,4 +1,4 @@
-const { spawn } = require('node:child_process')
+const { spawnCommand: spawn } = require('./hermes-command.cjs')
 const { rememberLog } = require('./logs.cjs')
 const { findHermes, getHermesVersion } = require('./paths.cjs')
 const { chooseRuntimePort, waitForHealth } = require('./runtime-network.cjs')

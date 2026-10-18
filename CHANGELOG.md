@@ -55,6 +55,9 @@
   the native WhatsApp platform registry. Keep deduplicated evidence in a plugin-owned
   SQLite archive, import approved legacy history read-only, preserve native mention
   filtering, and verify durability with the actual adapter and a fresh process.
+- Discover official PM launchers and query its committed Python selection. Run
+  the native CMD bootstrap without shell interpretation and use Hermes’ YAML facade
+  in the installer, retaining the active pre-PM installation contract.
 - Await native plugin enablement asynchronously, coalesce concurrent requests and
   hold runtime starts behind preparation. Use Playwright's official ready-event
   handshake for explicit Electron binaries instead of a manual CDP workaround.

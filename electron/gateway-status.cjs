@@ -1,4 +1,4 @@
-const { spawnSync } = require('node:child_process')
+const { spawnCommandSync: spawnSync } = require('./hermes-command.cjs')
 const { findHermes, hermesHome } = require('./paths.cjs')
 
 // Authoritative, OFFICIAL snapshot of whether a Hermes gateway PROCESS is already running,
@@ -40,6 +40,10 @@ function officialGatewayState(options = {}) {
   if (!result || result.error) {
     return { state: 'unknown', reason: (result && result.error && result.error.message) || 'no-result' }
   }
+  return interpretGatewayResult(result)
+}
+
+function interpretGatewayResult(result) {
   const output = `${result.stdout || ''}\n${result.stderr || ''}`
   // A non-zero exit alone is NOT "stopped" — only a positive textual match decides. Anything
   // ambiguous stays 'unknown' so the caller fails closed rather than skipping a restart.
@@ -48,4 +52,17 @@ function officialGatewayState(options = {}) {
   return { state: 'unknown', reason: 'unparseable-status', output }
 }
 
-module.exports = { officialGatewayState, RUNNING_RE, STOPPED_RE }
+async function officialGatewayStateAsync(options = {}) {
+  const command = options.command !== undefined ? options.command : findHermes()
+  if (!command) return { state: 'unknown', reason: 'hermes-not-found' }
+  const runner = options.runner || require('./process-util.cjs').runCaptured
+  try {
+    const result = await runner(command, ['gateway', 'status'], options.timeoutMs || 45_000,
+      { HERMES_HOME: options.home || hermesHome() }, { allowNonZero: true })
+    return interpretGatewayResult(result)
+  } catch (error) {
+    return { state: 'unknown', reason: `spawn-failed: ${error.message || error}` }
+  }
+}
+
+module.exports = { officialGatewayState, officialGatewayStateAsync, RUNNING_RE, STOPPED_RE }

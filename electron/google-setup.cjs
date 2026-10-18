@@ -23,15 +23,8 @@ const {
 async function googleSetupPaths() {
   const root = hermesHome()
   const hermesCommand = findHermes()
-  const pythonCandidates = process.platform === 'win32'
-    ? [
-        hermesCommand ? path.join(path.dirname(hermesCommand), 'python.exe') : '',
-        path.join(root, 'hermes-agent', 'venv', 'Scripts', 'python.exe')
-      ]
-    : [
-        hermesCommand ? path.join(path.dirname(hermesCommand), 'python') : '',
-        path.join(root, 'hermes-agent', 'venv', 'bin', 'python')
-      ]
+  const { installPython } = require('./hermes-install.cjs')
+  const python = installPython(hermesCommand, root)
   let discoveredSkillRoot = ''
   try {
     const skill = await hermesApi('/api/skills/content?name=google-workspace&profile=default')
@@ -45,7 +38,7 @@ async function googleSetupPaths() {
     path.join(root, 'hermes-agent', 'skills', 'productivity', 'google-workspace', 'scripts', 'setup.py')
   ]
   return {
-    python: pythonCandidates.find(candidate => candidate && fs.existsSync(candidate)),
+    python,
     script: candidates.find(candidate => candidate && fs.existsSync(candidate))
   }
 }

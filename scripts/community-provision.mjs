@@ -20,6 +20,7 @@
 // pairing are companion-UI concerns — verified and reported here, never run.
 
 import { spawnSync } from 'node:child_process'
+import nativeInstall from '../electron/hermes-install.cjs'
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
 import process from 'node:process'
@@ -151,6 +152,8 @@ function main() {
       engineDir: opts.engineDir
     })
     assertSafeDeploymentPaths(deployment)
+    const command = nativeInstall.launcherCandidates(deployment.homeDir).find(existsSync)
+    if (command) deployment.venvPython = nativeInstall.installPython(command, deployment.homeDir)
   } catch (err) {
     if (err instanceof ProvisionRefusedError) {
       console.error(`community-provision: ${err.message}`)

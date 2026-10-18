@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict'
 import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 import path from 'node:path'
+import { resolveHermesBinary } from '../electron/runtime-mode.cjs'
 import { tmpdir } from 'node:os'
 import { seedCompanionContext, serveCompanionBuild } from './lib/makom-companion-fixture.mjs'
 import { electronDriverArgs } from './lib/electron-driver.mjs'
@@ -23,12 +24,14 @@ assert.ok(installedHome.startsWith(path.resolve(tmpdir()) + path.sep) &&
 // An unrelated empty home causes native plugin admission to build a minimal
 // dependency set. User data/Electron caches remain in this run's own sandbox.
 sandbox.hermesHome = installedHome
+const publishedCli = resolveHermesBinary({ hermesHome: installedHome, hermesBinary: null })
+assert.ok(publishedCli && publishedCli.startsWith(installedHome + path.sep), 'Discover the real published native CLI')
 const loginItemBefore = snapshotLoginItem()
-const env = buildChildEnv({ base: process.env, sandbox, cliBin: runtime.launcher })
+const env = buildChildEnv({ base: process.env, sandbox, cliBin: publishedCli })
 Object.assign(env, {
   HERMES_BUSINESS_DEV_RUNTIME: 'isolated-dev-home',
   HERMES_BUSINESS_DEV_HERMES_HOME: sandbox.hermesHome,
-  HERMES_BUSINESS_HERMES_EXE: runtime.launcher,
+  HERMES_BUSINESS_HERMES_EXE: publishedCli,
   HERMES_BUSINESS_DEV_PORT: '19179',
   HERMES_NO_UPDATE_CHECK: '1', HERMES_DISABLE_UPDATE_CHECK: '1', DO_NOT_TRACK: '1'
 })
@@ -68,6 +71,14 @@ try {
   console.log('Companion Makom connect, live verification and disconnect passed through native IPC.')
 } catch (error) {
   console.error(error)
+  if (app) {
+    const mainLogs = await app.evaluate(async ({ app }) => {
+      const { createRequire } = process.getBuiltinModule('node:module')
+      const load = createRequire(app.getAppPath() + '/package.json')
+      return { logs: load('./electron/logs.cjs').recentLogs(), errors: load('./electron/error-journal.cjs').recentAppErrors() }
+    }).catch(failure => ({ error: failure.message }))
+    writeFileSync('.artifacts/makom/companion-main-diagnostics.json', JSON.stringify(mainLogs, null, 2))
+  }
   if (page) {
     const logs = await page.evaluate(() => window.hermesDesktop.getRecentLogs()).catch(() => null)
     writeFileSync('.artifacts/makom/companion-runtime-log.json', JSON.stringify(logs, null, 2))

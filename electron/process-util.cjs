@@ -1,4 +1,5 @@
-const { spawn, spawnSync } = require('node:child_process')
+const { spawnSync } = require('node:child_process')
+const { spawnCommand: spawn } = require('./hermes-command.cjs')
 const { redactSecrets } = require('./redact.cjs')
 const { rememberLog } = require('./logs.cjs')
 const { hermesHome } = require('./paths.cjs')
@@ -7,7 +8,7 @@ const { hermesHome } = require('./paths.cjs')
 // buffer and returning the captured stdout/stderr. Rejects on timeout or a
 // non-zero exit (with a redacted message). Used by the Google setup and
 // gateway/install flows.
-function runCaptured(command, args, timeout = 120_000, extraEnv = {}) {
+function runCaptured(command, args, timeout = 120_000, extraEnv = {}, { allowNonZero = false } = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       windowsHide: true,
@@ -36,7 +37,7 @@ function runCaptured(command, args, timeout = 120_000, extraEnv = {}) {
     })
     child.on('exit', code => {
       clearTimeout(timer)
-      if (code === 0) resolve({ stdout, stderr })
+      if (code === 0 || allowNonZero) resolve({ stdout, stderr })
       else reject(new Error(redactSecrets(stderr || stdout || `Setup exited with code ${code}`)))
     })
   })

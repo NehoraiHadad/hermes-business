@@ -9,7 +9,7 @@ const { installDesktopPlugin } = require('./plugin-install.cjs')
 const { installWhatsappPolicyPlugin } = require('./whatsapp-plugin-install.cjs')
 const { activateWhatsappGuard } = require('./whatsapp-guard-activation.cjs')
 const { recoverGuardActivation } = require('./whatsapp-guard-recovery.cjs')
-const { officialGatewayState } = require('./gateway-status.cjs')
+const { officialGatewayStateAsync } = require('./gateway-status.cjs')
 const { ensureGatewayBackground } = require('./google-setup.cjs')
 const { recoverIncompleteUpdate } = require('./hermes-update-recovery.cjs')
 const { recoverIncompleteCompanionUpdate } = require('./companion-apply.cjs')
@@ -226,7 +226,7 @@ app.whenReady().then(async () => {
   // still-running OLD-code gateway is distinguishable from a newly launched post-install one —
   // and it uses the official `hermes gateway status`, not the heartbeat (an old pre-heartbeat
   // gateway publishes none). The snapshot drives whether activation must force a restart.
-  const priorGatewayState = officialGatewayState().state
+  let priorGatewayState = 'unknown'
   // Install/enable the guard plugin BEFORE the gateway is ensured so a freshly-started
   // gateway loads it. The result (incl. `changed`) is carried to the post-runtime activation
   // transaction so we never double-install (a second install would reset `changed` to false).
@@ -234,7 +234,10 @@ app.whenReady().then(async () => {
   try {
     // Native PM may build a new dependency generation. Keep the window/IPC
     // responsive and serialize runtime starts behind the same preparation.
-    policyPlugin = await setRuntimePreparation(installWhatsappPolicyPlugin())
+    policyPlugin = await setRuntimePreparation((async () => {
+      priorGatewayState = (await officialGatewayStateAsync()).state
+      return installWhatsappPolicyPlugin()
+    })())
     if (!policyPlugin.ok || !policyPlugin.enabled) {
       rememberLog(`WhatsApp policy plugin not fully active: ${policyPlugin.error || policyPlugin.reason || 'unknown'}`)
     }

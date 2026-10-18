@@ -203,6 +203,14 @@
         "to": "business-bootstrap/community/scripts/community-provision.mjs"
       },
       {
+        "from": "electron/hermes-install.cjs",
+        "to": "business-bootstrap/community/electron/hermes-install.cjs"
+      },
+      {
+        "from": "electron/hermes-command.cjs",
+        "to": "business-bootstrap/community/electron/hermes-command.cjs"
+      },
+      {
         "from": "scripts/lib/community",
         "to": "business-bootstrap/community/scripts/lib/community",
         "filter": [

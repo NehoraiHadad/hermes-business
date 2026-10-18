@@ -53,12 +53,14 @@ function Find-Hermes {
     [Parameter(Mandatory)][string]$HermesHome,
     [switch]$HermesHomeWasExplicit
   )
-  $candidates = @((Join-Path $HermesHome 'hermes-agent\venv\Scripts\hermes.exe'))
+  $homes = @($HermesHome)
   if (-not $HermesHomeWasExplicit) {
-    $candidates += @(
-      (Join-Path $env:LOCALAPPDATA 'hermes\hermes-agent\venv\Scripts\hermes.exe'),
-      (Join-Path $env:USERPROFILE '.hermes\hermes-agent\venv\Scripts\hermes.exe')
-    )
+    $homes += @((Join-Path $env:LOCALAPPDATA 'hermes'), (Join-Path $env:USERPROFILE '.hermes'))
+  }
+  $candidates = foreach ($homeRoot in $homes) {
+    foreach ($relative in @('bin\hermes.exe', 'bin\hermes.cmd', 'hermes-agent\.hermes\bin\hermes.exe', 'hermes-agent\.hermes\bin\hermes.cmd', 'hermes-agent\venv\Scripts\hermes.exe')) {
+      Join-Path $homeRoot $relative
+    }
   }
   foreach ($candidate in $candidates) {
     if (Test-Path -LiteralPath $candidate -PathType Leaf) {

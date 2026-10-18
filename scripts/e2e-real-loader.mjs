@@ -111,7 +111,7 @@ async function main() {
     return blocked(`installed Hermes ${version} is outside the supported range ${HERMES_COMPAT_RANGE}.`)
   }
   if (!cliBin || !existsSync(cliBin)) {
-    return blocked('installed Hermes CLI (HERMES_DESKTOP_HERMES) not found.', ['Confirm venv/Scripts/hermes.exe exists.'])
+    return blocked('installed Hermes CLI (HERMES_DESKTOP_HERMES) not found.', ['Confirm the official Hermes installer published its CLI under bin/ or hermes-agent/.hermes/bin/.'])
   }
   if (!existsSync(desktopExe)) {
     return blocked(`installed Hermes Desktop executable not found: ${desktopExe}`, ['Build/install the desktop app first.'])

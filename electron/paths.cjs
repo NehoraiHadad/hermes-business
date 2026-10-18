@@ -1,4 +1,4 @@
-const { spawnSync } = require('node:child_process')
+const { spawnCommandSync: spawnSync } = require('./hermes-command.cjs')
 const fs = require('node:fs')
 const path = require('node:path')
 const { getRuntimeMode, resolveHermesBinary } = require('./runtime-mode.cjs')
@@ -21,7 +21,7 @@ function findHermes() {
 
 function getHermesVersion(command) {
   if (!command) return null
-  const result = spawnSync(command, ['--version'], { encoding: 'utf8', windowsHide: true })
+  const result = spawnSync(command, ['--version'], { encoding: 'utf8', windowsHide: true, timeout: 30_000, env: { ...process.env, HERMES_HOME: hermesHome() } })
   const output = `${result.stdout || ''} ${result.stderr || ''}`.trim()
   return output || null
 }

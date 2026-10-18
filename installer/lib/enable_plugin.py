@@ -21,7 +21,14 @@ substring. It never echoes config or secrets.
 """
 import sys
 
-import yaml
+# Native Hermes owns YAML parsing. The no-engine form remains the pre-PM
+# installer contract and the standalone offline regression harness.
+if sys.argv[1:2] == ["--engine-root"]:
+    sys.path.insert(0, sys.argv[2])
+    del sys.argv[1:3]
+    import hermes_yaml as yaml
+else:
+    import yaml
 
 
 def _load_config(config_path: str) -> dict:

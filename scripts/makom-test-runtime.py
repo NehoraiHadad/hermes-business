@@ -73,6 +73,11 @@ subprocess.run([str(python), str(engine / "scripts/write_install_stamp.py"),
                 "--update-mechanism", "external"], cwd=engine, env=env, check=True)
 
 
+# Publish the same native CLI boundary as scripts/install.ps1, independently of
+# the explicit test entrypoint used by empty-home isolation tests below.
+subprocess.run([bootstrap, "-I", str(engine / "hermes_cli/_launchers.py"), str(root / "bin")],
+               cwd=engine, env=env, check=True)
+
 bin_dir = root / "test-bin"
 bin_dir.mkdir()
 # Native bootstrap with PM's own venv interpreter: disposable homes have no PM

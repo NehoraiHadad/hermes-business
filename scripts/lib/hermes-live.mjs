@@ -2,7 +2,8 @@
 // WebSocket, request/response correlation and the event stream. Imports
 // child_process, so only the live suite (e2e-hermes.mjs) should import this.
 
-import { spawn, spawnSync } from 'node:child_process'
+import { spawnSync } from 'node:child_process'
+import { spawnCommand as spawn } from '../../electron/hermes-command.cjs'
 import { sanitize } from './e2e-harness.mjs'
 
 /** Collapse an arbitrarily nested skills payload into a flat list of names. */

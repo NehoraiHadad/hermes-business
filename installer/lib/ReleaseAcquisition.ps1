@@ -135,9 +135,9 @@ function Install-OfficialHermesRelease {
     if ($process.ExitCode -ne 0) {
       throw "The official Hermes installer exited with code $($process.ExitCode).`n$installerOutput"
     }
-    $expectedHermes = Join-Path $HermesHome 'hermes-agent\venv\Scripts\hermes.exe'
-    if (-not (Test-Path -LiteralPath $expectedHermes -PathType Leaf)) {
-      throw "The official Hermes installer returned success without creating $expectedHermes.`n$installerOutput"
+    $expectedHermes = Find-Hermes -HermesHome $HermesHome -HermesHomeWasExplicit:$true
+    if (-not $expectedHermes) {
+      throw "The official Hermes installer returned success without publishing a Hermes launcher.`n$installerOutput"
     }
   }
   finally {

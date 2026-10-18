@@ -11,6 +11,7 @@
 import { existsSync, mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
+import nativeInstall from '../../electron/hermes-install.cjs'
 
 /** Absolute path of the *live* user Hermes home we must never mutate. */
 export function liveHermesHome() {
@@ -30,12 +31,8 @@ export function installedHermesRoot() {
  */
 export function resolveInstalledHermes() {
   const root = installedHermesRoot()
-  const hermes =
-    process.env.HERMES_BIN ||
-    (process.platform === 'win32'
-      ? path.join(root, 'venv', 'Scripts', 'hermes.exe')
-      : path.join(root, 'venv', 'bin', 'hermes'))
-  if (!existsSync(hermes)) {
+  const hermes = process.env.HERMES_BIN || nativeInstall.launcherCandidates(path.dirname(root)).find(existsSync)
+  if (!hermes || !existsSync(hermes)) {
     throw new Error(`Installed Hermes binary not found at ${hermes}`)
   }
   return { hermes, installRoot: root }

@@ -1,4 +1,4 @@
-const { spawn } = require('node:child_process')
+const { spawnCommand: spawn } = require('./hermes-command.cjs')
 const fs = require('node:fs')
 const path = require('node:path')
 

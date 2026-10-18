@@ -32,12 +32,9 @@ function Install-BusinessPayload {
     @{ Source = $partnerSkillSource;  Target = (Join-Path $HermesHome 'skills\business\business-partner\SKILL.md') }
   )
 
-  # Community capability tooling (SINGLE HOME, 2026-08-16 decision): the
-  # community generator/provisioner and their Skill entry points live inside
-  # the SAME HERMES_HOME the business assistant uses. Nothing here creates a
-  # second engine or home — the provisioner overlays the reviewed engine SHA
-  # onto the official editable checkout only when a community contract is
-  # actually applied (temporary until upstream PR #85490 merges).
+  # Community tooling shares this Hermes home. Hermes owns engine acquisition
+  # and updates; this payload adds native configuration, skills and an optional
+  # archive plugin only.
   $communitySource = Join-Path $PayloadRoot 'community'
   if (-not (Test-Path -LiteralPath $communitySource -PathType Container)) {
     throw "The community tooling payload is missing at $communitySource. No changes were made."

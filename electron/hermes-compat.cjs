@@ -29,12 +29,7 @@ function isVersionSupported(text) {
   )
 }
 
-// The git checkout backing a git install: findHermes() returns
-// <root>/venv/Scripts/hermes.exe (or venv/bin/hermes), so the repo root is
-// three levels up from the executable.
-function installRepoRoot(command) {
-  return path.resolve(command, '..', '..', '..')
-}
+const { installRepoRoot } = require('./hermes-install.cjs')
 
 function isGitInstall(command) {
   if (!command) return false

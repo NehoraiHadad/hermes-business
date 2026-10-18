@@ -65,6 +65,8 @@ function stageBusinessBootstrap(options = {}) {
 const COMMUNITY_REQUIRED_FILES = Object.freeze([
   'scripts/community-generate.mjs',
   'scripts/community-provision.mjs',
+  'electron/hermes-install.cjs',
+  'electron/hermes-command.cjs',
   'assets/community-skills/community-bootstrap/SKILL.md',
   'assets/community-skills/community-admin/SKILL.md',
   'hermes-plugin/community-archive/plugin.yaml',
@@ -89,6 +91,8 @@ function stageCommunityPayload(sourceRoot, stagingRoot, isPackaged) {
   const include = [
     ['scripts/community-generate.mjs', 'scripts/community-generate.mjs'],
     ['scripts/community-provision.mjs', 'scripts/community-provision.mjs'],
+    ['electron/hermes-install.cjs', 'electron/hermes-install.cjs'],
+    ['electron/hermes-command.cjs', 'electron/hermes-command.cjs'],
     ['scripts/lib/community', 'scripts/lib/community'],
     ['assets/community-skills', 'assets/community-skills'],
     ['hermes-plugin/community-archive', 'hermes-plugin/community-archive'],
