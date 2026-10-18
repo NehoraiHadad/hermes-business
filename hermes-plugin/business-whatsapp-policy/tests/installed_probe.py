@@ -21,8 +21,8 @@ PROBE = r"""
 import json, importlib
 out = {"errors": {}}
 try:
-    import importlib.metadata as md
-    out["version"] = md.version("hermes-agent")
+    from hermes_cli import __version__
+    out["version"] = __version__
 except Exception as e:
     out["errors"]["version"] = repr(e)
 try:
@@ -58,6 +58,12 @@ print(json.dumps(out))
 
 
 def hermes_agent_root() -> "Path | None":
+    selected = os.environ.get("HERMES_INSTALL_ROOT")
+    if selected:
+        root = Path(selected)
+        if not root.is_absolute() or not (root / "gateway/platform_registry.py").is_file():
+            raise RuntimeError("HERMES_INSTALL_ROOT must identify the selected Hermes source")
+        return root
     candidates = []
     home = os.environ.get("HERMES_HOME")
     if home:
@@ -73,6 +79,12 @@ def hermes_agent_root() -> "Path | None":
 
 
 def venv_python(root: Path) -> "Path | None":
+    selected = os.environ.get("HERMES_PYTHON")
+    if selected:
+        interpreter = Path(selected)
+        if not interpreter.is_absolute() or not interpreter.is_file():
+            raise RuntimeError("HERMES_PYTHON must identify an existing interpreter")
+        return interpreter
     for rel in ("venv/Scripts/python.exe", "venv/bin/python"):
         candidate = root / rel
         if candidate.exists():
