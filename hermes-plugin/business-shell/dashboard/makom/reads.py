@@ -1,12 +1,23 @@
 """Convenience reads over the unchanged public Makom contract, without inference."""
 from datetime import datetime, timedelta
 import json
+import re
 from zoneinfo import ZoneInfo
 from .contract import bound_arguments
 
 ZONE = ZoneInfo("Asia/Jerusalem")
 RESOLVABLE = {"get_public_service_hours": "service", "get_public_event_timetable": "event",
               "get_public_resource": None}
+
+
+def name_query(query):
+    """Conservative Hebrew construct/article variant (מרפאה → מרפא)."""
+    def token(match):
+        text = match[0]
+        if len(text) > 4 and text.startswith("ה"):
+            text = text[1:]
+        return text[:-1] if len(text) >= 4 and text.endswith(("ה", "ת")) else text
+    return re.sub(r"[א-ת]+", token, query)
 
 
 def payload(result):
@@ -47,6 +58,7 @@ async def read(session, binding, name, arguments, at=None):
     args = bound_arguments(binding, name, arguments)
     if name == "get_public_prayer_day":
         args = prayer_arguments(args, at)
+    selected = None
     if name in RESOLVABLE and "query" in args:
         query = args.pop("query")
         if "publicId" in args or not isinstance(query, str) or not 1 <= len(query.strip()) <= 120:
@@ -58,12 +70,19 @@ async def read(session, binding, name, arguments, at=None):
             # Named cancellations/past events remain searchable while published.
             search["period"] = "all"
         matches = payload(await session.call_tool("search_public_information", search))
+        variant = name_query(query.strip())
+        if not matches["items"] and not matches.get("nextCursor") and variant != search["q"]:
+            matches = payload(await session.call_tool("search_public_information", {**search, "q": variant}))
         items = matches["items"]
         if len(items) != 1 or matches.get("nextCursor"):
-            value = {**matches, "status": "needs_selection" if items else "not_found"}
+            value = {**matches, "status": "needs_selection" if items or matches.get("nextCursor") else "not_found"}
             return result(value, at)
-        args["publicId"] = items[0]["publicId"]
-    return result(payload(await session.call_tool(name, args)), at)
+        selected = {key: items[0][key] for key in ("publicId", "title", "kind", "canonicalUrl") if key in items[0]}
+        args["publicId"] = selected["publicId"]
+    value = payload(await session.call_tool(name, args))
+    if selected:
+        value["matchedPublication"] = selected
+    return result(value, at)
 
 
 def result(value, at):

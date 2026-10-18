@@ -36,6 +36,8 @@ def adapt(wire):
         original.setdefault("properties", {})["clock"] = {"type": "object"}
         original["properties"]["localTimes"] = {"type": "object"}
         if name in RESOLVABLE:
+            original["properties"]["matchedPublication"] = {"type": "object"}
+        if name in RESOLVABLE:
             wire["outputSchema"] = {"type": "object", "anyOf": [original, {
                 "type": "object", "properties": {"status": {"enum": ["needs_selection", "not_found"]},
                 "items": {"type": "array"}, "clock": {"type": "object"}}, "required": ["status", "items", "clock"]}]}

@@ -80,9 +80,19 @@ class LiveReadTests(IsolatedAsyncioTestCase):
         for items, cursor, status in (([], None, "not_found"), ([{"publicId": "a"}, {"publicId": "b"}], None, "needs_selection"),
                                       ([{"publicId": "a"}], "more", "needs_selection")):
             session = SimpleNamespace(call_tool=AsyncMock(return_value=response({**self.envelope, "items": items, "nextCursor": cursor})))
-            value = await read(session, self.binding, "get_public_service_hours", {"query": "מרפאה"}, self.at)
+            value = await read(session, self.binding, "get_public_service_hours", {"query": "clinic"}, self.at)
             self.assertEqual(value["status"], status)
             self.assertEqual(session.call_tool.await_count, 1)
+
+    async def test_hebrew_construct_names_are_found_without_silently_picking_a_clinic(self):
+        empty = {**self.envelope, "items": [], "nextCursor": None}
+        clinics = {**self.envelope, "items": [{"publicId": "nurse", "title": "אחות — מרפאת היישוב"},
+            {"publicId": "doctor", "title": "רופא — מרפאת היישוב"}], "nextCursor": None}
+        session = SimpleNamespace(call_tool=AsyncMock(side_effect=[response(empty), response(clinics)]))
+        value = await read(session, self.binding, "get_public_service_hours", {"query": "המרפאה"}, self.at)
+        self.assertEqual(session.call_tool.await_args_list[1].args[1]["q"], "מרפא")
+        self.assertEqual(session.call_tool.await_count, 2)
+        self.assertEqual(value["status"], "needs_selection")
 
     async def test_explicit_id_preserves_date_range_and_only_reads_once(self):
         session = SimpleNamespace(call_tool=AsyncMock(return_value=response(self.envelope)))
