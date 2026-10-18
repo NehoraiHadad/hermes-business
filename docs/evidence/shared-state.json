@@ -2,13 +2,13 @@
   "schema_version": 1,
   "category": "shared-state",
   "status": "passed",
-  "app_version": "0.4.0-alpha.12",
-  "hermes_range": ">=0.19.0 <0.21.0",
-  "git_head": "8365f9687429b85565b4444e762ccd0befb4cf78",
+  "app_version": "0.4.0-alpha.13",
+  "hermes_range": ">=0.22.2",
+  "git_head": "45f4d52e51644499d2341cc802b5a06e83939543",
   "git_state": "working-tree",
-  "subject_scheme": 3,
-  "subject_fingerprint": "5adb2e322a0fc7aa89752751a473c515cf41bf9570c748f923d16ea2fc42ab18",
-  "captured_at": "2026-08-18T20:22:17.180Z",
+  "subject_scheme": 5,
+  "subject_fingerprint": "bfdb6221d3937525993944c208bb8873c2f1cacbab7403a5a9b0857713076941",
+  "captured_at": "2026-10-18T10:39:40.217Z",
   "tool": "e2e-hermes-shared-state.mjs",
   "redacted": true,
   "summary": {
@@ -27,7 +27,7 @@
     },
     "skill_shared": {
       "via_rpc": true,
-      "skill_count": 73
+      "skill_count": 53
     },
     "path_evidence": {
       "under_isolated_home": true,
@@ -62,7 +62,7 @@
       }
     },
     "approval_mapping": {
-      "official_method": "approval.respond",
+      "official_method": "JSON-RPC approval response",
       "competing_engine": false
     }
   }
