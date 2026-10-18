@@ -128,9 +128,9 @@ function Install-BusinessPayload {
     try {
       if ($policyPresent) {
         Write-Step 'Activating the WhatsApp reply-policy plugin via `hermes plugins enable`.'
-        & $HermesExe plugins enable business-whatsapp-policy --no-allow-tool-override
-        if ($LASTEXITCODE -ne 0) {
-          throw "Enabling the WhatsApp reply-policy plugin failed with exit code $LASTEXITCODE."
+        $result = Invoke-NativeCommand -FilePath $HermesExe -Arguments @('plugins', 'enable', 'business-whatsapp-policy', '--no-allow-tool-override')
+        if ($result.ExitCode -ne 0) {
+          throw "Enabling the WhatsApp reply-policy plugin failed with exit code $($result.ExitCode): $($result.Stderr)"
         }
       }
       if ($backendPresent) {
@@ -205,7 +205,8 @@ function Install-BusinessPayload {
 function Ensure-Gateway {
   param([Parameter(Mandatory)][string]$HermesExe)
   Write-Step 'Checking the Hermes background gateway.'
-  $statusOutput = (& $HermesExe gateway status 2>&1 | Out-String)
+  $result = Invoke-NativeCommand -FilePath $HermesExe -Arguments @('gateway', 'status')
+  $statusOutput = $result.Stdout
   # `hermes gateway status` has no machine-readable --json flag (checked the
   # installed CLI's hermes_cli/subcommands/gateway.py) and its exit code carries
   # no state either: hermes_cli/gateway_windows.py's status() prints and returns
@@ -216,23 +217,23 @@ function Ensure-Gateway {
   # every phrasing gateway_windows.py prints ("Gateway process running (PID: ..)",
   # and the cross-platform "Gateway already running (PID: ..)"/"Gateway is
   # running (PID: ..)"). PowerShell's -match is case-insensitive by default.
-  $running = $LASTEXITCODE -eq 0 -and $statusOutput -match 'gateway[^\r\n]*running \(pid'
+  $running = $result.ExitCode -eq 0 -and $statusOutput -match 'gateway[^\r\n]*running \(pid'
   # Both known positive phrasings from hermes_cli/gateway_windows.py status():
   # "Windows login item installed: <path>" and "Scheduled Task registered:
   # <name>". Tolerated together in case a future CLI version renames one.
   $startsOnLogin = $statusOutput -match 'login item installed|scheduled task (installed|registered)'
   if (-not ($running -and $startsOnLogin)) {
     Write-Step 'Installing and starting the official Hermes gateway service.'
-    & $HermesExe gateway install --start-now --start-on-login
-    if ($LASTEXITCODE -ne 0) {
-      throw "Hermes gateway installation failed with exit code $LASTEXITCODE."
+    $result = Invoke-NativeCommand -FilePath $HermesExe -Arguments @('gateway', 'install', '--start-now', '--start-on-login')
+    if ($result.ExitCode -ne 0) {
+      throw "Hermes gateway installation failed with exit code $($result.ExitCode): $($result.Stderr)"
     }
   }
 
   # Bounded health wait: poll the deep status until it reports PASS.
   Wait-HermesHealth -Description 'Hermes gateway health check' -TimeoutSec 60 -IntervalMs 1000 -Probe {
-    $deep = (& $HermesExe gateway status --deep 2>&1 | Out-String)
-    return ($LASTEXITCODE -eq 0 -and $deep -match 'PASS')
+    $deep = Invoke-NativeCommand -FilePath $HermesExe -Arguments @('gateway', 'status', '--deep')
+    return ($deep.ExitCode -eq 0 -and $deep.Stdout -match 'PASS')
   } | Out-Null
   Write-Step 'Hermes gateway health check passed.'
 }

@@ -100,7 +100,9 @@ function ConvertTo-BusinessSemVerFromAny {
 function Get-HermesVersion {
   [CmdletBinding()]
   param([Parameter(Mandatory)][string]$HermesExe)
-  $text = (& $HermesExe --version 2>&1 | Out-String).Trim()
+  $result = Invoke-NativeCommand -FilePath $HermesExe -Arguments @('--version')
+  if ($result.ExitCode -ne 0) { throw "Hermes version command failed ($($result.ExitCode)): $($result.Stderr)" }
+  $text = $result.Stdout
   # Capture the version token including an optional prerelease suffix (e.g.
   # "0.19.1-alpha.2") so a prerelease build is never silently rounded down to
   # its release core before it even reaches the parser. The actual parsing and

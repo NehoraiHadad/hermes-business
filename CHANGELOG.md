@@ -34,6 +34,8 @@
 
 ### Technical
 
+- Interpret native installer commands by exit code with separate stdout/stderr,
+  so PowerShell 5.1 does not turn Hermes dependency-lock warnings into failed installs.
 - Add one shared Makom connection flow for Companion and the native Desktop plugin,
   authenticated profile configuration routes, a bundled Hebrew skill, and a closed
   six-tool stdio MCP adapter over Makom's public HTTP MCP endpoint.

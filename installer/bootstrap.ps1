@@ -48,7 +48,7 @@ if ([string]::IsNullOrWhiteSpace($BootstrapVersion)) {
 
 # --- Load the shared library (single source of truth for every primitive). ---
 $LibraryRoot = Join-Path $PSScriptRoot 'lib'
-foreach ($module in @('Logging.ps1', 'Hashing.ps1', 'HttpRetry.ps1', 'HttpDownload.ps1', 'FileOps.ps1', 'ZipPolicy.ps1', 'SafeZip.ps1', 'SemVer.ps1', 'HermesEnv.ps1', 'Release.ps1', 'Payload.ps1', 'VerifyMode.ps1', 'BackendEnable.ps1', 'BusinessInstall.ps1')) {
+foreach ($module in @('Logging.ps1', 'Hashing.ps1', 'HttpRetry.ps1', 'HttpDownload.ps1', 'FileOps.ps1', 'ZipPolicy.ps1', 'SafeZip.ps1', 'SemVer.ps1', 'NativeCommand.ps1', 'HermesEnv.ps1', 'Release.ps1', 'Payload.ps1', 'VerifyMode.ps1', 'BackendEnable.ps1', 'BusinessInstall.ps1')) {
   $modulePath = Join-Path $LibraryRoot $module
   if (-not (Test-Path -LiteralPath $modulePath -PathType Leaf)) {
     throw "Required installer module is missing: $modulePath"

@@ -13,7 +13,7 @@ $root = [System.IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))
 $lib = Join-Path $root 'installer\lib'
 
 # --- Load modules under test. ------------------------------------------------
-foreach ($module in @('Logging.ps1', 'Hashing.ps1', 'HttpRetry.ps1', 'HttpDownload.ps1', 'FileOps.ps1', 'ZipPolicy.ps1', 'SafeZip.ps1', 'HermesEnv.ps1', 'Release.ps1', 'Payload.ps1', 'BackendEnable.ps1', 'BusinessInstall.ps1')) {
+foreach ($module in @('Logging.ps1', 'Hashing.ps1', 'HttpRetry.ps1', 'HttpDownload.ps1', 'FileOps.ps1', 'ZipPolicy.ps1', 'SafeZip.ps1', 'NativeCommand.ps1', 'HermesEnv.ps1', 'Release.ps1', 'Payload.ps1', 'BackendEnable.ps1', 'BusinessInstall.ps1')) {
   . (Join-Path $lib $module)
 }
 # The companion installer resolves headers from $BootstrapVersion when dot-sourced.
@@ -74,7 +74,7 @@ function Stop-MockServer {
 
 # --- Focused suites (each defines an Invoke-*Tests function). -----------------
 foreach ($suite in @(
-    'http-integrity.tests.ps1', 'payload-transaction.tests.ps1', 'version-gate.tests.ps1',
+    'native-command.tests.ps1', 'http-integrity.tests.ps1', 'payload-transaction.tests.ps1', 'version-gate.tests.ps1',
     'companion-contract.tests.ps1', 'safezip-entrypoint.tests.ps1',
     'companion-install.tests.ps1', 'release-acquisition.tests.ps1',
     'release-packaging.tests.ps1', 'backend-enable.tests.ps1', 'backend-bundling.tests.ps1',
@@ -85,6 +85,7 @@ foreach ($suite in @(
 # --- Parse-check every installer + test PowerShell file. ---------------------
 Write-Host 'Parse checks:'
 $parseTargets = @(
+  'installer\lib\NativeCommand.ps1', 'scripts\lib\tests\native-command.tests.ps1',
   'installer\lib\Logging.ps1', 'installer\lib\Hashing.ps1', 'installer\lib\HttpRetry.ps1',
   'installer\lib\HttpDownload.ps1', 'installer\lib\FileOps.ps1', 'installer\lib\ZipPolicy.ps1',
   'installer\lib\SafeZip.ps1', 'installer\lib\SemVer.ps1', 'installer\lib\CompanionEntrypoint.ps1',
@@ -121,6 +122,7 @@ New-Item -ItemType Directory -Force -Path $workRoot | Out-Null
 $validSha = 'A' * 64
 
 try {
+  Invoke-NativeCommandTests -WorkRoot $workRoot
   Invoke-HttpIntegrityTests -WorkRoot $workRoot
   Invoke-PayloadTransactionTests -WorkRoot $workRoot
   Invoke-VersionGateTests -Root $root -WorkRoot $workRoot

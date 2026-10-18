@@ -80,11 +80,14 @@ function Resolve-PythonForConfig {
     $previousHome = $env:HERMES_HOME
     try {
       $env:HERMES_HOME = $HermesHome
-      $runtime = (& $command --print-runtime-command | Out-String).Trim() | ConvertFrom-Json
-      if ($LASTEXITCODE -ne 0 -or -not $runtime[0]) { throw 'Cannot resolve the native Hermes runtime.' }
+      $result = Invoke-NativeCommand -FilePath $command -Arguments @('--print-runtime-command')
+      if ($result.ExitCode -ne 0) { throw "Cannot resolve the native Hermes runtime: $($result.Stderr)" }
+      $runtime = $result.Stdout | ConvertFrom-Json
+      if (-not $runtime[0]) { throw 'Cannot resolve the native Hermes runtime.' }
       $code = 'import sys; from pathlib import Path; sys.path.insert(0,sys.argv[1]); from pm.environments import project_python; print(project_python(Path(sys.argv[1])))'
-      $selected = (& $runtime[0] -I -c $code $engine | Out-String).Trim()
-      if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $selected -PathType Leaf)) { throw 'The native Hermes dependency environment is incomplete.' }
+      $result = Invoke-NativeCommand -FilePath $runtime[0] -Arguments @('-I', '-c', $code, $engine)
+      $selected = $result.Stdout
+      if ($result.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $selected -PathType Leaf)) { throw 'The native Hermes dependency environment is incomplete.' }
       return $selected
     } finally { $env:HERMES_HOME = $previousHome }
   }
@@ -116,9 +119,10 @@ function Enable-DashboardPluginInConfig {
   $engine = Join-Path $HermesHome 'hermes-agent'
   if (Test-Path -LiteralPath (Join-Path $engine 'pm\environments.py')) { $engineArgs = @('--engine-root', $engine) }
   $configPath = Join-Path $HermesHome 'config.yaml'
-  $output = (& $python $script @engineArgs $configPath $PluginId 2>&1 | Out-String).Trim()
-  if ($LASTEXITCODE -ne 0) {
-    throw "Enabling '$PluginId' in config.yaml failed: $output"
+  $result = Invoke-NativeCommand -FilePath $python -Arguments (@($script) + $engineArgs + @($configPath, $PluginId))
+  $output = $result.Stdout
+  if ($result.ExitCode -ne 0) {
+    throw "Enabling '$PluginId' in config.yaml failed: $($result.Stderr) $output"
   }
   Write-Step "Companion backend '$PluginId' enabled in config.yaml ($output)."
 }
@@ -143,8 +147,8 @@ function Test-DashboardPluginEnabled {
   $engine = Join-Path $HermesHome 'hermes-agent'
   if (Test-Path -LiteralPath (Join-Path $engine 'pm\environments.py')) { $engineArgs = @('--engine-root', $engine) }
   $configPath = Join-Path $HermesHome 'config.yaml'
-  & $python $script @engineArgs '--check' $configPath $PluginId 2>&1 | Out-Null
-  return ($LASTEXITCODE -eq 0)
+  $result = Invoke-NativeCommand -FilePath $python -Arguments (@($script) + $engineArgs + @('--check', $configPath, $PluginId))
+  return ($result.ExitCode -eq 0)
 }
 
 function Assert-BackendHealthy {
