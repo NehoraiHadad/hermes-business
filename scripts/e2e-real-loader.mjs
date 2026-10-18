@@ -121,6 +121,9 @@ async function main() {
   report.steps.compatRange = HERMES_COMPAT_RANGE
   report.steps.cliBin = canonical(cliBin)
   report.steps.cliVersion = getHermesVersion(cliBin) || null
+  if (!report.steps.cliVersion?.includes(`Hermes Agent v${version}`)) {
+    return blocked('The selected Hermes CLI did not report the expected source version.')
+  }
   report.steps.desktopExe = canonical(desktopExe)
   const desktopApp = process.env.HERMES_BUSINESS_DESKTOP_APP
   if (desktopApp && !existsSync(path.join(desktopApp, 'dist/electron-main.mjs'))) {

@@ -153,7 +153,7 @@ export async function provePartnerCheckinReconcile(harness, rest, home, ctx) {
   return { created: true, idempotent: true, paused_preserved: true, hidden_from_active_only: true, one_source: true, no_cache: true, job_id: jobId }
 }
 
-/** Wrapper REST creates a skill; official RPC skills.manage + on-disk SKILL.md must see it. */
+/** Wrapper REST creates a skill; native skill reload + on-disk SKILL.md must see it. */
 export async function proveSkillSharedState(harness, rest, home, ctx) {
   const { rpc, stage } = harness
   const name = ctx.skillName
@@ -165,17 +165,19 @@ export async function proveSkillSharedState(harness, rest, home, ctx) {
   ctx.skillCreated = true
   stage('created skill through the wrapper REST contract')
 
-  const listed = await rpc('skills.manage', { action: 'list' })
-  const names = new Set(flattenSkillNames(listed.skills || {}))
-  if (!names.has(name)) throw new Error('REST-created skill is not visible via official skills.manage RPC')
+  // Current skills.manage(list) reads the process-cached startup banner. The
+  // explicit native reload is the live discovery contract for a new skill.
+  const reloaded = await rpc('skills.reload', { profile: 'default' })
+  const names = new Set(flattenSkillNames(reloaded.result?.added || []))
+  if (!names.has(name)) throw new Error('REST-created skill is not visible via official skills.reload RPC')
 
   const skillMd = createResult?.skill_md || path.join(home, 'skills', 'business', name, 'SKILL.md')
   if (!existsSync(skillMd)) throw new Error(`REST-created skill missing on disk at ${skillMd}`)
   if (path.resolve(skillMd).toLowerCase().indexOf(path.resolve(home).toLowerCase()) !== 0) {
     throw new Error(`skill written outside the isolated home: ${skillMd}`)
   }
-  stage('skill is visible through official skills.manage RPC and on-disk SKILL.md')
-  return { rest_created: true, visible_via_rpc: true, on_disk_path: skillMd, skill_count: names.size }
+  stage('skill is visible through official skills.reload RPC and on-disk SKILL.md')
+  return { rest_created: true, visible_via_rpc: true, rpc_method: 'skills.reload', on_disk_path: skillMd, skill_count: reloaded.result?.total }
 }
 
 /** Wrapper RPC creates a session; official REST /api/sessions + on-disk store must see it. */
