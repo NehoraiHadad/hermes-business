@@ -1,5 +1,5 @@
 {
-  "//": "Committed trust roots that AUTHENTICATE release provenance (HIGH 6). EMPTY by default — with no committed ledger public key and no known-good GitHub asset digest, an on-disk release-ledger.json can never be authenticated, so public fails closed (a self-applied \"source\" label is never trusted). Populate `keys` with PEM public keys keyed by id and reference them from the ledger's `signed_by`, and/or pin known-good GitHub release-asset sha256 per version.",
+  "//": "Committed trust roots that AUTHENTICATE release provenance (HIGH 6). EMPTY by default â€” with no committed ledger public key and no known-good GitHub asset digest, an on-disk release-ledger.json can never be authenticated, so public fails closed (a self-applied \"source\" label is never trusted). Populate `keys` with PEM public keys keyed by id and reference them from the ledger's `signed_by`, and/or pin known-good GitHub release-asset sha256 per version.",
   "ledger_pubkeys": [],
   "keys": {},
   "github_asset_sha256": {
@@ -13,6 +13,7 @@
     "0.4.0-alpha.9": "fae853e7955f43953bf000cac615c9072f7dbf2e886608258d64ab46a3ecb4d4",
     "0.4.0-alpha.10": "4f50529746b285ac85e29b8e60695b811962d7532966ad3deb0e5d63e0d1daac",
     "0.4.0-alpha.11": "eb66e33cefee5a5022b2fddeb7890e710cfe97c864eb9d08842b02925dd6f727",
-    "0.4.0-alpha.12": "070339062cb268e0253228db866adee115121b5eaea683449e9121fde75ddcfe"
+    "0.4.0-alpha.12": "070339062cb268e0253228db866adee115121b5eaea683449e9121fde75ddcfe",
+    "0.4.0-alpha.13": "5237638532f9e4b794055d030739b7f1487199f70c894f3a25a40b6649ffbae1"
   }
 }
