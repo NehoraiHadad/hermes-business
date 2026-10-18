@@ -181,10 +181,10 @@ describe('installer packaging references the policy plugin', () => {
     // transactional refactor replaced the old Install-WhatsappPolicyPlugin helper.
     expect(payload).toContain('Invoke-PayloadTransaction')
     expect(payload).toContain("Join-Path $PayloadRoot 'whatsapp-policy'")
-    expect(payload).toContain('plugins enable business-whatsapp-policy')
+    expect(payload).toContain("@('plugins', 'enable', 'business-whatsapp-policy', '--no-allow-tool-override')")
     // Enablement must abort (throw) on non-zero exit so the transaction rolls back
     // instead of leaving the safety plugin copied-but-disabled.
-    expect(payload).toMatch(/plugins enable business-whatsapp-policy[\s\S]*?\$LASTEXITCODE -ne 0[\s\S]*?throw/)
+    expect(payload).toMatch(/Invoke-NativeCommand[^\r\n]*'business-whatsapp-policy'[\s\S]*?\$result.ExitCode -ne 0[\s\S]*?throw/)
     // The thin bootstrap must copy every runtime payload file (fail-closed
     // parity with the packaged companion).
     for (const file of paths.WHATSAPP_POLICY_PLUGIN_FILES) {
