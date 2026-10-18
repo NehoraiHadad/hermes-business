@@ -457,7 +457,7 @@ export function buildProfileConfig(
     if (Object.keys(toolsets).length > 0) cfg.platform_toolsets = toolsets
     else delete cfg.platform_toolsets
   } else {
-    toolsets.whatsapp = [...toolset]
+    toolsets.whatsapp = cfg.tachles_makom?.serverName ? [...toolset, 'mcp-' + cfg.tachles_makom.serverName] : [...toolset]
     cfg.platform_toolsets = toolsets
   }
 

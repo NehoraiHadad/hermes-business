@@ -28,7 +28,7 @@
 // folded into every fingerprint, so old fingerprints stop matching and force an
 // honest recapture rather than silently comparing across schemes.
 
-export const SUBJECT_SCHEME = 3
+export const SUBJECT_SCHEME = 4
 
 // Tests, caches and compiled Python never run in the shipped app, so a change to
 // them must not invalidate an artifact — excluded from every SHIPPED directory walk.
@@ -43,6 +43,7 @@ const ELECTRON_RUNTIME = [{ dir: 'electron', exclude: NON_SHIPPED }]
 // We fingerprint the sources, never the generated dist output.
 const RENDERER_SOURCES = [
   { dir: 'src', exclude: NON_SHIPPED },
+  { dir: 'shared', exclude: NON_SHIPPED, exts: ['.js'] },
   { file: 'index.html' },
   { file: 'vite.config.ts' },
   { file: 'tsconfig.json' },

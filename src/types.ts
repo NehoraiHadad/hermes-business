@@ -81,7 +81,7 @@ export type Connection = {
   description: string
   state: 'connected' | 'available' | 'attention'
   official?: boolean
-  icon: 'google' | 'telegram' | 'whatsapp'
+  icon: 'google' | 'telegram' | 'whatsapp' | 'makom'
 }
 
 export type GatewayEvent = {

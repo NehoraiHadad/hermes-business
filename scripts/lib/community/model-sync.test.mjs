@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import yaml from 'js-yaml'
-import { COMMUNITY_ARCHIVE_PLUGIN_FILES, generateArtifacts } from './generate.mjs'
+import { COMMUNITY_ARCHIVE_PLUGIN_FILES, generateArtifacts, buildProfileConfig } from './generate.mjs'
 
 const contract = {
   name: 'קהילה',
@@ -16,6 +16,12 @@ const contract = {
 const template = name => `---\nname: ${name}\ndescription: "קהילה"\n---\n{{HOME_DIR}} {{CONTRACT_PATH}} {{INSTALL_ROOT}} {{GENERATE_CLI}} {{PROVISION_CLI}}\n`
 
 describe('community model propagation after OAuth', () => {
+  it('preserves an explicitly connected Makom toolset when community configuration is regenerated', () => {
+    const config = buildProfileConfig(yaml.dump({ tachles_makom: { communitySlug: 'village', serverName: 'makom-test-binding' }, mcp_servers: { 'makom-test-binding': { enabled: true } } }), ['web', 'skills'])
+    expect(config.platform_toolsets.whatsapp).toEqual(['web', 'skills', 'mcp-makom-test-binding'])
+    expect(config.mcp_servers['makom-test-binding'].enabled).toBe(true)
+    expect(buildProfileConfig('', ['web']).platform_toolsets.whatsapp).toEqual(['web'])
+  })
   it('writes the root provider/default into every shared and isolated routed profile', () => {
     const model = { provider: 'openai-codex', default: 'openai-codex/gpt-5' }
     const artifacts = generateArtifacts(contract, {

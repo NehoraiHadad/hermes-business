@@ -3,7 +3,7 @@ const path = require('node:path')
 const { hermesHome, desktopBackendSourceDir, DESKTOP_BACKEND_FILES } = require('./paths.cjs')
 const { safeWrite } = require('./atomic-write.cjs')
 
-// Install + enable the READ-ONLY companion backend plugin so Hermes mounts
+// Install + enable the companion backend plugin so Hermes mounts
 // /api/plugins/business-shell/ (the paused-inclusive source of truth the desktop
 // plugin reaches via ctx.rest). Best-effort and non-fatal: a build that hasn't
 // staged the payload, or a runtime without js-yaml, degrades to the active-only
@@ -46,6 +46,7 @@ function installCompanionBackend() {
     try {
       fs.mkdirSync(targetDir, { recursive: true })
       for (const name of DESKTOP_BACKEND_FILES) {
+        fs.mkdirSync(path.dirname(path.join(targetDir, name)), { recursive: true })
         fs.writeFileSync(path.join(targetDir, name), fs.readFileSync(path.join(sourceDir, name)), { mode: 0o600 })
       }
     } catch (commitError) {
@@ -142,6 +143,7 @@ function stageBackendPayload(sourceRoot, stagingRoot, isPackaged) {
   for (const name of DESKTOP_BACKEND_FILES) {
     const source = path.join(sourceDir, name)
     if (!fs.existsSync(source)) throw new Error(`The packaged companion backend payload is missing: ${name}`)
+    fs.mkdirSync(path.dirname(path.join(targetDir, name)), { recursive: true })
     fs.copyFileSync(source, path.join(targetDir, name))
   }
 }

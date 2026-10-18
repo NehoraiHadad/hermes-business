@@ -8,11 +8,10 @@ authentication, it does not add its own. The Desktop plugin reaches it through
 plugin's own ``/api/plugins/business-shell`` prefix (apps/desktop/src/contrib/
 plugin.ts::PluginContext.rest -> apps/desktop/src/hermes.ts::pluginRest).
 
-This file is deliberately thin and strictly READ-ONLY: it owns the FastAPI routing
-and the read-only scheduled-task PROJECTION (the ``GET /cron/jobs`` door below). It
-adds NO write surface — the business-context skill is persisted entirely through the
-official Hermes Skills API (immutable versioned create + enable/disable toggle), so
-there is no companion write engine to mount here.
+The cron projection remains read-only. The sibling ``makom`` package adds an
+authenticated setup surface for native profile configuration and a bundled skill.
+It cannot send messages or mutate Makom business data. Business-context skills
+continue to use the official Hermes Skills API.
 
 Why the cron door exists: the gateway JSON-RPC ``cronjob``/``cron.manage`` door
 lists ``list_jobs(include_disabled=False)`` — active jobs only — so a paused task
@@ -34,6 +33,25 @@ except Exception:  # pragma: no cover - allows unit import without FastAPI prese
             return lambda fn: fn
 
 router = APIRouter()
+
+# Hermes loads this entrypoint by filename. Load our cohesive sibling package
+# explicitly without changing the process-global Python import path.
+def _mount_makom():
+    import importlib.util
+    import sys
+    from pathlib import Path
+    package = Path(__file__).with_name("makom")
+    name = "tachles_makom_backend"
+    spec = importlib.util.spec_from_file_location(name, package / "__init__.py", submodule_search_locations=[str(package)])
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    from importlib import import_module
+    router.include_router(import_module(name + ".api").router)
+
+
+if hasattr(router, "include_router"):
+    _mount_makom()
 
 # Minimal, safe projection onto Hermes' AUTHORITATIVE normalized CronJob schema
 # (cron/jobs.py::_normalize_job_record / the Desktop CronJob type). The desktop

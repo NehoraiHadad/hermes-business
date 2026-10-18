@@ -54,7 +54,7 @@ export function useHermesData() {
 
   const fetchConnections = useCallback(async () => {
     let failed = false
-    const [messaging, googleStatus] = await Promise.all([
+    const [messaging, googleStatus, makom] = await Promise.all([
       hermesClient.listMessagingPlatforms().catch(() => {
         failed = true
         return []
@@ -62,11 +62,14 @@ export function useHermesData() {
       hermesClient.getGoogleStatus().catch(() => {
         failed = true
         return { available: false, authenticated: false }
-      })
+      }),
+      hermesClient.getMakomStatus().catch(() => null)
     ])
     if (!mounted.current) return
     startTransition(() => {
-      setConnections(hydrateConnectionStates(CONNECTIONS, messaging, googleStatus.authenticated))
+      setConnections(hydrateConnectionStates(CONNECTIONS, messaging, googleStatus.authenticated).map(row => row.id === 'makom'
+        ? { ...row, state: !makom ? 'attention' : makom.profiles.some(profile => profile.connected) ? 'connected' : makom.profiles.some(profile => profile.binding) ? 'attention' : 'available' }
+        : row))
       setLoadErrors(prev => ({ ...prev, connections: failed }))
     })
   }, [])

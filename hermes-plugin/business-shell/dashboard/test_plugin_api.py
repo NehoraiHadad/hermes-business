@@ -34,7 +34,12 @@ def _load_module():
         "business_shell_plugin_api", os.path.join(_HERE, "plugin_api.py")
     )
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    # Cron projection tests isolate their router even on machines that happen
+    # to have FastAPI installed without the complete Hermes MCP dependencies.
+    fastapi = types.ModuleType("fastapi")
+    fastapi.APIRouter = type("ProjectionRouter", (), {"get": lambda self, *args, **kwargs: lambda fn: fn})
+    with mock.patch.dict(sys.modules, {"fastapi": fastapi}):
+        spec.loader.exec_module(module)
     return module
 
 
@@ -133,11 +138,9 @@ class PluginApiSecurityTests(unittest.TestCase):
         self.assertTrue(body.get("degraded"))
         self.assertNotIn("boom", str(body))
 
-    def test_door_stays_read_only(self):
-        # The companion backend is strictly READ-ONLY: no write verb anywhere. The
-        # business-context skill is persisted through the official Hermes Skills API
-        # (immutable versioned create + enable/disable toggle), so there is NO custom
-        # write route — no POST/PUT/DELETE/PATCH of any kind on this router.
+    def test_cron_door_stays_read_only(self):
+        # Makom setup has its own authenticated configuration routes. Cron still
+        # has only the original read projection; writes remain native cron RPCs.
         with open(os.path.join(_HERE, "plugin_api.py"), encoding="utf-8") as handle:
             source = handle.read()
         for verb in ("router.post", "router.put", "router.delete", "router.patch"):

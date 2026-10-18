@@ -53,11 +53,12 @@ export function AppModals({
         <ConnectionModal
           connection={connectionModal}
           onClose={onCloseConnection}
-          onConnected={id => {
+          onConnected={(id, connected = true) => {
             setConnections(current =>
-              current.map(connection => (connection.id === id ? { ...connection, state: 'connected' } : connection))
+              current.map(connection => (connection.id === id ? { ...connection, state: connected ? 'connected' : 'available' } : connection))
             )
-            setToast('החיבור נשמר ב־Hermes')
+            setToast(id === 'makom' ? 'מצב החיבור למקום עודכן' : 'החיבור נשמר ב־Hermes')
+            if (id === 'makom') void hermesClient.listSkills().then(setSkills).catch(() => {})
           }}
         />
       ) : null}

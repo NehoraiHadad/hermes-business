@@ -68,7 +68,10 @@ describe('WhatsApp policy plugin payload', () => {
   })
 
   it('has no desktop backend runtime file on disk that is missing from DESKTOP_BACKEND_FILES', () => {
-    const onDisk = runtimePayloadFilesOnDisk(paths.desktopBackendSourceDir())
+    const onDisk = [
+      ...runtimePayloadFilesOnDisk(paths.desktopBackendSourceDir()),
+      ...runtimePayloadFilesOnDisk(path.join(paths.desktopBackendSourceDir(), 'makom')).map(name => `makom/${name}`)
+    ].sort()
     const manifest = [...paths.DESKTOP_BACKEND_FILES].sort()
     expect(onDisk, 'a new dashboard file exists that electron/paths.cjs DESKTOP_BACKEND_FILES does not list').toEqual(
       manifest

@@ -50,6 +50,8 @@ import {
 } from './lib/probes/hermes/real-loader-protocol.mjs'
 import { snapshotOwnedProcs, snapshotOwnedByCmdline, mergeRecords, reapOwned } from './lib/probes/hermes/real-loader-procs.mjs'
 import { seedPausedCronJob } from './lib/probes/hermes/real-loader-seed.mjs'
+import { verifyMakomUi } from './lib/probes/hermes/makom-ui.mjs'
+import { seedMakomTestAuth } from './lib/probes/hermes/makom-test-auth.mjs'
 import {
   installPreseedInitScript,
   assertPreseeded,
@@ -120,10 +122,15 @@ async function main() {
   report.steps.cliBin = canonical(cliBin)
   report.steps.cliVersion = getHermesVersion(cliBin) || null
   report.steps.desktopExe = canonical(desktopExe)
-  await run({ cliBin, desktopExe: canonical(desktopExe) })
+  const desktopApp = process.env.HERMES_BUSINESS_DESKTOP_APP
+  if (desktopApp && !existsSync(path.join(desktopApp, 'dist/electron-main.mjs'))) {
+    return blocked('the explicitly selected Desktop source build is missing its entrypoint.')
+  }
+  if (desktopApp) report.steps.desktopApp = canonical(desktopApp)
+  await run({ cliBin, desktopExe: canonical(desktopExe), desktopApp })
 }
 
-async function run({ cliBin, desktopExe }) {
+async function run({ cliBin, desktopExe, desktopApp }) {
   // Lifecycle state declared BEFORE any resource is created so every branch's
   // cleanup sees the same handles (Fix: try starts before sandbox creation).
   let sandbox = null
@@ -155,6 +162,7 @@ async function run({ cliBin, desktopExe }) {
     report.cleanup.staleSweep = sweepStaleSandboxes({})
 
     sandbox = createSandbox('hermes-realloader-')
+    if (process.env.HERMES_BUSINESS_E2E_MAKOM_LINK) seedMakomTestAuth(sandbox.hermesHome)
     report.steps.sandbox = sandbox.root
 
     const receipt = installBusinessShell(sandbox.hermesHome)
@@ -184,7 +192,7 @@ async function run({ cliBin, desktopExe }) {
     const env = buildChildEnv({ base: process.env, sandbox, cliBin })
     electronApp = await electron.launch({
       executablePath: desktopExe,
-      args: [`--user-data-dir=${sandbox.userData}`],
+      args: [...(desktopApp ? [desktopApp] : []), `--user-data-dir=${sandbox.userData}`],
       cwd: sandbox.cwd,
       env,
       timeout: 180_000
@@ -222,6 +230,14 @@ async function run({ cliBin, desktopExe }) {
     //     click, else the official ⌘/Ctrl+K command palette by keyboard) opens
     //     the page + Automations tab + reaches the paused-inclusive backend door.
     report.steps.clickPath = await openBusinessViaPointer(page)
+    if (process.env.HERMES_BUSINESS_E2E_MAKOM_LINK) {
+      report.mode = 'real-loader-makom'
+      await page.getByRole('button', { name: 'חיבורים', exact: true }).press('Enter')
+      await page.getByRole('button', { name: 'חיבור וניהול מקום', exact: true }).press('Enter')
+      report.steps.makom = await verifyMakomUi(page, { link: process.env.HERMES_BUSINESS_E2E_MAKOM_LINK })
+      report.ok = Boolean(report.steps.clickPath.clickPathOk)
+      return
+    }
     report.steps.automations = await assertAutomationsBackend(page, { seededJobName: seeded.name })
     report.steps.backendResponse = {
       observed2xx: Boolean(backendObs.matched2xx()),

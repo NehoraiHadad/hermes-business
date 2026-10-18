@@ -21,6 +21,7 @@ export const NAV_ITEMS = ALL_NAV_ITEMS
     : { ...item, label: 'פעילות ומשימות' })
 
 export const CONNECTIONS: Connection[] = [
+  { id: 'makom', name: 'מקום — מידע מהקהילה', description: 'מידע ציבורי עדכני, שעות פעילות, אירועים ותפילות', state: 'available', official: true, icon: 'makom' },
   {
     id: 'google',
     name: 'Google Workspace',

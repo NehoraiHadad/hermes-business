@@ -11,6 +11,7 @@ import {
 } from './rest-system'
 import { createUsageApi, type HermesUsageApi } from './rest-usage'
 import { createWhatsappApi, type HermesWhatsappApi } from './whatsapp-rest'
+import { createMakomApi, type HermesMakomApi } from './rest-makom'
 
 export type { WhatsappCloudCredentials, WhatsappOnboarding } from './whatsapp-rest'
 export type { ApiFn, TaskEdit, HermesUpdateStatus }
@@ -25,7 +26,7 @@ export interface HermesRest
     HermesSkillsApi,
     HermesMessagingApi,
     HermesSystemApi,
-    HermesUsageApi {}
+    HermesUsageApi, HermesMakomApi {}
 
 // Coherent facade over the REST modules. Everything is routed through a single
 // injected `api` function so the demo and desktop transports are
@@ -43,6 +44,7 @@ export function createHermesRest(
     ...createSkillsApi(api),
     ...createMessagingApi(api, ensureGateway),
     ...createSystemApi(api, applyDesktopUpdate),
-    ...createUsageApi(api)
+    ...createUsageApi(api),
+    ...createMakomApi(api)
   }
 }

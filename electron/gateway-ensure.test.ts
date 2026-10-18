@@ -10,6 +10,16 @@ const REGISTERED_STATUS = {
 }
 
 describe('ensureGatewayBackground — QA runtime suppression', () => {
+  it('development isolation never registers a user-global gateway either', async () => {
+    const run = vi.fn()
+    const result = await ensureGatewayBackground('hermes.exe', {
+      qaOverride: () => ({ enabled: false }),
+      runtimeMode: () => ({ mode: 'development', isolated: true }),
+      run
+    })
+    expect(result.skipped).toBe('development-isolated-runtime')
+    expect(run).not.toHaveBeenCalled()
+  })
   it('ARMED override: returns the skip verdict and never spawns a single command', async () => {
     const run = vi.fn()
     const result = await ensureGatewayBackground('hermes.exe', {

@@ -3,6 +3,7 @@ import { Button, StatusDot, evaluateRuntimeReadiness, host } from '@hermes/plugi
 import { h } from '../dom.js'
 import { flattenSkillNames, useAsync } from '../helpers.js'
 import { Card, SectionTitle } from '../ui.js'
+import { MakomConnection } from './makom.js'
 
 // Connection overview. Every card links into an official Hermes screen or opens a
 // guided session — the shell never stores credentials or duplicates state itself.
@@ -72,6 +73,7 @@ export function Connections() {
       title: 'השירותים של העסק',
       copy: 'כל חיבור נשמר ומנוהל על ידי Hermes. המעטפת רק מקצרת את הדרך למסך או ל־Skill הרשמי.'
     }),
+    h(MakomConnection),
     h(
       'div',
       { className: 'grid gap-3 lg:grid-cols-3' },

@@ -2,6 +2,7 @@ import { MessageCircle, Send } from 'lucide-react'
 import type { Connection } from '../../types'
 
 export function ServiceIcon({ type }: { type: Connection['icon'] }) {
+  if (type === 'makom') return <span className="service-icon" aria-hidden="true">מ</span>
   if (type === 'google') {
     return (
       <span className="service-icon service-icon--google" aria-hidden="true">

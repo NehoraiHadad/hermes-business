@@ -1,5 +1,6 @@
 const { findHermes } = require('./paths.cjs')
 const { getQaRuntimeOverride } = require('./qa-runtime.cjs')
+const { getRuntimeMode } = require('./runtime-mode.cjs')
 const { runCaptured } = require('./process-util.cjs')
 const { rememberLog } = require('./logs.cjs')
 
@@ -9,7 +10,7 @@ const { rememberLog } = require('./logs.cjs')
 // re-exported from there for its existing consumers).
 async function ensureGatewayBackground(
   command = findHermes(),
-  { qaOverride = getQaRuntimeOverride, run = runCaptured, log = rememberLog } = {}
+  { qaOverride = getQaRuntimeOverride, runtimeMode = getRuntimeMode, run = runCaptured, log = rememberLog } = {}
 ) {
   // `gateway install` registers USER-LEVEL auto-start (Startup login item /
   // Scheduled Task) pointing at whatever HERMES_HOME this process resolves.
@@ -24,6 +25,11 @@ async function ensureGatewayBackground(
   const override = qaOverride()
   if (override && override.enabled) {
     return { ok: true, installed: false, running: false, startedFresh: false, skipped: 'qa-isolated-runtime' }
+  }
+  // Development is isolated too. It must not install a user-global logon task
+  // or wait for background-service installation before its UI can start.
+  if (runtimeMode().isolated) {
+    return { ok: true, installed: false, running: false, startedFresh: false, skipped: 'development-isolated-runtime' }
   }
   if (!command) return { ok: false, installed: false, startedFresh: false }
   let probe

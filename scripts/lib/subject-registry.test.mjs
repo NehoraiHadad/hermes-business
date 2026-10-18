@@ -64,6 +64,12 @@ describe('packaged input set — resolved over the real repo', () => {
     expect(files).toContain('scripts/lib/build-attestation.mjs')
   })
 
+  it('attests the shared connection UI compiled into both application surfaces', () => {
+    expect(files).toContain('shared/makom-form.js')
+    expect(files).toContain('shared/makom-style.js')
+    expect(files).not.toContain('shared/makom-form.d.ts')
+  })
+
   it('thin-installer subjects span the whole installer + harness contract', () => {
     const t = resolveSubjects(repoRoot(), EVIDENCE_SUBJECTS['thin-installer'])
     for (const f of [

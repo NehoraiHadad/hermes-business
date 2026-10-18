@@ -18,6 +18,7 @@ function New-BackendPayload {
   Set-Content -LiteralPath (Join-Path $Directory 'plugin.js') -Value "// plugin $([guid]::NewGuid())" -Encoding UTF8
   foreach ($name in (Get-DashboardBackendFiles)) {
     $value = if ($name -eq 'manifest.json') { '{{"name":"business-shell","api":"{0}"}}' -f $Api } else { "# $name $([guid]::NewGuid())" }
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent (Join-Path $dash $name)) | Out-Null
     Set-Content -LiteralPath (Join-Path $dash $name) -Value $value -Encoding UTF8
   }
   return $Directory
@@ -47,6 +48,7 @@ function New-HealthHome {
   New-Item -ItemType Directory -Force -Path $dash | Out-Null
   foreach ($name in (Get-DashboardBackendFiles)) {
     $value = if ($name -eq 'manifest.json') { '{"name":"business-shell","api":"plugin_api.py"}' } else { "# $name" }
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent (Join-Path $dash $name)) | Out-Null
     Set-Content -LiteralPath (Join-Path $dash $name) -Value $value -Encoding UTF8
   }
   Set-Content -LiteralPath (Join-Path $healthHome 'config.yaml') -Value $Config -Encoding UTF8
@@ -132,7 +134,9 @@ function Invoke-BackendEnableTests {
     # manifest (all files present, config carries the id).
     foreach ($name in (Get-DashboardBackendFiles)) {
       $value = if ($name -eq 'manifest.json') { '{"name":"business-shell"}' } else { "# $name" }
-      Set-Content -LiteralPath (Join-Path $dash $name) -Value $value -Encoding UTF8
+      $target = Join-Path $dash $name
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $target) | Out-Null
+      Set-Content -LiteralPath $target -Value $value -Encoding UTF8
     }
     Set-Content -LiteralPath (Join-Path $hermesHome 'config.yaml') -Value 'plugins:' -Encoding UTF8
     $threw = $false

@@ -84,7 +84,7 @@ export function ConnectionsScreen({
               does not — the phone keeps listing us), and it works when this app is
               broken, which is exactly when someone wants to cut the connection. We
               point at it instead of shadowing it. */}
-          <span>בחר את השירות שמתאים לעסק; אפשר לפתוח ולנהל כל חיבור פעיל בכל רגע</span>
+          <span>בחרו שירות לעסק או לקהילה; אפשר לפתוח ולנהל כל חיבור פעיל בכל רגע</span>
         </div>
         {loadError ? (
           <div className="list-state list-state--error">
@@ -105,7 +105,7 @@ export function ConnectionsScreen({
 
       <div className="privacy-note">
         <ShieldCheck size={19} />
-        <div><strong>השליטה נשארת אצלך</strong><p>רוצים לנתק? עושים את זה מהטלפון: וואטסאפ ← מכשירים מקושרים ← התנתקות.</p></div>
+        <div><strong>השליטה נשארת אצלך</strong><p>חיבור מקום ניתן להסרה ממסך הניהול שלו. לניתוק WhatsApp: בטלפון ← מכשירים מקושרים ← התנתקות.</p></div>
       </div>
     </main>
   )

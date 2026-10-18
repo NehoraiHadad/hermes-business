@@ -1,7 +1,7 @@
 {
   "name": "business-shell",
   "label": "Hermes לעסק (backend)",
-  "description": "Companion backend for the business-shell desktop plugin: a read-only active+paused scheduled-task listing straight from Hermes' authoritative scheduler. One source of truth, no parallel store. The business-context skill is persisted via the official Hermes Skills API (no custom write surface here).",
+  "description": "Authenticated Tachles backend: read-only active+paused task projection and profile-scoped Makom read-connection setup. Configuration stays in native Hermes profiles; no messaging or Makom write operations.",
   "version": "0.1.0",
   "tab": { "hidden": true },
   "slots": [],

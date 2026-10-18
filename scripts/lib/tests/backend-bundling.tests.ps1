@@ -8,14 +8,8 @@
 # dashboard under extraResources for the packaged Electron staging path.
 # Dot-sourced by scripts/test-bootstrap-lib.ps1; uses its shared harness.
 
-# The complete companion backend runtime payload — the manifest and the mounted,
-# self-contained api entrypoint. The business-context skill is persisted through the
-# official Hermes Skills API, so no custom write-engine modules ship.
-# Kept in lockstep with electron/paths.cjs DESKTOP_BACKEND_FILES / Get-DashboardBackendFiles.
-$script:CompanionBackendPayloadFiles = @(
-  'manifest.json',
-  'plugin_api.py'
-)
+# Follow the canonical installer payload, including the scoped Makom adapter.
+$script:CompanionBackendPayloadFiles = @(Get-DashboardBackendFiles)
 
 function Invoke-BackendBundlingTests {
   param([Parameter(Mandatory)][string]$Root)
@@ -28,7 +22,10 @@ function Invoke-BackendBundlingTests {
 
   Test-Case 'NSI File-bundles the full dashboard payload + BackendEnable + enable_plugin.py' {
     foreach ($name in $script:CompanionBackendPayloadFiles) {
-      Assert-True ($nsi -match [regex]::Escape("dashboard\$name")) "$name not bundled in the NSI"
+      $normalizedName = $name.Replace('/', '\')
+      $exact = $nsi -match [regex]::Escape("dashboard\$normalizedName")
+      $pythonPackage = $name.StartsWith('makom/') -and $name.EndsWith('.py') -and ($nsi -match [regex]::Escape('dashboard\makom\*.py'))
+      Assert-True ($exact -or $pythonPackage) "$name not bundled in the NSI"
     }
     Assert-True ($nsi -match [regex]::Escape('File "lib\BackendEnable.ps1"')) 'BackendEnable.ps1 not File-bundled'
     Assert-True ($nsi -match [regex]::Escape('File "lib\enable_plugin.py"')) 'enable_plugin.py not File-bundled'

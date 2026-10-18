@@ -3,6 +3,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { createRequire } from 'node:module'
 import yaml from 'js-yaml'
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -30,13 +31,7 @@ const bootstrapSkillTarget = join(bootstrapSkillDir, 'SKILL.md')
 const configPath = join(hermesHome, 'config.yaml')
 const backendSourceDir = join(root, 'hermes-plugin', 'business-shell', 'dashboard')
 const backendTargetDir = join(hermesHome, 'plugins', 'business-shell', 'dashboard')
-// Runtime payload: manifest + the mounted, self-contained api entrypoint. In lockstep
-// with electron/paths.cjs. The business-context skill uses the official Skills API, so
-// no custom write-engine modules ship.
-const BACKEND_FILES = [
-  'manifest.json',
-  'plugin_api.py'
-]
+const { DESKTOP_BACKEND_FILES: BACKEND_FILES } = createRequire(import.meta.url)('../electron/paths.cjs')
 
 // Parse + validate the existing config BEFORE touching the filesystem. A malformed
 // or non-mapping config.yaml is a real user config we must never clobber: ABORT
@@ -87,6 +82,7 @@ await writeFile(join(targetDir, 'install-receipt.json'), `${JSON.stringify(recei
 // config.yaml allow-list the mount gate reads (_get_enabled_set).
 await mkdir(backendTargetDir, { recursive: true })
 for (const name of BACKEND_FILES) {
+  await mkdir(dirname(join(backendTargetDir, name)), { recursive: true })
   await cp(join(backendSourceDir, name), join(backendTargetDir, name))
 }
 

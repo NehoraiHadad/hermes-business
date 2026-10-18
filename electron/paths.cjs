@@ -35,17 +35,24 @@ function bootstrapSkillSource() {
 }
 
 // The companion backend plugin that Hermes mounts at /api/plugins/business-shell/
-// — a strictly read-only paused-inclusive cron door, reached by the desktop plugin
-// through its namespace-locked ctx.rest. plugin_api.py is the mounted entrypoint
-// (manifest `api`) and is fully self-contained (no sibling runtime modules): the
-// business-context skill is persisted through the official Hermes Skills API, so no
-// custom write engine ships here. The co-located test_*.py are NOT shipped. Keep this
+// — read-only cron projection plus profile-scoped Makom connection setup, reached
+// through namespace-locked ctx.rest. plugin_api.py mounts the Makom adapter package.
+// Business-context skills still use the official Hermes Skills API. Test sidecars
+// are NOT shipped. Keep this
 // list in lockstep with the installer/probe/build enumerations (BackendEnable.ps1,
 // install-plugin.mjs, plugin-install.mjs, business-bootstrap.nsi, package.json
 // extraResources).
 const DESKTOP_BACKEND_FILES = Object.freeze([
   'manifest.json',
-  'plugin_api.py'
+  'plugin_api.py',
+  'makom_bridge.py',
+  'makom/__init__.py',
+  'makom/api.py',
+  'makom/contract.py',
+  'makom/source.py',
+  'makom/store.py',
+  'makom/bridge.py',
+  'makom/SKILL.md'
 ])
 
 function desktopBackendSourceDir() {

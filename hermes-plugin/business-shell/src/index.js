@@ -1,6 +1,7 @@
 import { PALETTE_AREA, ROUTES_AREA, SIDEBAR_NAV_AREA, host } from '@hermes/plugin-sdk'
 import { h } from './dom.js'
 import { setPluginRest } from './cron-source.js'
+import { setMakomRest } from './makom-source.js'
 import { BusinessShell } from './shell.js'
 
 // Entry module: the official Hermes Desktop plugin contract. It contributes a
@@ -18,6 +19,7 @@ export default {
     // degrades to the active-only cron.manage RPC when the companion backend
     // isn't present. Safe no-op when the runtime SDK doesn't expose ctx.rest.
     setPluginRest(ctx.rest)
+    setMakomRest(ctx.rest)
     ctx.registerMany([
       {
         id: 'page',

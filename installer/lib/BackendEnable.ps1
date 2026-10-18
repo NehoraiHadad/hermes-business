@@ -16,7 +16,15 @@
 function Get-DashboardBackendFiles {
   return @(
     'manifest.json',
-    'plugin_api.py'
+    'plugin_api.py',
+    'makom_bridge.py',
+    'makom/__init__.py',
+    'makom/api.py',
+    'makom/contract.py',
+    'makom/source.py',
+    'makom/store.py',
+    'makom/bridge.py',
+    'makom/SKILL.md'
   )
 }
 

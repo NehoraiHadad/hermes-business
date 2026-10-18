@@ -12,6 +12,7 @@ import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { createRequire } from 'node:module'
 import yaml from 'js-yaml'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
@@ -23,13 +24,7 @@ export const BOOTSTRAP_SKILL = 'business-bootstrap'
 const pluginSource = path.join(repoRoot, 'hermes-plugin', 'business-shell', 'plugin.js')
 const skillSource = path.join(repoRoot, 'hermes-plugin', 'business-shell', 'skills', BOOTSTRAP_SKILL, 'SKILL.md')
 const backendSourceDir = path.join(repoRoot, 'hermes-plugin', 'business-shell', 'dashboard')
-// Runtime payload: manifest + the mounted, self-contained api entrypoint. In lockstep
-// with electron/paths.cjs. The business-context skill uses the official Skills API, so
-// no custom write-engine modules ship.
-const BACKEND_FILES = [
-  'manifest.json',
-  'plugin_api.py'
-]
+const { DESKTOP_BACKEND_FILES: BACKEND_FILES } = createRequire(import.meta.url)('../../../../electron/paths.cjs')
 
 function sri(bytes) {
   return `sha256-${createHash('sha256').update(bytes).digest('base64')}`
@@ -119,6 +114,7 @@ export function installBusinessShellBackend(home) {
     const src = path.join(backendSourceDir, name)
     if (!existsSync(src)) throw new Error(`companion backend payload missing: ${name}`)
     const dest = path.join(targetDir, name)
+    mkdirSync(path.dirname(dest), { recursive: true })
     writeFileSync(dest, readFileSync(src))
     files[name] = dest
   }

@@ -87,6 +87,7 @@ const SEG = "[A-Za-z0-9._~%!'()*-]+"
 // The lockstep test in ipc-guards.test.ts scans src/ for `/api/...` literals,
 // so a new renderer endpoint fails CI here instead of failing at runtime.
 const ALLOWED_API_ROUTES = [
+  /^\/api\/plugins\/business-shell\/makom(\/(resolve|connect|disconnect))?$/,
   /^\/api\/(health|status|config|env)$/,
   /^\/api\/skills(\/(content|toggle))?$/,
   new RegExp(`^/api/cron/jobs(/${SEG}(/(trigger|pause|resume))?)?$`),

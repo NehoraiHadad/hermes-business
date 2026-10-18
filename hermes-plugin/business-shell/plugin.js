@@ -10,7 +10,7 @@ import React, { useState, useEffect, useMemo } from 'react'
 
 // Hermes compiles the shipped plugin without JSX, so every element is built with
 // React.createElement. `h` is the shared shorthand used across the shell modules.
-const h = React.createElement;
+const h$1 = React.createElement;
 
 // Canonical cron/once → Hebrew DISPLAY core, shared by the React app's friendly
 // schedule picker (src/lib/schedule.ts, which additionally owns FORM compilation —
@@ -489,23 +489,32 @@ async function loadScheduledTasks() {
   return { ...summarizeCronJobs(viaRpc), source: 'cron.manage' }
 }
 
+let rest;
+const setMakomRest = value => { rest = value; };
+async function makomRequest(path, init) {
+  if (!rest) throw Error('חיבור מקום דורש את רכיב השירות של תכל׳ס. עדכנו או התקינו מחדש את תכל׳ס.')
+  const value = await rest(path, init ? { ...init, timeoutMs: 120000 } : { timeoutMs: 30000 });
+  if (!value) throw Error('רכיב החיבור למקום אינו זמין כרגע')
+  return value
+}
+
 // Reusable presentational primitives shared by every screen. Tailwind-in-string
 // classes mirror the Hermes design tokens so the shell matches the host UI.
 
 function SectionTitle({ eyebrow, title, copy }) {
-  return h(
+  return h$1(
     'div',
     { className: 'mb-4' },
     eyebrow
-      ? h('div', { className: 'mb-1 text-[0.6875rem] font-semibold tracking-wide text-primary' }, eyebrow)
+      ? h$1('div', { className: 'mb-1 text-[0.6875rem] font-semibold tracking-wide text-primary' }, eyebrow)
       : null,
-    h('h2', { className: 'text-lg font-semibold text-(--ui-text-primary)' }, title),
-    copy ? h('p', { className: 'mt-1 max-w-2xl text-xs leading-5 text-(--ui-text-tertiary)' }, copy) : null
+    h$1('h2', { className: 'text-lg font-semibold text-(--ui-text-primary)' }, title),
+    copy ? h$1('p', { className: 'mt-1 max-w-2xl text-xs leading-5 text-(--ui-text-tertiary)' }, copy) : null
   )
 }
 
 function Card({ children, className = '' }) {
-  return h(
+  return h$1(
     'section',
     {
       className: `rounded-[6px] border border-(--ui-stroke-secondary) bg-(--ui-bg-secondary) p-4 ${className}`
@@ -515,21 +524,21 @@ function Card({ children, className = '' }) {
 }
 
 function Metric({ label, value, tone = 'good' }) {
-  return h(
+  return h$1(
     'div',
     { className: 'flex min-w-0 items-center gap-2' },
-    h(StatusDot, { tone }),
-    h(
+    h$1(StatusDot, { tone }),
+    h$1(
       'div',
       { className: 'min-w-0' },
-      h('div', { className: 'truncate text-xs font-medium text-(--ui-text-primary)' }, value),
-      h('div', { className: 'text-[0.6875rem] text-(--ui-text-tertiary)' }, label)
+      h$1('div', { className: 'truncate text-xs font-medium text-(--ui-text-primary)' }, value),
+      h$1('div', { className: 'text-[0.6875rem] text-(--ui-text-tertiary)' }, label)
     )
   )
 }
 
 function QuickAction({ icon, title, copy, onClick, badge }) {
-  return h(
+  return h$1(
     'button',
     {
       type: 'button',
@@ -537,24 +546,24 @@ function QuickAction({ icon, title, copy, onClick, badge }) {
       className:
         'group flex min-h-28 flex-col items-start rounded-[6px] border border-(--ui-stroke-secondary) bg-(--ui-bg-secondary) p-4 text-right transition-colors hover:bg-(--ui-bg-tertiary)'
     },
-    h(
+    h$1(
       'div',
       { className: 'mb-3 flex w-full items-start justify-between gap-2' },
-      h('span', { className: 'text-xl', 'aria-hidden': true }, icon),
-      badge ? h(Badge, { variant: 'muted' }, badge) : null
+      h$1('span', { className: 'text-xl', 'aria-hidden': true }, icon),
+      badge ? h$1(Badge, { variant: 'muted' }, badge) : null
     ),
-    h('strong', { className: 'text-sm text-(--ui-text-primary)' }, title),
-    h('span', { className: 'mt-1 text-xs leading-5 text-(--ui-text-tertiary)' }, copy)
+    h$1('strong', { className: 'text-sm text-(--ui-text-primary)' }, title),
+    h$1('span', { className: 'mt-1 text-xs leading-5 text-(--ui-text-tertiary)' }, copy)
   )
 }
 
 function Field({ label, name, value, onChange, multiline = false, placeholder = '' }) {
   const Component = multiline ? Textarea : Input;
-  return h(
+  return h$1(
     'label',
     { className: 'grid gap-1.5' },
-    h('span', { className: 'text-xs font-medium text-(--ui-text-secondary)' }, label),
-    h(Component, {
+    h$1('span', { className: 'text-xs font-medium text-(--ui-text-secondary)' }, label),
+    h$1(Component, {
       name,
       value,
       placeholder,
@@ -1042,63 +1051,63 @@ function ActivityStrip() {
 
   if (!activity) return null
 
-  return h(
+  return h$1(
     'div',
     {
       className:
         'mb-4 flex items-center gap-2 rounded-[5px] border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-(--ui-text-secondary)'
     },
-    h(Loader, { type: 'lemniscate-bloom', className: 'size-4' }),
-    h('span', null, activity)
+    h$1(Loader, { type: 'lemniscate-bloom', className: 'size-4' }),
+    h$1('span', null, activity)
   )
 }
 
 // The business-home shortcut grid. Every tile deep-links into an official Hermes
 // screen — no Sessions, Skills or connections are duplicated by the shell.
 function HomeQuickActions() {
-  return h(
+  return h$1(
     React.Fragment,
     null,
-    h(SectionTitle, {
+    h$1(SectionTitle, {
       eyebrow: 'קיצורי דרך',
       title: 'מה תרצה לעשות?',
       copy: 'הפעולות פותחות את המסכים הרשמיים של Hermes — אין שכפול של Sessions, Skills או חיבורים.'
     }),
-    h(
+    h$1(
       'div',
       { className: 'grid gap-3 sm:grid-cols-2 xl:grid-cols-3' },
-      h(QuickAction, {
+      h$1(QuickAction, {
         icon: '💬',
         title: 'לדבר עם העוזר',
         copy: 'שיחה מלאה עם Streaming, קבצים, פעולות ואישורים.',
         onClick: () => host.navigate('/'),
         badge: 'מומלץ'
       }),
-      h(QuickAction, {
+      h$1(QuickAction, {
         icon: '🗓️',
         title: 'משימות קבועות',
         copy: 'סיכום בוקר, מעקב לידים ותהליכים חוזרים.',
         onClick: () => host.navigate('/cron')
       }),
-      h(QuickAction, {
+      h$1(QuickAction, {
         icon: '✨',
         title: 'מה Hermes למד',
         copy: 'Skills קיימים ותהליכים חדשים שהעוזר למד.',
         onClick: () => host.navigate('/skills')
       }),
-      h(QuickAction, {
+      h$1(QuickAction, {
         icon: '🔌',
         title: 'חיבור שירותים',
         copy: 'Telegram וערוצי הודעות דרך מנגנון Hermes.',
         onClick: () => host.navigate('/messaging')
       }),
-      h(QuickAction, {
+      h$1(QuickAction, {
         icon: '🖼️',
         title: 'תוצרים וקבצים',
         copy: 'Artifacts, תמונות, מסמכים וקישורים מכל השיחות.',
         onClick: () => host.navigate('/artifacts')
       }),
-      h(QuickAction, {
+      h$1(QuickAction, {
         icon: '⚙️',
         title: 'Hermes המלא',
         copy: 'Providers, Logs, עדכונים וכל ההגדרות המתקדמות.',
@@ -1134,68 +1143,68 @@ function Overview({ onOnboarding, storage }) {
   // confident, proven-empty answer, not the "we couldn't check" truth.
   const activityError = Boolean(sessions.error || cron.error);
 
-  return h(
+  return h$1(
     React.Fragment,
     null,
-    h(ActivityStrip),
-    h(
+    h$1(ActivityStrip),
+    h$1(
       'div',
       { className: 'mb-6 flex flex-wrap items-start justify-between gap-4' },
-      h(
+      h$1(
         'div',
         null,
-        h('div', { className: 'mb-1 text-[0.6875rem] font-semibold text-primary' }, 'HERMES לעסק'),
-        h('h1', { className: 'text-2xl font-semibold tracking-tight text-(--ui-text-primary)' }, 'בוקר טוב 👋'),
-        h(
+        h$1('div', { className: 'mb-1 text-[0.6875rem] font-semibold text-primary' }, 'HERMES לעסק'),
+        h$1('h1', { className: 'text-2xl font-semibold tracking-tight text-(--ui-text-primary)' }, 'בוקר טוב 👋'),
+        h$1(
           'p',
           { className: 'mt-1 text-sm text-(--ui-text-tertiary)' },
           'אותו Hermes חזק — עם כניסה פשוטה לעבודה היומיומית.'
         )
       ),
-      h(
+      h$1(
         'div',
         { className: 'flex gap-2' },
-        h(Button, { variant: 'outline', onClick: onOnboarding }, 'היכרות עם העסק'),
-        h(Button, { onClick: () => host.navigate('/') }, 'שיחה חדשה')
+        h$1(Button, { variant: 'outline', onClick: onOnboarding }, 'היכרות עם העסק'),
+        h$1(Button, { onClick: () => host.navigate('/') }, 'שיחה חדשה')
       )
     ),
-    h(
+    h$1(
       Card,
       { className: 'mb-5' },
-      h(
+      h$1(
         'div',
         { className: 'grid gap-4 sm:grid-cols-2 lg:grid-cols-4' },
-        h(Metric, {
+        h$1(Metric, {
           label: 'Hermes',
           value: gateway === 'open' ? 'פועל ותקין' : 'מתחבר…',
           tone: gateway === 'open' ? 'good' : 'warn'
         }),
-        h(Metric, {
+        h$1(Metric, {
           label: 'ספק AI',
           value: runtime.error ? 'לא הצלחנו לבדוק' : providerReady ? model || runtime.value?.model || 'מחובר' : 'נדרשת הגדרה',
           tone: runtime.error ? 'bad' : providerReady ? 'good' : 'warn'
         }),
-        h(Metric, { label: 'פרופיל פעיל', value: profile || 'default', tone: 'good' }),
-        h(Metric, {
+        h$1(Metric, { label: 'פרופיל פעיל', value: profile || 'default', tone: 'good' }),
+        h$1(Metric, {
           label: 'פעילות',
           value: activityError ? 'לא הצלחנו לבדוק — נסו לרענן' : `${sessionCount} שיחות אחרונות · ${jobs.length} משימות פעילות`,
           tone: activityError ? 'bad' : 'good'
         })
       )
     ),
-    h(
+    h$1(
       Card,
       { className: 'mb-5' },
-      h(
+      h$1(
         'div',
         { className: 'mb-3 flex flex-wrap items-center justify-between gap-3' },
-        h(
+        h$1(
           'div',
           null,
-          h('h2', { className: 'text-sm font-semibold text-(--ui-text-primary)' }, 'שיחות אחרונות'),
-          h('p', { className: 'mt-0.5 text-xs text-(--ui-text-tertiary)' }, 'אותן שיחות שמופיעות בממשק המלא, ב־CLI ובערוצי ההודעות.')
+          h$1('h2', { className: 'text-sm font-semibold text-(--ui-text-primary)' }, 'שיחות אחרונות'),
+          h$1('p', { className: 'mt-0.5 text-xs text-(--ui-text-tertiary)' }, 'אותן שיחות שמופיעות בממשק המלא, ב־CLI ובערוצי ההודעות.')
         ),
-        h(Input, {
+        h$1(Input, {
           value: sessionQuery,
           onChange: event => setSessionQuery(event.target.value),
           placeholder: 'חיפוש בשיחות',
@@ -1204,15 +1213,15 @@ function Overview({ onOnboarding, storage }) {
         })
       ),
       sessions.loading
-        ? h('div', { className: 'py-5 text-center text-xs text-(--ui-text-tertiary)' }, 'טוען שיחות…')
+        ? h$1('div', { className: 'py-5 text-center text-xs text-(--ui-text-tertiary)' }, 'טוען שיחות…')
         : sessions.error
-          ? h('div', { className: 'py-5 text-center text-xs text-(--ui-text-tertiary)' }, 'לא הצלחנו לבדוק שיחות אחרונות — נסו לרענן.')
+          ? h$1('div', { className: 'py-5 text-center text-xs text-(--ui-text-tertiary)' }, 'לא הצלחנו לבדוק שיחות אחרונות — נסו לרענן.')
           : visibleSessions.length
-            ? h(
+            ? h$1(
                 'div',
                 { className: 'grid gap-2 sm:grid-cols-2' },
                 ...visibleSessions.map(session =>
-                  h(
+                  h$1(
                     'button',
                     {
                       key: session.id,
@@ -1221,8 +1230,8 @@ function Overview({ onOnboarding, storage }) {
                       className:
                         'rounded-[4px] border border-(--ui-stroke-secondary) bg-(--ui-bg-primary) px-3 py-2.5 text-right hover:bg-(--ui-bg-tertiary)'
                     },
-                    h('div', { className: 'truncate text-xs font-medium text-(--ui-text-primary)' }, session.title || 'שיחה ללא כותרת'),
-                    h(
+                    h$1('div', { className: 'truncate text-xs font-medium text-(--ui-text-primary)' }, session.title || 'שיחה ללא כותרת'),
+                    h$1(
                       'div',
                       { className: 'mt-1 line-clamp-2 text-[0.6875rem] leading-5 text-(--ui-text-tertiary)' },
                       session.preview || 'פתח את השיחה לצפייה'
@@ -1230,13 +1239,13 @@ function Overview({ onOnboarding, storage }) {
                   )
                 )
               )
-            : h(
+            : h$1(
                 'div',
                 { className: 'py-5 text-center text-xs text-(--ui-text-tertiary)' },
                 sessionQuery ? 'לא נמצאו שיחות מתאימות.' : 'עדיין אין שיחות. אפשר להתחיל שיחה חדשה.'
               )
     ),
-    h(HomeQuickActions)
+    h$1(HomeQuickActions)
   )
 }
 
@@ -1280,33 +1289,33 @@ function Onboarding({ storage, onDone, onCancel }) {
     }
   }
 
-  return h(
+  return h$1(
     'div',
     { className: 'mx-auto max-w-2xl' },
-    h(
+    h$1(
       'div',
       { className: 'mb-6 flex items-center justify-between gap-4' },
-      h(
+      h$1(
         'div',
         null,
-        h(
+        h$1(
           'div',
           { className: 'text-[0.6875rem] font-semibold text-primary' },
           `שלב ${step + 1} מתוך ${ONBOARDING_STEPS.length}`
         ),
-        h('h1', { className: 'mt-1 text-xl font-semibold text-(--ui-text-primary)' }, page.title),
-        h('p', { className: 'mt-1 text-xs text-(--ui-text-tertiary)' }, page.copy)
+        h$1('h1', { className: 'mt-1 text-xl font-semibold text-(--ui-text-primary)' }, page.title),
+        h$1('p', { className: 'mt-1 text-xs text-(--ui-text-tertiary)' }, page.copy)
       ),
-      h(Button, { variant: 'text', onClick: onCancel }, 'סגירה')
+      h$1(Button, { variant: 'text', onClick: onCancel }, 'סגירה')
     ),
-    h(
+    h$1(
       Card,
       null,
-      h(
+      h$1(
         'div',
         { className: 'grid gap-4 sm:grid-cols-2' },
         ...page.fields.map(({ key, label, multiline }) =>
-          h(Field, {
+          h$1(Field, {
             key,
             label,
             name: key,
@@ -1316,20 +1325,117 @@ function Onboarding({ storage, onDone, onCancel }) {
           })
         )
       ),
-      h(
+      h$1(
         'div',
         { className: 'mt-6 flex items-center justify-between border-t border-(--ui-stroke-secondary) pt-4' },
-        h(
+        h$1(
           Button,
           { variant: 'outline', disabled: step === 0 || saving, onClick: () => setStep(current => current - 1) },
           'הקודם'
         ),
         step < ONBOARDING_STEPS.length - 1
-          ? h(Button, { onClick: () => setStep(current => current + 1) }, 'המשך')
-          : h(Button, { disabled: saving, onClick: save }, saving ? 'Hermes לומד…' : 'שמור והמשך לשיחה')
+          ? h$1(Button, { onClick: () => setStep(current => current + 1) }, 'המשך')
+          : h$1(Button, { disabled: saving, onClick: save }, saving ? 'Hermes לומד…' : 'שמור והמשך לשיחה')
       )
     )
   )
+}
+
+const makomStyle = `
+.makom-form { display:grid; gap:14px; max-width:680px; color:inherit; font:inherit; }
+.makom-form p { margin:0; line-height:1.7; }
+.makom-form label { display:grid; gap:6px; }
+.makom-form input[type=url] { width:100%; box-sizing:border-box; padding:10px; border:1px solid #a6b5b7; border-radius:8px; color:inherit; background:transparent; font:inherit; }
+.makom-form fieldset { min-width:0; display:grid; gap:10px; padding:12px; border:1px solid #a6b5b7; border-radius:10px; }
+.makom-form .makom-profile { display:flex; align-items:center; gap:10px; }
+.makom-form .makom-profile input { width:18px; height:18px; flex:0 0 auto; }
+.makom-form button { font:inherit; padding:9px 14px; border:1px solid #a6b5b7; border-radius:8px; color:inherit; background:transparent; cursor:pointer; }
+.makom-form button.primary-button { background:#006b70; color:white; border-color:#006b70; }
+.makom-form button:disabled { opacity:.5; cursor:default; }
+.makom-form .modal__actions { display:flex; flex-wrap:wrap; gap:10px; }
+.makom-form .form-error { color:#c74545; }
+`;
+
+const h = React.createElement;
+
+// One accessible connection flow for Companion and the native Desktop plugin.
+// api is namespace-bound by the host; this component never fetches external URLs.
+function MakomForm({ api, onChanged = () => {} }) {
+  const [data, setData] = useState(null);
+  const [selected, setSelected] = useState(['default']);
+  const [link, setLink] = useState('');
+  const [resolved, setResolved] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
+  useEffect(() => {
+    let alive = true;
+    api('/makom').then(value => { if (alive) setData(value); }).catch(() => {
+      if (alive) setError('לא הצלחנו לקרוא את החיבורים. ודאו ש־Hermes פועל ונסו שוב.');
+    });
+    return () => { alive = false; }
+  }, [api]);
+  async function act(work) {
+    setBusy(true); setError(''); setMessage('');
+    try { await work(); } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'הפעולה לא הושלמה. רעננו ובדקו את מצב החיבור.');
+    } finally { setBusy(false); }
+  }
+  async function reload() {
+    const value = await api('/makom'); setData(value);
+    onChanged(value.profiles.some(row => row.connected));
+  }
+  const configured = data?.profiles.filter(row => selected.includes(row.id) && row.binding) || [];
+  return h('div', { className: 'modal-form makom-form', dir: 'rtl' },
+    h('style', null, makomStyle),
+    h('p', null, 'קריאת מידע ציבורי עדכני מהקהילה: תפילות, שעות פעילות ואירועים. אין צורך בטוקן.'),
+    h('label', null, h('span', null, 'קישור לקהילה במקום'), h('input', {
+      type: 'url', dir: 'ltr', value: link, disabled: busy,
+      placeholder: 'https://…/public/…',
+      onChange: event => { setLink(event.target.value); setResolved(null); setMessage(''); }
+    })),
+    h('button', { type: 'button', className: 'outline-button', disabled: busy || !link.trim(),
+      onClick: () => act(async () => { setResolved(await api('/makom/resolve', { method: 'POST', body: { link } })); })
+    }, busy ? 'בודק…' : 'בדיקת הקהילה'),
+    resolved ? h('p', { role: 'status' }, 'נמצאה הקהילה: ', h('strong', null, resolved.name), ' · קריאה בלבד') : null,
+    data ? h('fieldset', { disabled: busy },
+      h('legend', null, 'באילו מרחבים להשתמש במידע?'),
+      ...data.profiles.map(row => h('label', { key: row.id, className: 'makom-profile' },
+        h('input', { type: 'checkbox', checked: selected.includes(row.id),
+          onChange: event => setSelected(previous => event.target.checked ? [...previous, row.id] : previous.filter(id => id !== row.id)) }),
+        h('span', null, row.label, row.binding ? ` — ${row.binding.name} (${row.connected ? 'נבדק וזמין' : 'הוגדר; לא ניתן לאמת כרגע'})` : '')
+      ))
+    ) : error ? null : h('p', { role: 'status' }, 'טוען מרחבים…'),
+    resolved && configured.length ? h('p', null, 'החיבור הקודם במרחבים שנבחרו יוחלף בחיבור לקהילה הזאת.') : null,
+    h('p', null, 'החיבור אינו מפעיל מענה בווטסאפ ואינו משנה את הרשאות הקבוצות. לאחר חיבור, התחילו שיחה חדשה כדי לטעון את הכלים.'),
+    error ? h('p', { className: 'form-error', role: 'alert' }, error) : null,
+    message ? h('p', { role: 'status' }, message) : null,
+    h('div', { className: 'modal__actions' },
+      h('button', { type: 'button', className: 'primary-button', disabled: busy || !resolved || !data || !selected.length,
+        onClick: () => act(async () => {
+          await api('/makom/connect', { method: 'POST', body: { link, profiles: selected } });
+          await reload(); setMessage(`חובר ל${resolved.name}. המידע נבדק והסקיל הותקן במרחבים שנבחרו.`);
+        })
+      }, busy ? 'מבצע…' : 'חיבור מקום'),
+      h('button', { type: 'button', className: 'ghost-button', disabled: busy || !configured.length,
+        onClick: () => act(async () => {
+          await api('/makom/disconnect', { method: 'POST', body: { profiles: configured.map(row => row.id) } });
+          await reload(); setMessage('החיבור והסקיל הוסרו מהמרחבים שנבחרו. חיבורים אחרים לא השתנו.');
+        })
+      }, 'ניתוק מהמרחבים שנבחרו')
+    ),
+    h('button', { type: 'button', className: 'ghost-button', disabled: busy,
+      onClick: () => act(reload) }, 'רענון מצב החיבור')
+  )
+}
+
+function MakomConnection() {
+  const [open, setOpen] = useState(false);
+  return h$1(Card, { className: 'mt-3' },
+    h$1('h3', { className: 'text-sm font-semibold' }, 'מקום — מידע מהקהילה'),
+    h$1('p', null, 'מידע ציבורי עדכני, שעות פעילות, אירועים ותפילות דרך כלי הקריאה של מקום.'),
+    h$1(Button, { variant: 'outline', onClick: () => setOpen(value => !value), 'aria-expanded': open }, open ? 'סגירת החיבור' : 'חיבור וניהול מקום'),
+    open ? h$1(MakomForm, { api: makomRequest }) : null)
 }
 
 // Connection overview. Every card links into an official Hermes screen or opens a
@@ -1392,54 +1498,55 @@ function Connections() {
     }
   ];
 
-  return h(
+  return h$1(
     React.Fragment,
     null,
-    h(SectionTitle, {
+    h$1(SectionTitle, {
       eyebrow: 'חיבורים',
       title: 'השירותים של העסק',
       copy: 'כל חיבור נשמר ומנוהל על ידי Hermes. המעטפת רק מקצרת את הדרך למסך או ל־Skill הרשמי.'
     }),
-    h(
+    h$1(MakomConnection),
+    h$1(
       'div',
       { className: 'grid gap-3 lg:grid-cols-3' },
       ...cards.map(card =>
-        h(
+        h$1(
           Card,
           { key: card.title },
-          h('h3', { className: 'text-sm font-semibold text-(--ui-text-primary)' }, card.title),
-          h('p', { className: 'mt-1 min-h-10 text-xs leading-5 text-(--ui-text-tertiary)' }, card.copy),
-          h(
+          h$1('h3', { className: 'text-sm font-semibold text-(--ui-text-primary)' }, card.title),
+          h$1('p', { className: 'mt-1 min-h-10 text-xs leading-5 text-(--ui-text-tertiary)' }, card.copy),
+          h$1(
             'div',
             { className: 'mt-4 flex items-center justify-between gap-2' },
-            h(
+            h$1(
               'span',
               { className: 'flex items-center gap-1.5 text-[0.6875rem] text-(--ui-text-tertiary)' },
-              h(StatusDot, { tone: card.error ? 'bad' : card.connected ? 'good' : 'muted' }),
+              h$1(StatusDot, { tone: card.error ? 'bad' : card.connected ? 'good' : 'muted' }),
               card.status
             ),
-            h(Button, { variant: card.connected ? 'outline' : 'default', onClick: card.action }, card.connected ? 'ניהול' : 'חבר')
+            h$1(Button, { variant: card.connected ? 'outline' : 'default', onClick: card.action }, card.connected ? 'ניהול' : 'חבר')
           )
         )
       )
     ),
-    h(
+    h$1(
       Card,
       { className: 'mt-3' },
-      h(
+      h$1(
         'div',
         { className: 'flex flex-wrap items-center justify-between gap-3' },
-        h(
+        h$1(
           'div',
           null,
-          h('h3', { className: 'text-sm font-semibold text-(--ui-text-primary)' }, 'WhatsApp'),
-          h(
+          h$1('h3', { className: 'text-sm font-semibold text-(--ui-text-primary)' }, 'WhatsApp'),
+          h$1(
             'p',
             { className: 'mt-1 max-w-2xl text-xs leading-5 text-(--ui-text-tertiary)' },
             'Hermes תומך גם ב־WhatsApp Business Cloud API וגם בחיבור אישי דרך API צד שלישי. הרישום דרך צד שלישי עלול להשתנות, להיחסם או להביא להגבלת החשבון; מומלץ מספר ייעודי.'
           )
         ),
-        h(Button, { variant: 'outline', onClick: () => host.navigate('/messaging') }, 'הצג אפשרויות')
+        h$1(Button, { variant: 'outline', onClick: () => host.navigate('/messaging') }, 'הצג אפשרויות')
       )
     )
   )
@@ -1477,19 +1584,19 @@ function NewTaskForm({ onCreated }) {
     }
   }
 
-  return h(
+  return h$1(
     Card,
     null,
-    h('h3', { className: 'mb-3 text-sm font-semibold text-(--ui-text-primary)' }, 'משימה חדשה'),
-    h(
+    h$1('h3', { className: 'mb-3 text-sm font-semibold text-(--ui-text-primary)' }, 'משימה חדשה'),
+    h$1(
       'div',
       { className: 'grid gap-3' },
-      h(Field, { label: 'שם', name: 'name', value: name, onChange: (_, value) => setName(value), placeholder: 'סיכום בוקר' }),
-      h(
+      h$1(Field, { label: 'שם', name: 'name', value: name, onChange: (_, value) => setName(value), placeholder: 'סיכום בוקר' }),
+      h$1(
         'label',
         { className: 'grid gap-1.5' },
-        h('span', { className: 'text-xs font-medium text-(--ui-text-secondary)' }, 'מתי'),
-        h(
+        h$1('span', { className: 'text-xs font-medium text-(--ui-text-secondary)' }, 'מתי'),
+        h$1(
           'select',
           {
             value: schedule,
@@ -1497,10 +1604,10 @@ function NewTaskForm({ onCreated }) {
             className:
               'h-8 rounded-[4px] border border-(--ui-stroke-secondary) bg-(--ui-bg-primary) px-2 text-xs text-(--ui-text-primary)'
           },
-          ...SCHEDULE_PRESETS.map(preset => h('option', { key: preset.value, value: preset.value }, preset.label))
+          ...SCHEDULE_PRESETS.map(preset => h$1('option', { key: preset.value, value: preset.value }, preset.label))
         )
       ),
-      h(Field, {
+      h$1(Field, {
         label: 'מה Hermes יעשה?',
         name: 'prompt',
         value: prompt,
@@ -1508,7 +1615,7 @@ function NewTaskForm({ onCreated }) {
         onChange: (_, value) => setPrompt(value),
         placeholder: 'סכם את הפגישות והמשימות החשובות להיום'
       }),
-      h(Button, { disabled: saving || !name.trim() || !prompt.trim(), onClick: create }, saving ? 'יוצר…' : 'צור משימה')
+      h$1(Button, { disabled: saving || !name.trim() || !prompt.trim(), onClick: create }, saving ? 'יוצר…' : 'צור משימה')
     )
   )
 }
@@ -1547,83 +1654,83 @@ function Automations({ storage }) {
     }
   }
 
-  return h(
+  return h$1(
     React.Fragment,
     null,
-    h(SectionTitle, {
+    h$1(SectionTitle, {
       eyebrow: 'אוטומציות',
       title: 'משימות קבועות',
       copy: 'המעטפת מציעה תבנית אנושית, אבל שומרת אותה במנגנון ה־Cron הרשמי של Hermes.'
     }),
-    h(
+    h$1(
       'div',
       { className: 'grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]' },
-      h(
+      h$1(
         Card,
         null,
         result.loading
-          ? h('div', { className: 'py-8 text-center text-xs text-(--ui-text-tertiary)' }, 'טוען משימות…')
+          ? h$1('div', { className: 'py-8 text-center text-xs text-(--ui-text-tertiary)' }, 'טוען משימות…')
           : // A failed read is NOT proof of "no scheduled tasks" — show it as an
             // explicit problem, never as the same empty state a genuinely-empty
             // list would render.
             result.error
-            ? h(
+            ? h$1(
                 'div',
                 { className: 'flex flex-col items-center gap-2 py-8 text-center text-xs text-(--ui-text-tertiary)' },
-                h(StatusDot, { tone: 'bad' }),
+                h$1(StatusDot, { tone: 'bad' }),
                 'לא הצלחנו לבדוק משימות מתוזמנות — נסו לרענן.'
               )
             : jobs.length
-              ? h(
+              ? h$1(
                   'div',
                   { className: 'grid gap-2' },
                   ...jobs.map((job, index) =>
-                    h(
+                    h$1(
                       'div',
                       {
                         key: cronJobId(job) || index,
                         className:
                           'flex flex-wrap items-center justify-between gap-3 rounded-[4px] border border-(--ui-stroke-secondary) px-3 py-2.5'
                       },
-                      h(
+                      h$1(
                         'div',
                         null,
-                        h('div', { className: 'text-xs font-medium text-(--ui-text-primary)' }, job.name || 'משימה'),
-                        h(
+                        h$1('div', { className: 'text-xs font-medium text-(--ui-text-primary)' }, job.name || 'משימה'),
+                        h$1(
                           'div',
                           { className: 'mt-0.5 text-[0.6875rem] text-(--ui-text-tertiary)' },
                           humanSchedule(job.schedule_display || job.schedule || job.cron)
                         )
                       ),
-                      h(
+                      h$1(
                         'div',
                         { className: 'flex items-center gap-2' },
-                        h(Badge, { variant: isJobPaused(job) ? 'muted' : 'default' }, isJobPaused(job) ? 'מושהית' : 'פעילה'),
-                        h(Button, { variant: 'outline', size: 'sm', onClick: () => toggle(job) }, isJobPaused(job) ? 'הפעל' : 'השהה')
+                        h$1(Badge, { variant: isJobPaused(job) ? 'muted' : 'default' }, isJobPaused(job) ? 'מושהית' : 'פעילה'),
+                        h$1(Button, { variant: 'outline', size: 'sm', onClick: () => toggle(job) }, isJobPaused(job) ? 'הפעל' : 'השהה')
                       )
                     )
                   )
                 )
-              : h('div', { className: 'py-8 text-center text-xs text-(--ui-text-tertiary)' }, 'עדיין אין משימות מתוזמנות.'),
+              : h$1('div', { className: 'py-8 text-center text-xs text-(--ui-text-tertiary)' }, 'עדיין אין משימות מתוזמנות.'),
         // Honest degrade: shown only when the read succeeded but the paused-inclusive
         // backend door is unavailable and we fell back to the active-only cron.manage
         // RPC. A failed read already has its own message above — don't stack a second,
         // unrelated notice on top of it.
         pausedListingSupported || result.error
           ? null
-          : h(
+          : h$1(
               'p',
               { className: 'mt-4 text-[0.6875rem] leading-5 text-(--ui-text-tertiary)' },
               'התצוגה הפשוטה מציגה משימות פעילות מתוך Hermes. משימות מושהות נשמרות ב־Hermes ומנוהלות במסך ה־Cron המלא.'
             ),
-        h(
+        h$1(
           'div',
           { className: 'mt-4 flex flex-wrap justify-end gap-2' },
-          h(Button, { variant: 'text', onClick: () => setRefresh(value => value + 1) }, 'רענן'),
-          h(Button, { variant: 'textStrong', onClick: () => host.navigate('/cron') }, 'פתח ניהול מלא')
+          h$1(Button, { variant: 'text', onClick: () => setRefresh(value => value + 1) }, 'רענן'),
+          h$1(Button, { variant: 'textStrong', onClick: () => host.navigate('/cron') }, 'פתח ניהול מלא')
         )
       ),
-      h(NewTaskForm, { onCreated: () => setRefresh(value => value + 1) })
+      h$1(NewTaskForm, { onCreated: () => setRefresh(value => value + 1) })
     )
   )
 }
@@ -1678,37 +1785,37 @@ function Support({ storage }) {
     }
   }
 
-  return h(
+  return h$1(
     React.Fragment,
     null,
-    h(SectionTitle, {
+    h$1(SectionTitle, {
       eyebrow: 'תמיכה',
       title: 'מצב המערכת',
       copy: 'הבדיקות מפעילות את דלתות ה־status וה־gateway הרשמיות של Hermes.'
     }),
-    h(
+    h$1(
       Card,
       null,
-      h(
+      h$1(
         'div',
         { className: 'grid gap-4 sm:grid-cols-2 lg:grid-cols-4' },
-        h(Metric, { label: 'Hermes', value: gateway === 'open' ? 'פועל' : gateway, tone: gateway === 'open' ? 'good' : 'warn' }),
-        h(Metric, {
+        h$1(Metric, { label: 'Hermes', value: gateway === 'open' ? 'פועל' : gateway, tone: gateway === 'open' ? 'good' : 'warn' }),
+        h$1(Metric, {
           label: 'Provider',
           // A failed readiness probe is not proof the provider is unready — say so
           // explicitly instead of reusing the same "לא מוכן" a real failure shows.
           value: runtime.loading ? 'בודק…' : runtime.error ? 'לא הצלחנו לבדוק' : runtime.value?.ready ? model || 'מוגדר' : 'לא מוכן',
           tone: runtime.loading ? 'warn' : runtime.error ? 'bad' : runtime.value?.ready ? 'good' : 'bad'
         }),
-        h(Metric, {
+        h$1(Metric, {
           label: 'גרסת Hermes',
           // status.error must not collapse into the same "נבדקת…" a still-loading
           // read shows — the read already finished, and it failed.
           value: status.error ? 'לא הצלחנו לבדוק' : status.value?.version || status.value?.hermes_version || 'נבדקת…',
           tone: status.error ? 'bad' : 'good'
         }),
-        h(Metric, { label: 'פרופיל', value: profile || 'default', tone: 'good' }),
-        h(Metric, {
+        h$1(Metric, { label: 'פרופיל', value: profile || 'default', tone: 'good' }),
+        h$1(Metric, {
           label: 'חיבורים',
           // A failed status read must not render as the confident "אין חיבורים
           // מוגדרים" a genuinely-empty platform list would show.
@@ -1719,7 +1826,7 @@ function Support({ storage }) {
               : 'אין חיבורים מוגדרים',
           tone: status.error ? 'bad' : connectedPlatforms ? 'good' : 'warn'
         }),
-        h(Metric, {
+        h$1(Metric, {
           label: 'משימות פעילות',
           // Same rule for a failed cron read: never render "0 פעילות" as if the
           // list were proven empty.
@@ -1727,27 +1834,27 @@ function Support({ storage }) {
           tone: cron.error ? 'bad' : activeJobs.length ? 'good' : 'warn'
         })
       ),
-      h(
+      h$1(
         'div',
         { className: 'mt-5 flex flex-wrap gap-2 border-t border-(--ui-stroke-secondary) pt-4' },
-        h(Button, { disabled: checking, onClick: check }, checking ? 'בודק…' : 'בדיקת תקינות'),
-        h(Button, { variant: 'outline', onClick: () => host.restartGateway() }, 'הפעל מחדש את Hermes'),
-        h(Button, { variant: 'outline', onClick: showLogs }, 'פתח Logs'),
-        h(Button, { variant: 'outline', onClick: () => host.navigate('/settings?tab=about') }, 'עדכונים וגרסאות'),
-        h(Button, { variant: 'textStrong', onClick: () => host.navigate('/settings?tab=gateway') }, 'אבחון מתקדם')
+        h$1(Button, { disabled: checking, onClick: check }, checking ? 'בודק…' : 'בדיקת תקינות'),
+        h$1(Button, { variant: 'outline', onClick: () => host.restartGateway() }, 'הפעל מחדש את Hermes'),
+        h$1(Button, { variant: 'outline', onClick: showLogs }, 'פתח Logs'),
+        h$1(Button, { variant: 'outline', onClick: () => host.navigate('/settings?tab=about') }, 'עדכונים וגרסאות'),
+        h$1(Button, { variant: 'textStrong', onClick: () => host.navigate('/settings?tab=gateway') }, 'אבחון מתקדם')
       )
     ),
     logs
-      ? h(
+      ? h$1(
           Card,
           { className: 'mt-4' },
-          h(
+          h$1(
             'div',
             { className: 'mb-2 flex items-center justify-between' },
-            h('h3', { className: 'text-sm font-semibold text-(--ui-text-primary)' }, 'שגיאות אחרונות'),
-            h(Button, { variant: 'text', onClick: () => setLogs('') }, 'סגור')
+            h$1('h3', { className: 'text-sm font-semibold text-(--ui-text-primary)' }, 'שגיאות אחרונות'),
+            h$1(Button, { variant: 'text', onClick: () => setLogs('') }, 'סגור')
           ),
-          h(
+          h$1(
             'pre',
             {
               className:
@@ -1757,7 +1864,7 @@ function Support({ storage }) {
           )
         )
       : null,
-    h(
+    h$1(
       'p',
       { className: 'mt-4 text-[0.6875rem] leading-5 text-(--ui-text-quaternary)' },
       'האבחון המתקדם הוא המסך הרשמי של Hermes ואינו מעלה דבר אוטומטית. ZIP מצומצם ללא שיחות, מיילים או קבצי עסק זמין ב־launcher של המעטפת. אין במעטפת גישה מרחוק או backdoor.'
@@ -1799,24 +1906,24 @@ function BusinessShell({ storage }) {
     void openGuidedSetup(false);
   }, [storage]);
 
-  return h(
+  return h$1(
     'main',
     {
       dir: 'rtl',
       lang: 'he',
       className: 'h-full min-h-0 overflow-auto bg-(--ui-bg-primary) text-(--ui-text-primary)'
     },
-    h(
+    h$1(
       'div',
       { className: 'mx-auto min-h-full w-full max-w-6xl px-5 py-5 sm:px-7' },
-      h(
+      h$1(
         'nav',
         {
           'aria-label': 'ניווט עסקי',
           className: 'mb-6 flex flex-wrap items-center gap-1 border-b border-(--ui-stroke-secondary) pb-2'
         },
         ...nav.map(([id, label]) =>
-          h(
+          h$1(
             Button,
             {
               key: id,
@@ -1830,47 +1937,47 @@ function BusinessShell({ storage }) {
             label
           )
         ),
-        h('span', { className: 'flex-1' }),
-        h(Button, { variant: 'textStrong', size: 'inline', onClick: () => host.navigate('/') }, 'פתח את Hermes המלא')
+        h$1('span', { className: 'flex-1' }),
+        h$1(Button, { variant: 'textStrong', size: 'inline', onClick: () => host.navigate('/') }, 'פתח את Hermes המלא')
       ),
       guidedSetupBusy
-        ? h(
+        ? h$1(
             Card,
             { className: 'mb-4' },
-            h(
+            h$1(
               'div',
               { className: 'flex items-center gap-3 text-sm text-(--ui-text-secondary)' },
-              h(Loader, { type: 'lemniscate-bloom', className: 'size-4' }),
-              h('span', null, 'מכין שיחת היכרות אישית עם העוזר…')
+              h$1(Loader, { type: 'lemniscate-bloom', className: 'size-4' }),
+              h$1('span', null, 'מכין שיחת היכרות אישית עם העוזר…')
             )
           )
         : guidedSetupError
-          ? h(
+          ? h$1(
               Card,
               { className: 'mb-4' },
-              h('h2', { className: 'text-sm font-semibold text-(--ui-text-primary)' }, 'לא הצלחנו להתחיל את ההיכרות'),
-              h(
+              h$1('h2', { className: 'text-sm font-semibold text-(--ui-text-primary)' }, 'לא הצלחנו להתחיל את ההיכרות'),
+              h$1(
                 'p',
                 { className: 'mt-1 text-xs leading-5 text-(--ui-text-tertiary)' },
                 'אפשר לנסות שוב, או להשתמש זמנית בטופס המהיר.'
               ),
-              h(
+              h$1(
                 'div',
                 { className: 'mt-3 flex gap-2' },
-                h(Button, { onClick: () => openGuidedSetup(true) }, 'נסה שוב'),
-                h(Button, { variant: 'outline', onClick: () => setOnboarding(true) }, 'טופס מהיר')
+                h$1(Button, { onClick: () => openGuidedSetup(true) }, 'נסה שוב'),
+                h$1(Button, { variant: 'outline', onClick: () => setOnboarding(true) }, 'טופס מהיר')
               )
             )
           : null,
       onboarding
-        ? h(Onboarding, { storage, onDone: () => setOnboarding(false), onCancel: () => setOnboarding(false) })
+        ? h$1(Onboarding, { storage, onDone: () => setOnboarding(false), onCancel: () => setOnboarding(false) })
         : view === 'automations'
-          ? h(Automations, { storage })
+          ? h$1(Automations, { storage })
           : view === 'connections'
-            ? h(Connections)
+            ? h$1(Connections)
             : view === 'support'
-              ? h(Support, { storage })
-          : h(Overview, { storage, onOnboarding: () => openGuidedSetup(false) })
+              ? h$1(Support, { storage })
+          : h$1(Overview, { storage, onOnboarding: () => openGuidedSetup(false) })
     )
   )
 }
@@ -1890,13 +1997,14 @@ export default {
     // degrades to the active-only cron.manage RPC when the companion backend
     // isn't present. Safe no-op when the runtime SDK doesn't expose ctx.rest.
     setPluginRest(ctx.rest);
+    setMakomRest(ctx.rest);
     ctx.registerMany([
       {
         id: 'page',
         area: ROUTES_AREA,
         title: 'Hermes לעסק',
         data: { path: ROUTE },
-        render: () => h(BusinessShell, { storage: ctx.storage })
+        render: () => h$1(BusinessShell, { storage: ctx.storage })
       },
       {
         id: 'nav',
