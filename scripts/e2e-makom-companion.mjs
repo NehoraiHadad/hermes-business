@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict'
 import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 import path from 'node:path'
+import { tmpdir } from 'node:os'
 import { seedCompanionContext, serveCompanionBuild, openCompanionDocument } from './lib/makom-companion-fixture.mjs'
 import { chromium } from 'playwright-core'
 import { spawn } from 'node:child_process'
@@ -16,6 +17,13 @@ const root = process.cwd()
 const runtime = JSON.parse(readFileSync('.artifacts/makom/runtime.json', 'utf8'))
 assert.ok(existsSync(runtime.launcher), 'Prepare the test runtime with scripts/makom-test-runtime.py first')
 const sandbox = createSandbox('hermes-business-e2e-makom-')
+const installedHome = path.resolve(runtime.root)
+assert.ok(installedHome.startsWith(path.resolve(tmpdir()) + path.sep) &&
+  path.basename(installedHome).startsWith('tachles-makom-runtime-'), 'Use only the disposable official test installation')
+// Match a real installation: PM dependency selection belongs to its data home.
+// An unrelated empty home causes native plugin admission to build a minimal
+// dependency set. User data/Electron caches remain in this run's own sandbox.
+sandbox.hermesHome = installedHome
 const loginItemBefore = snapshotLoginItem()
 const env = buildChildEnv({ base: process.env, sandbox, cliBin: runtime.launcher })
 Object.assign(env, {
