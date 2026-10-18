@@ -33,7 +33,7 @@ class MakomContractTests(unittest.TestCase):
     def test_native_probe_failure_does_not_write_configuration(self):
         import yaml
         with tempfile.TemporaryDirectory() as directory:
-            home = Path(directory)
+            home = Path(directory).resolve()
             target = home / "config.yaml"
             target.write_bytes(b"# preserve exactly\n")
             def fail(*_):
