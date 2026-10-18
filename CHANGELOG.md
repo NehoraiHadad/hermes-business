@@ -10,6 +10,39 @@
 
 ---
 
+## [0.4.0-alpha.13] - 2026-10-18
+
+### מה חדש (למשתמש)
+
+- **מידע קהילתי חי ממקום.** בהגדרות ועזרה ← חיבורים ← מקום אפשר להדביק קישור
+  לקהילה, לבדוק אותה ולבחור באילו מרחבים להשתמש במידע. הסקיל והחיבור מותקנים
+  אוטומטית, ללא צורך בטוקן לקריאת מידע ציבורי.
+- **תשובות מתוך המקור העדכני.** הסוכן יכול לבדוק זמני תפילות, שעות פעילות
+  ואירועים במקום, עם הנחיות להציג מקור ותאריך ולהימנע מניחוש כשהמידע חסר.
+- **שליטה בכל מרחב.** החיבורים מופרדים בין מרחבים; ניתוק או החלפת קהילה חוסמים
+  קריאות נוספות דרך החיבור הקודם. החיבור מאפשר קריאה בלבד ואינו מפעיל מענה
+  בקבוצות ווטסאפ או משנה את מדיניות הקבוצות.
+
+### Technical
+
+- Add one shared Makom connection flow for Companion and the native Desktop plugin,
+  authenticated profile configuration routes, a bundled Hebrew skill, and a closed
+  six-tool stdio MCP adapter over Makom's public HTTP MCP endpoint.
+- Bind each connection to a profile and revision, inject the selected community in
+  code, revoke stale running adapters, and preserve unrelated native configuration.
+  Multi-profile writes restore exact configuration and skill bytes on failure.
+- Include the adapter package in every installer path and preserve its exact toolset
+  when community configuration is regenerated. Prevent isolated development runs
+  from registering a user-wide gateway login task.
+- Verify live prayer reads, native multi-profile MCP registration, reconnection and
+  revocation, both application windows, mobile layout, and unauthenticated-route
+  rejection. Keep the test Desktop and CLI on the same reviewed engine source.
+- Refresh the SDK snapshot from the pinned community engine, provision PyYAML in CI,
+  isolate cron projection tests from optional MCP dependencies, and include shared
+  JavaScript sources in release fingerprints (subject scheme 4).
+
+---
+
 ## [0.4.0-alpha.12] - 2026-08-18
 
 ### מה חדש (למשתמש)
